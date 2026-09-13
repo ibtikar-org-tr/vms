@@ -1,6 +1,14 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2, Sparkles, X } from 'lucide-react'
 import { editProjectNoteWithAi } from '../../../api/vms'
+import { NoteAiDiffReview } from './NoteAiDiffReview'
+import {
+  buildNoteDiffSegments,
+  listDiffHunks,
+  type DiffHunkDecision,
+  type NoteDiffSegment,
+} from './note-ai-diff'
 
 /** Must match backend `NOTE_AI_PRIMARY_MODEL` (first model in the fallback chain). */
 export const NOTE_AI_PRIMARY_MODEL = '@cf/google/gemma-4-26b-a4b-it'
@@ -30,6 +38,16 @@ export function NoteAiCommandControl({
   const [summary, setSummary] = useState<string | null>(null)
   const [usedModel, setUsedModel] = useState<string | null>(null)
 
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [diffSegments, setDiffSegments] = useState<NoteDiffSegment[]>([])
+  const [decisions, setDecisions] = useState<Record<string, DiffHunkDecision>>({})
+
+  const closeReview = () => {
+    setReviewOpen(false)
+    setDiffSegments([])
+    setDecisions({})
+  }
+
   useEffect(() => {
     if (!open) {
       return
@@ -42,7 +60,7 @@ export function NoteAiCommandControl({
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !reviewOpen) {
         setOpen(false)
       }
     }
@@ -53,7 +71,7 @@ export function NoteAiCommandControl({
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open])
+  }, [open, reviewOpen])
 
   useEffect(() => {
     if (!open) {
@@ -65,6 +83,27 @@ export function NoteAiCommandControl({
     })
     return () => window.cancelAnimationFrame(frame)
   }, [open])
+
+  useEffect(() => {
+    if (!reviewOpen) {
+      return
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeReview()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [reviewOpen])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -80,16 +119,27 @@ export function NoteAiCommandControl({
     setIsRunning(true)
 
     try {
+      const original = getContent()
       const { edited } = await editProjectNoteWithAi(noteId, {
         command: trimmed,
-        content: getContent(),
+        content: original,
         contentType,
       })
 
-      onApplyContent(edited.content)
-      setSummary(edited.summary?.trim() || 'تم تطبيق التعديل.')
+      const segments = buildNoteDiffSegments(original, edited.content)
+      const hunks = listDiffHunks(segments)
+      const nextDecisions: Record<string, DiffHunkDecision> = {}
+      for (const hunk of hunks) {
+        nextDecisions[hunk.id] = 'pending'
+      }
+
+      setDiffSegments(segments)
+      setDecisions(nextDecisions)
+      setSummary(edited.summary?.trim() || null)
       setUsedModel(edited.model?.trim() || NOTE_AI_PRIMARY_MODEL)
       setCommand('')
+      setOpen(false)
+      setReviewOpen(true)
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -99,6 +149,14 @@ export function NoteAiCommandControl({
     } finally {
       setIsRunning(false)
     }
+  }
+
+  const setAllDecisions = (decision: DiffHunkDecision) => {
+    const next: Record<string, DiffHunkDecision> = {}
+    for (const hunk of listDiffHunks(diffSegments)) {
+      next[hunk.id] = decision
+    }
+    setDecisions(next)
   }
 
   return (
@@ -130,7 +188,9 @@ export function NoteAiCommandControl({
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-[13px] font-semibold text-[#31302e]">تعديل بالذكاء الاصطناعي</p>
-              <p className="mt-0.5 text-[11px] text-[#615d59]">اكتب أمراً لتعديل محتوى الملاحظة الحالية.</p>
+              <p className="mt-0.5 text-[11px] text-[#615d59]">
+                اكتب أمراً ثم راجع الفروقات قبل تطبيقها.
+              </p>
             </div>
             <button
               type="button"
@@ -170,14 +230,36 @@ export function NoteAiCommandControl({
               ) : (
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
               )}
-              {isRunning ? 'جار التنفيذ...' : 'نفّذ الأمر'}
+              {isRunning ? 'جار التنفيذ...' : 'اقترح التعديلات'}
             </button>
           </form>
 
           {error ? <p className="mt-2 text-[12px] text-red-600">{error}</p> : null}
-          {!error && summary ? <p className="mt-2 text-[12px] text-[#615d59]">{summary}</p> : null}
         </div>
       ) : null}
+
+      {typeof document !== 'undefined'
+        ? createPortal(
+            <NoteAiDiffReview
+              open={reviewOpen}
+              segments={diffSegments}
+              decisions={decisions}
+              summary={summary}
+              model={usedModel}
+              onDecisionChange={(hunkId, decision) => {
+                setDecisions((current) => ({ ...current, [hunkId]: decision }))
+              }}
+              onAcceptAll={() => setAllDecisions('accepted')}
+              onRejectAll={() => setAllDecisions('rejected')}
+              onApply={(content) => {
+                onApplyContent(content)
+                closeReview()
+              }}
+              onDismiss={closeReview}
+            />,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
