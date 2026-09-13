@@ -2,16 +2,20 @@ import { Check, CheckCheck, Undo2, X, XCircle } from 'lucide-react'
 import {
   composeNoteFromDiffDecisions,
   countHunkDecisions,
+  isVisuallyEmptyBlock,
   listDiffHunks,
   type DiffHunkDecision,
+  type NoteDiffContentType,
   type NoteDiffHunk,
   type NoteDiffSegment,
 } from './note-ai-diff'
+import { markdownToHtml } from './note-markdown'
 
 export interface NoteAiProposal {
   segments: NoteDiffSegment[]
   summary: string | null
   model: string | null
+  contentType: NoteDiffContentType
 }
 
 interface NoteAiInlineDiffProps {
@@ -24,91 +28,73 @@ interface NoteAiInlineDiffProps {
   onDiscard: () => void
 }
 
-function splitDisplayLines(text: string) {
-  if (!text) {
-    return [] as string[]
+const proseClass =
+  'note-ai-diff-prose text-[16px] leading-[1.5] text-[#31302e] [&_p]:my-2 [&_h1]:my-3 [&_h1]:text-[40px] [&_h1]:font-bold [&_h1]:tracking-[-1px] [&_h2]:my-2.5 [&_h2]:text-[26px] [&_h2]:font-bold [&_h2]:tracking-[-0.625px] [&_h3]:my-2 [&_h3]:text-[22px] [&_h3]:font-bold [&_h3]:tracking-[-0.25px] [&_ul]:my-2 [&_ul]:list-disc [&_ul]:ps-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:ps-6 [&_blockquote]:my-3 [&_blockquote]:border-s-4 [&_blockquote]:border-[#e6e6e6] [&_blockquote]:ps-4 [&_blockquote]:text-[#615d59] [&_a]:text-[#0075de] [&_a]:underline [&_strong]:font-bold [&_em]:italic [&_u]:underline [&_s]:line-through [&_code]:rounded [&_code]:bg-[#f6f5f4] [&_code]:px-1 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[#f6f5f4] [&_pre]:p-3'
+
+function toPreviewHtml(content: string, contentType: NoteDiffContentType) {
+  if (contentType === 'markdown') {
+    return markdownToHtml(content)
   }
 
-  const normalized = text.replace(/\n$/, '')
-  if (!normalized) {
-    return ['']
-  }
-
-  return normalized.split('\n')
+  return content.trim() || '<p></p>'
 }
 
-function FileLines({
-  text,
+function RichBlock({
+  content,
+  contentType,
   tone,
 }: {
-  text: string
+  content: string
+  contentType: NoteDiffContentType
   tone: 'unchanged' | 'removed' | 'added' | 'resolved'
 }) {
-  const lines = splitDisplayLines(text)
-  if (lines.length === 0 && tone !== 'unchanged') {
-    return (
-      <div
-        className={`flex border-b border-black/5 font-mono text-[12px] leading-6 ${
-          tone === 'removed' ? 'bg-[#fcebec] text-[#a31515]' : 'bg-[#e6ffed] text-[#116329]'
-        }`}
-      >
-        <span className="w-8 shrink-0 select-none border-e border-black/5 px-1 text-center opacity-60">
-          {tone === 'removed' ? '−' : '+'}
-        </span>
-        <span className="px-3 py-0.5 italic opacity-50">(فارغ)</span>
-      </div>
-    )
+  if (isVisuallyEmptyBlock(content, contentType)) {
+    return null
   }
 
-  const rowClass =
+  const html = toPreviewHtml(content, contentType)
+  const shell =
     tone === 'removed'
-      ? 'bg-[#fcebec] text-[#a31515]'
+      ? 'border-s-4 border-[#f14c4c] bg-[#fcebec]/80'
       : tone === 'added'
-        ? 'bg-[#e6ffed] text-[#116329]'
-        : 'bg-white text-[#31302e]'
-  const prefix = tone === 'removed' ? '−' : tone === 'added' ? '+' : ' '
-  const textClass = tone === 'removed' ? 'line-through decoration-[#a31515]/50' : ''
+        ? 'border-s-4 border-[#2da44e] bg-[#e6ffed]/80'
+        : 'border-s-4 border-transparent'
+  const bodyTone =
+    tone === 'removed' ? 'opacity-80 [&_*]:line-through [&_*]:decoration-[#a31515]/45' : ''
 
   return (
-    <>
-      {lines.map((line, index) => (
-        <div
-          key={`${tone}-${index}-${line.slice(0, 32)}`}
-          className={`flex border-b border-black/5 font-mono text-[12px] leading-6 ${rowClass}`}
-          dir="auto"
-        >
-          <span className="w-8 shrink-0 select-none border-e border-black/5 px-1 text-center opacity-60">
-            {prefix}
-          </span>
-          <span className={`min-w-0 flex-1 whitespace-pre-wrap break-words px-3 py-0.5 ${textClass}`}>
-            {line || ' '}
-          </span>
-        </div>
-      ))}
-    </>
+    <div className={`px-4 py-1 sm:px-5 ${shell}`}>
+      <div
+        className={`${proseClass} ${bodyTone}`}
+        dir="auto"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
   )
 }
 
 function InlineHunk({
   hunk,
+  contentType,
   decision,
   onDecisionChange,
 }: {
   hunk: NoteDiffHunk
+  contentType: NoteDiffContentType
   decision: DiffHunkDecision
   onDecisionChange: (hunkId: string, decision: DiffHunkDecision) => void
 }) {
   if (decision === 'accepted') {
-    return <FileLines text={hunk.newText} tone="resolved" />
+    return <RichBlock content={hunk.newText} contentType={contentType} tone="resolved" />
   }
 
   if (decision === 'rejected') {
-    return <FileLines text={hunk.oldText} tone="resolved" />
+    return <RichBlock content={hunk.oldText} contentType={contentType} tone="resolved" />
   }
 
   return (
-    <div className="relative">
-      <div className="sticky top-10 z-[1] flex items-center justify-end gap-1 border-b border-[#e6e6e6] bg-[#f6f5f4]/95 px-2 py-1 backdrop-blur-sm">
+    <div className="relative my-1">
+      <div className="sticky top-10 z-[1] flex items-center justify-end gap-1 border-y border-[#e6e6e6] bg-[#f6f5f4]/95 px-3 py-1 backdrop-blur-sm">
         <span className="me-auto text-[10px] font-medium text-[#a39e98]">تعديل مقترح</span>
         <button
           type="button"
@@ -127,9 +113,12 @@ function InlineHunk({
           رفض
         </button>
       </div>
-      {hunk.oldText ? <FileLines text={hunk.oldText} tone="removed" /> : null}
-      {hunk.newText ? <FileLines text={hunk.newText} tone="added" /> : null}
-      {!hunk.oldText && !hunk.newText ? <FileLines text="" tone="added" /> : null}
+      {hunk.oldText ? (
+        <RichBlock content={hunk.oldText} contentType={contentType} tone="removed" />
+      ) : null}
+      {hunk.newText ? (
+        <RichBlock content={hunk.newText} contentType={contentType} tone="added" />
+      ) : null}
     </div>
   )
 }
@@ -147,6 +136,7 @@ export function NoteAiInlineDiff({
   const counts = countHunkDecisions(hunks, decisions)
   const identical = hunks.length === 0
   const canApply = !identical && (counts.accepted > 0 || counts.pending === 0)
+  const contentType = proposal.contentType
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -177,8 +167,7 @@ export function NoteAiInlineDiff({
               type="button"
               disabled={!canApply && counts.pending > 0 && counts.accepted === 0}
               onClick={() => {
-                // Pending hunks stay as original; accepted take new text.
-                onApply(composeNoteFromDiffDecisions(proposal.segments, decisions))
+                onApply(composeNoteFromDiffDecisions(proposal.segments, decisions, contentType))
               }}
               className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg bg-[#0075de] px-2.5 text-[11px] font-medium text-white transition hover:bg-[#005bab] disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -197,7 +186,7 @@ export function NoteAiInlineDiff({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto py-2">
         {identical ? (
           <div className="px-5 py-10 text-center text-[13px] text-[#615d59]">
             لم يغيّر النموذج محتوى الملاحظة.
@@ -205,13 +194,21 @@ export function NoteAiInlineDiff({
         ) : (
           proposal.segments.map((segment, index) => {
             if (segment.type === 'unchanged') {
-              return <FileLines key={`u-${index}`} text={segment.text} tone="unchanged" />
+              return (
+                <RichBlock
+                  key={`u-${index}`}
+                  content={segment.text}
+                  contentType={contentType}
+                  tone="unchanged"
+                />
+              )
             }
 
             return (
               <InlineHunk
                 key={segment.hunk.id}
                 hunk={segment.hunk}
+                contentType={contentType}
                 decision={decisions[segment.hunk.id] ?? 'pending'}
                 onDecisionChange={onDecisionChange}
               />

@@ -92,11 +92,12 @@ export function NoteAiCommandControl({
         contentType,
       })
 
-      const segments = buildNoteDiffSegments(original, edited.content)
+      const segments = buildNoteDiffSegments(original, edited.content, contentType)
       onProposalReady({
         segments,
         summary: edited.summary?.trim() || null,
         model: edited.model?.trim() || NOTE_AI_PRIMARY_MODEL,
+        contentType,
       })
       setUsedModel(edited.model?.trim() || NOTE_AI_PRIMARY_MODEL)
       setCommand('')
