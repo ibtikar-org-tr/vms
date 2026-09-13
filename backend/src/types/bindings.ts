@@ -62,12 +62,47 @@ export interface DurableObjectStubLike<T = unknown> {
 export interface CloudflareAiBindingLike {
   run(
     model: string,
-    inputs: {
-      messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
-      max_tokens?: number
-      temperature?: number
+    inputs:
+      | {
+          messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+          max_tokens?: number
+          temperature?: number
+          response_format?: {
+            type: 'json_schema'
+            json_schema: Record<string, unknown>
+          }
+        }
+      | {
+          text: string[]
+        },
+  ): Promise<{ response?: unknown; data?: number[][] }>
+}
+
+export type VectorizeMetadataValue = string | number | boolean | null
+
+export interface VectorizeVectorLike {
+  id: string
+  values: number[] | Float32Array
+  metadata?: Record<string, VectorizeMetadataValue>
+}
+
+export interface VectorizeMatchLike {
+  id: string
+  score: number
+  metadata?: Record<string, VectorizeMetadataValue>
+}
+
+export interface VectorizeBindingLike {
+  upsert(vectors: VectorizeVectorLike[]): Promise<unknown>
+  deleteByIds(ids: string[]): Promise<unknown>
+  query(
+    vector: number[],
+    options?: {
+      topK?: number
+      returnMetadata?: 'none' | 'indexed' | 'all'
+      filter?: Record<string, unknown>
     },
-  ): Promise<{ response?: string }>
+  ): Promise<{ matches: VectorizeMatchLike[] }>
 }
 
 export interface AppBindings {
@@ -77,6 +112,7 @@ export interface AppBindings {
   MY_BUCKET: R2BucketLike
   PROJECT_NOTE_ROOM: DurableObjectNamespaceLike
   AI?: CloudflareAiBindingLike
+  VMS_NOTES_VECTORIZE?: VectorizeBindingLike
   TELEGRAM_MS_SERVICE?: Fetcher
   MEMBERSHIP_NUMBER_PREFIX: string
   SMTP_HOST: string

@@ -4,9 +4,10 @@ import * as syncProtocol from 'y-protocols/sync'
 import * as awarenessProtocol from 'y-protocols/awareness'
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
-import { updateProjectNoteContent } from '../repositories/vms-project-notes.repository'
+import { updateProjectNoteContent, getProjectNoteById } from '../repositories/vms-project-notes.repository'
 import type { AppBindings } from '../types/bindings'
 import { extractMarkdownNoteContent, extractNoteContent } from '../utils/yjs-rich-text'
+import { hashNoteContent, reindexNoteVectors } from '../services/note-embeddings.service'
 
 const MESSAGE_SYNC = 0
 const MESSAGE_AWARENESS = 1
@@ -42,6 +43,10 @@ function yjsStorageKey(noteId: string) {
 
 function contentTypeStorageKey(noteId: string) {
   return `content-type:${noteId}`
+}
+
+function contentHashStorageKey(noteId: string) {
+  return `content-hash:${noteId}`
 }
 
 export class ProjectNoteRoom extends DurableObject<AppBindings> {
@@ -473,14 +478,59 @@ export class ProjectNoteRoom extends DurableObject<AppBindings> {
   }
 
   private async persistSql(session: NoteSession) {
+    let content: string
+    let preview: string | null
+
     if (session.contentType === 'markdown') {
-      const { content, preview } = extractMarkdownNoteContent(session.doc)
-      await updateProjectNoteContent(this.env.VMS_DB, session.noteId, content, preview)
-      return
+      const extracted = extractMarkdownNoteContent(session.doc)
+      content = extracted.content
+      preview = extracted.preview
+    } else {
+      const extracted = extractNoteContent(session.doc)
+      content = extracted.html
+      preview = extracted.preview
     }
 
-    const { html, preview } = extractNoteContent(session.doc)
-    await updateProjectNoteContent(this.env.VMS_DB, session.noteId, html, preview)
+    await updateProjectNoteContent(this.env.VMS_DB, session.noteId, content, preview)
+    void this.queueNoteVectorReindex(session.noteId, session.contentType, content)
+  }
+
+  private async queueNoteVectorReindex(
+    noteId: string,
+    contentType: NoteContentType,
+    content: string,
+  ) {
+    try {
+      const projectId = this.projectId ?? (await this.ctx.storage.get<string>('project-id'))
+      if (!projectId) {
+        return
+      }
+
+      const previousContentHash =
+        (await this.ctx.storage.get<string>(contentHashStorageKey(noteId))) ?? null
+      const nextHash = await hashNoteContent(content)
+      if (previousContentHash && previousContentHash === nextHash) {
+        return
+      }
+
+      const note = await getProjectNoteById(this.env.VMS_DB, noteId)
+      const title = note?.title?.trim() || noteId
+
+      const result = await reindexNoteVectors(this.env, {
+        projectId,
+        noteId,
+        title,
+        contentType,
+        content,
+        previousContentHash,
+      })
+
+      if (!result.skipped) {
+        await this.ctx.storage.put(contentHashStorageKey(noteId), result.contentHash)
+      }
+    } catch (error) {
+      console.warn(`Failed to reindex note vectors for ${noteId}`, error)
+    }
   }
 }
 

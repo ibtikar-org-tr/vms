@@ -10,7 +10,9 @@ import type * as Y from 'yjs'
 import { plainTextToHtml, xmlFragmentToPlainText } from '../../../utils/yjs-rich-text'
 import { NoteEditorToolbar, type NoteEditorViewMode } from './NoteEditorToolbar'
 import { formatNoteHtmlForEditing, beautifyNoteHtml, normalizeNoteHtmlInput } from './note-html-source'
-import { NoteAiCommandControl } from './NoteAiCommandControl'
+import { NoteAiCommandControl, createPendingDecisions } from './NoteAiCommandControl'
+import { NoteAiInlineDiff, type NoteAiProposal } from './NoteAiInlineDiff'
+import type { DiffHunkDecision } from './note-ai-diff'
 import { NoteFontSize } from './note-font-size'
 import { NoteHtmlCodeEditor } from './NoteHtmlCodeEditor'
 import { NoteOnlineUsers, type ResolvedOnlineUser } from './NoteOnlineUsers'
@@ -77,6 +79,8 @@ export function CollaborativeNoteEditor({
   const [viewMode, setViewMode] = useState<NoteEditorViewMode>('visual')
   const [htmlSource, setHtmlSource] = useState('')
   const [htmlApplyError, setHtmlApplyError] = useState<string | null>(null)
+  const [aiProposal, setAiProposal] = useState<NoteAiProposal | null>(null)
+  const [aiDecisions, setAiDecisions] = useState<Record<string, DiffHunkDecision>>({})
 
   mentionableMembersRef.current = mentionableMembers
 
@@ -149,6 +153,8 @@ export function CollaborativeNoteEditor({
       setHtmlSource('')
       setHtmlApplyError(null)
       htmlDirtyRef.current = false
+      setAiProposal(null)
+      setAiDecisions({})
     }
   }, [noteId])
 
@@ -389,7 +395,8 @@ export function CollaborativeNoteEditor({
               <NoteAiCommandControl
                 noteId={noteId}
                 contentType="html"
-                disabled={!canEdit}
+                disabled={!canEdit || Boolean(aiProposal)}
+                reviewActive={Boolean(aiProposal)}
                 getContent={() => {
                   if (viewMode === 'html') {
                     return htmlSource
@@ -401,17 +408,9 @@ export function CollaborativeNoteEditor({
 
                   return resolveCurrentHtml()
                 }}
-                onApplyContent={(content) => {
-                  if (!editor || !canEdit) {
-                    return
-                  }
-
-                  const normalized = normalizeNoteHtmlInput(content)
-                  editor.commands.setContent(normalized, true)
-                  htmlDirtyRef.current = false
-                  setHtmlSource(formatNoteHtmlForEditing(editor.getHTML()))
-                  setHtmlApplyError(null)
-                  setViewMode('visual')
+                onProposalReady={(proposal) => {
+                  setAiProposal(proposal)
+                  setAiDecisions(createPendingDecisions(proposal))
                 }}
               />
             ) : null
@@ -430,34 +429,82 @@ export function CollaborativeNoteEditor({
           </div>
         ) : null}
 
-        {viewMode === 'visual' ? (
-          <RemoteCursorEdgeIndicators
-            editor={editor}
-            scrollContainerRef={editorScrollRef}
-            enabled={canEdit}
-          />
-        ) : null}
+        {aiProposal ? (
+          <NoteAiInlineDiff
+            proposal={aiProposal}
+            decisions={aiDecisions}
+            onDecisionChange={(hunkId, decision) => {
+              setAiDecisions((current) => ({ ...current, [hunkId]: decision }))
+            }}
+            onAcceptAll={() => {
+              setAiDecisions(() => {
+                const next = createPendingDecisions(aiProposal)
+                for (const key of Object.keys(next)) {
+                  next[key] = 'accepted'
+                }
+                return next
+              })
+            }}
+            onRejectAll={() => {
+              setAiDecisions(() => {
+                const next = createPendingDecisions(aiProposal)
+                for (const key of Object.keys(next)) {
+                  next[key] = 'rejected'
+                }
+                return next
+              })
+            }}
+            onApply={(content) => {
+              if (!editor || !canEdit) {
+                return
+              }
 
-        <div
-          ref={editorScrollRef}
-          className={`h-full min-h-0 ${
-            viewMode === 'html' ? 'overflow-hidden' : `overflow-auto ${editorSurfaceClass}`
-          }`}
-        >
-          {viewMode === 'html' ? (
-            <NoteHtmlCodeEditor
-              value={htmlSource}
-              readOnly={readOnly || !canEdit}
-              onChange={(nextValue) => {
-                htmlDirtyRef.current = true
-                setHtmlApplyError(null)
-                setHtmlSource(nextValue)
-              }}
-            />
-          ) : (
-            <EditorContent editor={editor} className="min-h-full" />
-          )}
-        </div>
+              const normalized = normalizeNoteHtmlInput(content)
+              editor.commands.setContent(normalized, true)
+              htmlDirtyRef.current = false
+              setHtmlSource(formatNoteHtmlForEditing(editor.getHTML()))
+              setHtmlApplyError(null)
+              setViewMode('visual')
+              setAiProposal(null)
+              setAiDecisions({})
+            }}
+            onDiscard={() => {
+              setAiProposal(null)
+              setAiDecisions({})
+            }}
+          />
+        ) : (
+          <>
+            {viewMode === 'visual' ? (
+              <RemoteCursorEdgeIndicators
+                editor={editor}
+                scrollContainerRef={editorScrollRef}
+                enabled={canEdit}
+              />
+            ) : null}
+
+            <div
+              ref={editorScrollRef}
+              className={`h-full min-h-0 ${
+                viewMode === 'html' ? 'overflow-hidden' : `overflow-auto ${editorSurfaceClass}`
+              }`}
+            >
+              {viewMode === 'html' ? (
+                <NoteHtmlCodeEditor
+                  value={htmlSource}
+                  readOnly={readOnly || !canEdit}
+                  onChange={(nextValue) => {
+                    htmlDirtyRef.current = true
+                    setHtmlApplyError(null)
+                    setHtmlSource(nextValue)
+                  }}
+                />
+              ) : (
+                <EditorContent editor={editor} className="min-h-full" />
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

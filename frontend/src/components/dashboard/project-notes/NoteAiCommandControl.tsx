@@ -1,6 +1,12 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Loader2, Sparkles, X } from 'lucide-react'
 import { editProjectNoteWithAi } from '../../../api/vms'
+import {
+  buildNoteDiffSegments,
+  listDiffHunks,
+  type DiffHunkDecision,
+} from './note-ai-diff'
+import type { NoteAiProposal } from './NoteAiInlineDiff'
 
 /** Must match backend `NOTE_AI_PRIMARY_MODEL` (first model in the fallback chain). */
 export const NOTE_AI_PRIMARY_MODEL = '@cf/google/gemma-4-26b-a4b-it'
@@ -9,16 +15,18 @@ export interface NoteAiCommandControlProps {
   noteId: string
   contentType: 'html' | 'markdown'
   disabled?: boolean
+  reviewActive?: boolean
   getContent: () => string
-  onApplyContent: (content: string) => void
+  onProposalReady: (proposal: NoteAiProposal) => void
 }
 
 export function NoteAiCommandControl({
   noteId,
   contentType,
   disabled = false,
+  reviewActive = false,
   getContent,
-  onApplyContent,
+  onProposalReady,
 }: NoteAiCommandControlProps) {
   const panelId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -27,7 +35,6 @@ export function NoteAiCommandControl({
   const [command, setCommand] = useState('')
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [summary, setSummary] = useState<string | null>(null)
   const [usedModel, setUsedModel] = useState<string | null>(null)
 
   useEffect(() => {
@@ -70,26 +77,31 @@ export function NoteAiCommandControl({
     event.preventDefault()
 
     const trimmed = command.trim()
-    if (!trimmed || disabled || isRunning) {
+    if (!trimmed || disabled || isRunning || reviewActive) {
       return
     }
 
     setError(null)
-    setSummary(null)
-    setUsedModel(null)
     setIsRunning(true)
 
     try {
+      const original = getContent()
       const { edited } = await editProjectNoteWithAi(noteId, {
         command: trimmed,
-        content: getContent(),
+        content: original,
         contentType,
       })
 
-      onApplyContent(edited.content)
-      setSummary(edited.summary?.trim() || 'تم تطبيق التعديل.')
+      const segments = buildNoteDiffSegments(original, edited.content, contentType)
+      onProposalReady({
+        segments,
+        summary: edited.summary?.trim() || null,
+        model: edited.model?.trim() || NOTE_AI_PRIMARY_MODEL,
+        contentType,
+      })
       setUsedModel(edited.model?.trim() || NOTE_AI_PRIMARY_MODEL)
       setCommand('')
+      setOpen(false)
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -105,16 +117,16 @@ export function NoteAiCommandControl({
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        disabled={disabled}
+        disabled={disabled || reviewActive}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
         className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
-          open
+          open || reviewActive
             ? 'border-[#0075de]/40 bg-[#0075de]/10 text-[#0075de]'
             : 'border-[#e6e6e6] bg-white text-[#31302e] hover:bg-black/5'
         }`}
-        title="تعديل بالذكاء الاصطناعي"
+        title={reviewActive ? 'أنهِ مراجعة التعديلات أولاً' : 'تعديل بالذكاء الاصطناعي'}
       >
         <Sparkles className="h-3.5 w-3.5" aria-hidden />
         AI
@@ -130,7 +142,9 @@ export function NoteAiCommandControl({
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-[13px] font-semibold text-[#31302e]">تعديل بالذكاء الاصطناعي</p>
-              <p className="mt-0.5 text-[11px] text-[#615d59]">اكتب أمراً لتعديل محتوى الملاحظة الحالية.</p>
+              <p className="mt-0.5 text-[11px] text-[#615d59]">
+                ستظهر التعديلات داخل الملف بالأحمر والأخضر للمراجعة.
+              </p>
             </div>
             <button
               type="button"
@@ -170,14 +184,21 @@ export function NoteAiCommandControl({
               ) : (
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
               )}
-              {isRunning ? 'جار التنفيذ...' : 'نفّذ الأمر'}
+              {isRunning ? 'جار التنفيذ...' : 'اقترح التعديلات'}
             </button>
           </form>
 
           {error ? <p className="mt-2 text-[12px] text-red-600">{error}</p> : null}
-          {!error && summary ? <p className="mt-2 text-[12px] text-[#615d59]">{summary}</p> : null}
         </div>
       ) : null}
     </div>
   )
+}
+
+export function createPendingDecisions(proposal: NoteAiProposal) {
+  const decisions: Record<string, DiffHunkDecision> = {}
+  for (const hunk of listDiffHunks(proposal.segments)) {
+    decisions[hunk.id] = 'pending'
+  }
+  return decisions
 }

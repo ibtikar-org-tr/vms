@@ -33,6 +33,7 @@
     "boring-avatars": "^2.0.4",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",
+    "diff": "^9.0.0",
     "gsap": "^3.14.2",
     "iso-countries-languages": "^0.3.0",
     "js-beautify": "^2.0.3",
@@ -56,6 +57,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@types/canvas-confetti": "^1.9.0",
+    "@types/diff": "^7.0.2",
     "@types/js-beautify": "^1.14.3",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",

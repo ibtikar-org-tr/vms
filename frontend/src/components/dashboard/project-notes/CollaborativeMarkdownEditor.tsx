@@ -6,7 +6,9 @@ import Placeholder from '@tiptap/extension-placeholder'
 import type * as awarenessProtocol from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { NoteEditorViewMode } from './NoteEditorToolbar'
-import { NoteAiCommandControl } from './NoteAiCommandControl'
+import { NoteAiCommandControl, createPendingDecisions } from './NoteAiCommandControl'
+import { NoteAiInlineDiff, type NoteAiProposal } from './NoteAiInlineDiff'
+import type { DiffHunkDecision } from './note-ai-diff'
 import { NoteMarkdownCodeEditor } from './NoteMarkdownCodeEditor'
 import { NoteMarkdownEditorToolbar } from './NoteMarkdownEditorToolbar'
 import { NoteOnlineUsers, type ResolvedOnlineUser } from './NoteOnlineUsers'
@@ -76,6 +78,8 @@ export function CollaborativeMarkdownEditor({
   const [viewMode, setViewMode] = useState<NoteEditorViewMode>('visual')
   const [markdownSource, setMarkdownSource] = useState('')
   const [markdownApplyError, setMarkdownApplyError] = useState<string | null>(null)
+  const [aiProposal, setAiProposal] = useState<NoteAiProposal | null>(null)
+  const [aiDecisions, setAiDecisions] = useState<Record<string, DiffHunkDecision>>({})
 
   const yText = useMemo(() => (yDoc ? yDoc.getText('markdown') : null), [yDoc])
   const isCollaborative = Boolean(yDoc && awareness && !readOnly)
@@ -123,6 +127,8 @@ export function CollaborativeMarkdownEditor({
       setMarkdownSource('')
       setMarkdownApplyError(null)
       markdownDirtyRef.current = false
+      setAiProposal(null)
+      setAiDecisions({})
     }
   }, [noteId])
 
@@ -375,7 +381,8 @@ export function CollaborativeMarkdownEditor({
               <NoteAiCommandControl
                 noteId={noteId}
                 contentType="markdown"
-                disabled={!canEdit}
+                disabled={!canEdit || Boolean(aiProposal)}
+                reviewActive={Boolean(aiProposal)}
                 getContent={() => {
                   if (viewMode === 'markdown') {
                     return markdownSource
@@ -383,27 +390,9 @@ export function CollaborativeMarkdownEditor({
 
                   return resolveCurrentMarkdown()
                 }}
-                onApplyContent={(content) => {
-                  if (!editor || !canEdit) {
-                    return
-                  }
-
-                  const normalized = normalizeNoteMarkdownInput(content).trim()
-                  const html = markdownToHtml(normalized)
-                  editor.commands.setContent(html, true)
-
-                  if (yText && yDoc) {
-                    applyingLocalRef.current = true
-                    yDoc.transact(() => {
-                      replaceYTextContent(yText, normalized)
-                    })
-                    applyingLocalRef.current = false
-                  }
-
-                  markdownDirtyRef.current = false
-                  setMarkdownSource(formatNoteMarkdownForEditing(normalized))
-                  setMarkdownApplyError(null)
-                  setViewMode('visual')
+                onProposalReady={(proposal) => {
+                  setAiProposal(proposal)
+                  setAiDecisions(createPendingDecisions(proposal))
                 }}
               />
             ) : null
@@ -419,7 +408,11 @@ export function CollaborativeMarkdownEditor({
 
       <div
         className={`relative min-h-0 flex-1 ${
-          viewMode === 'markdown' ? 'overflow-hidden' : `overflow-auto ${editorSurfaceClass}`
+          aiProposal
+            ? 'overflow-hidden'
+            : viewMode === 'markdown'
+              ? 'overflow-hidden'
+              : `overflow-auto ${editorSurfaceClass}`
         }`}
       >
         {!readOnly && !isCollaborative ? (
@@ -428,7 +421,61 @@ export function CollaborativeMarkdownEditor({
           </div>
         ) : null}
 
-        {viewMode === 'markdown' ? (
+        {aiProposal ? (
+          <NoteAiInlineDiff
+            proposal={aiProposal}
+            decisions={aiDecisions}
+            onDecisionChange={(hunkId, decision) => {
+              setAiDecisions((current) => ({ ...current, [hunkId]: decision }))
+            }}
+            onAcceptAll={() => {
+              setAiDecisions(() => {
+                const next = createPendingDecisions(aiProposal)
+                for (const key of Object.keys(next)) {
+                  next[key] = 'accepted'
+                }
+                return next
+              })
+            }}
+            onRejectAll={() => {
+              setAiDecisions(() => {
+                const next = createPendingDecisions(aiProposal)
+                for (const key of Object.keys(next)) {
+                  next[key] = 'rejected'
+                }
+                return next
+              })
+            }}
+            onApply={(content) => {
+              if (!editor || !canEdit) {
+                return
+              }
+
+              const normalized = normalizeNoteMarkdownInput(content).trim()
+              const html = markdownToHtml(normalized)
+              editor.commands.setContent(html, true)
+
+              if (yText && yDoc) {
+                applyingLocalRef.current = true
+                yDoc.transact(() => {
+                  replaceYTextContent(yText, normalized)
+                })
+                applyingLocalRef.current = false
+              }
+
+              markdownDirtyRef.current = false
+              setMarkdownSource(formatNoteMarkdownForEditing(normalized))
+              setMarkdownApplyError(null)
+              setViewMode('visual')
+              setAiProposal(null)
+              setAiDecisions({})
+            }}
+            onDiscard={() => {
+              setAiProposal(null)
+              setAiDecisions({})
+            }}
+          />
+        ) : viewMode === 'markdown' ? (
           <NoteMarkdownCodeEditor
             value={markdownSource}
             readOnly={readOnly || !canEdit}

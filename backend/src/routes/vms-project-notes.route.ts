@@ -15,6 +15,7 @@ import {
 } from '../schemas/vms-project-note.schema'
 import { editNoteWithAiSchema } from '../schemas/vms-ai-note.schema'
 import { editNoteContentWithAi } from '../services/ai-note-edit.service'
+import { deleteNoteVectors, reindexNoteVectors } from '../services/note-embeddings.service'
 import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber } from '../utils/actor'
@@ -144,6 +145,21 @@ vmsProjectNotesRoute.put(
 
       const payload = c.req.valid('json')
       const updatedNote = await updateProjectNoteById(c.env.VMS_DB, id, payload)
+
+      if (updatedNote && payload.title !== undefined) {
+        try {
+          await reindexNoteVectors(c.env, {
+            projectId: updatedNote.projectId,
+            noteId: updatedNote.id,
+            title: updatedNote.title,
+            contentType: updatedNote.contentType,
+            content: updatedNote.content,
+          })
+        } catch (error) {
+          console.warn(`Failed to reindex note vectors after title update for ${id}`, error)
+        }
+      }
+
       return c.json({ note: updatedNote })
     } catch (error) {
       console.error('Failed to update project note', error)
@@ -189,6 +205,8 @@ vmsProjectNotesRoute.post(
         content: payload.content,
         contentType: payload.contentType,
         noteTitle: note.title,
+        projectId: note.projectId,
+        noteId: note.id,
       })
 
       return c.json({ edited })
@@ -218,6 +236,11 @@ vmsProjectNotesRoute.delete('/project-notes/:id', zValidator('param', projectNot
     }
 
     await deleteProjectNoteById(c.env.VMS_DB, id)
+    try {
+      await deleteNoteVectors(c.env, id)
+    } catch (error) {
+      console.warn(`Failed to delete note vectors for ${id}`, error)
+    }
     return c.json({ message: 'Note deleted successfully.' })
   } catch (error) {
     console.error('Failed to delete project note', error)

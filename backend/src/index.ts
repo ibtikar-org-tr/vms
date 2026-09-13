@@ -23,6 +23,7 @@ import { handleProjectNoteWebSocket, vmsProjectNotesRoute } from './routes/vms-p
 import { uploadClubBanner, uploadEventBanner, uploadImages, serveImage } from './routes/images.route'
 import { handleCron } from './cron'
 import { ProjectNoteRoom } from './durable-objects/project-note-room'
+import { reindexAllProjectNotes } from './services/note-vector-backfill.service'
 import type { AppBindings } from './types/bindings'
 import type { AppEnv } from './types/hono'
 
@@ -58,6 +59,32 @@ app.post('/ms/membership-app/api/internal/cron', async (c) => {
 
   const stats = await handleCron(c.env)
   return c.json({ ok: true, stats })
+})
+
+app.post('/ms/membership-app/api/internal/reindex-project-notes', async (c) => {
+  const apiKey = c.req.header('X-API-Key')?.trim()
+  const expected = c.env.INTERNAL_SECRET?.trim()
+
+  if (!expected || apiKey !== expected) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      projectId?: string
+      limit?: number
+    }
+
+    const stats = await reindexAllProjectNotes(c.env, {
+      projectId: body.projectId?.trim() || undefined,
+      limit: typeof body.limit === 'number' ? body.limit : undefined,
+    })
+
+    return c.json({ ok: true, stats })
+  } catch (error) {
+    console.error('Failed to reindex project notes', error)
+    return c.json({ error: 'Could not reindex project notes.' }, 500)
+  }
 })
 
 app.get('/ms/membership-app/api/projects/:projectId/notes/ws', async (c) => {

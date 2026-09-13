@@ -1,6 +1,7 @@
 import { aiEditedNoteSchema, type AiEditedNote } from '../schemas/vms-ai-note.schema'
 import type { AppBindings } from '../types/bindings'
 import type { ProjectNoteContentType } from '../schemas/vms-project-note.schema'
+import { buildNoteRagContext } from './note-rag.service'
 
 const NOTE_EDIT_MODELS = [
   '@cf/google/gemma-4-26b-a4b-it',
@@ -54,7 +55,8 @@ Rules:
 - Keep existing structure and meaning unless the command asks to change them.
 - For HTML notes: use simple semantic tags (p, h1-h3, ul, ol, li, blockquote, strong, em, a, code, pre, hr). Do not include <html>, <head>, or <body>.
 - For Markdown notes: use standard GFM (headings, lists, bold, italic, strike, links, fenced code, blockquotes, horizontal rules).
-- Do not invent unrelated sections. Do not wrap JSON in markdown fences.`
+- Do not invent unrelated sections. Do not wrap JSON in markdown fences.
+- You may receive related notes from the same project and a roster of other note titles. Use them only when the command needs project context (merge, summarize across notes, reference decisions). Never replace the current note with another note's full body unless explicitly asked.`
 }
 
 function extractJsonObject(raw: string): string {
@@ -151,6 +153,8 @@ export async function editNoteContentWithAi(
     content: string
     contentType: ProjectNoteContentType
     noteTitle?: string | null
+    projectId: string
+    noteId: string
   },
 ): Promise<AiEditedNote> {
   const ai = env.AI as CloudflareAiBinding | undefined
@@ -158,11 +162,21 @@ export async function editNoteContentWithAi(
     throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً.')
   }
 
+  const rag = await buildNoteRagContext(env, {
+    projectId: input.projectId,
+    noteId: input.noteId,
+    command: input.command,
+    noteTitle: input.noteTitle,
+  })
+
   const formatLabel = input.contentType === 'markdown' ? 'Markdown' : 'HTML'
   const titleLine = input.noteTitle?.trim() ? `Note title: ${input.noteTitle.trim()}\n` : ''
+  const contextBlocks = [rag.rosterBlock, rag.relatedNotesBlock].filter(Boolean).join('\n\n')
+  const contextSection = contextBlocks ? `${contextBlocks}\n\n` : ''
+
   const userMessage = `${titleLine}Format: ${formatLabel}
 
-Current note content:
+${contextSection}Current note content:
 """
 ${truncateForModel(input.content)}
 """

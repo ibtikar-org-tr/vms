@@ -41,6 +41,12 @@
     "binding": "AI",
     "remote": true
   },
+  "vectorize": [
+    {
+      "binding": "VMS_NOTES_VECTORIZE",
+      "index_name": "vms-project-notes"
+    }
+  ],
   "services": [
     {
       "binding": "TELEGRAM_MS_SERVICE",
