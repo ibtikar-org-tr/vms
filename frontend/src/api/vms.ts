@@ -859,6 +859,7 @@ export function editProjectNoteWithAi(
     command: string
     content: string
     contentType: 'html' | 'markdown'
+    model: string
   },
 ) {
   return postJson<

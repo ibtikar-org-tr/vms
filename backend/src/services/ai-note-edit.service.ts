@@ -1,19 +1,22 @@
-import { aiEditedNoteSchema, type AiEditedNote } from '../schemas/vms-ai-note.schema'
+import {
+  aiEditedNoteSchema,
+  NOTE_AI_DEFAULT_MODEL,
+  type AiEditedNote,
+  type NoteAiModelId,
+} from '../schemas/vms-ai-note.schema'
 import type { AppBindings } from '../types/bindings'
 import type { ProjectNoteContentType } from '../schemas/vms-project-note.schema'
 import { buildNoteRagContext } from './note-rag.service'
 
-const NOTE_EDIT_MODELS = [
-  '@cf/google/gemma-4-26b-a4b-it',
-  '@cf/qwen/qwen3-30b-a3b-fp8',
-] as const
-
-/** Primary Workers AI model used for note command edits (shown in the UI). */
-export const NOTE_AI_PRIMARY_MODEL = NOTE_EDIT_MODELS[0]
+/** @deprecated Prefer NOTE_AI_DEFAULT_MODEL — kept for callers that import the old name. */
+export const NOTE_AI_PRIMARY_MODEL = NOTE_AI_DEFAULT_MODEL
 
 const JSON_MODE_MODELS = new Set<string>([
-  '@cf/google/gemma-4-26b-a4b-it',
   '@cf/qwen/qwen3-30b-a3b-fp8',
+  '@cf/ibm-granite/granite-4.0-h-micro',
+  '@cf/zai-org/glm-4.7-flash',
+  '@cf/zai-org/glm-5.3-flash',
+  '@cf/deepseek-ai/deepseek-v4-flash-0731',
 ])
 
 const NOTE_JSON_SCHEMA = {
@@ -155,12 +158,15 @@ export async function editNoteContentWithAi(
     noteTitle?: string | null
     projectId: string
     noteId: string
+    model?: NoteAiModelId
   },
 ): Promise<AiEditedNote> {
   const ai = env.AI as CloudflareAiBinding | undefined
   if (!ai) {
     throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً.')
   }
+
+  const model = input.model ?? NOTE_AI_DEFAULT_MODEL
 
   const rag = await buildNoteRagContext(env, {
     projectId: input.projectId,
@@ -184,49 +190,45 @@ ${truncateForModel(input.content)}
 User command:
 ${input.command.trim()}`
 
-  let parsedPayload: unknown
   let lastError: unknown
+  const useJsonSchemaAttempts = JSON_MODE_MODELS.has(model) ? [true, false] : [false]
 
-  for (const model of NOTE_EDIT_MODELS) {
-    const useJsonSchemaAttempts = JSON_MODE_MODELS.has(model) ? [true, false] : [false]
-
-    for (const useJsonSchema of useJsonSchemaAttempts) {
-      try {
-        const inputs: Parameters<CloudflareAiBinding['run']>[1] = {
-          messages: [
-            { role: 'system', content: buildSystemPrompt(input.contentType) },
-            { role: 'user', content: userMessage },
-          ],
-          max_tokens: 4096,
-          temperature: 0.3,
-        }
-
-        if (useJsonSchema) {
-          inputs.response_format = {
-            type: 'json_schema',
-            json_schema: NOTE_JSON_SCHEMA,
-          }
-        }
-
-        const response = await ai.run(model, inputs)
-        parsedPayload = normalizeAiResponsePayload(response)
-        if (parsedPayload) {
-          const edited = parseEditedNote(parsedPayload)
-          return {
-            ...edited,
-            model,
-          }
-        }
-      } catch (error) {
-        lastError = error
-        console.warn(
-          `Cloudflare AI note edit failed for model ${model}${useJsonSchema ? ' (json schema)' : ''}`,
-          error,
-        )
+  for (const useJsonSchema of useJsonSchemaAttempts) {
+    try {
+      const inputs: Parameters<CloudflareAiBinding['run']>[1] = {
+        messages: [
+          { role: 'system', content: buildSystemPrompt(input.contentType) },
+          { role: 'user', content: userMessage },
+        ],
+        max_tokens: 4096,
+        temperature: 0.3,
       }
+
+      if (useJsonSchema) {
+        inputs.response_format = {
+          type: 'json_schema',
+          json_schema: NOTE_JSON_SCHEMA,
+        }
+      }
+
+      const response = await ai.run(model, inputs)
+      const parsedPayload = normalizeAiResponsePayload(response)
+      if (parsedPayload) {
+        const edited = parseEditedNote(parsedPayload)
+        return {
+          ...edited,
+          model,
+        }
+      }
+    } catch (error) {
+      lastError = error
+      console.warn(
+        `Cloudflare AI note edit failed for model ${model}${useJsonSchema ? ' (json schema)' : ''}`,
+        error,
+      )
     }
   }
 
-  console.error('Cloudflare AI note edit failed for all models', lastError)
-  throw new Error('تعذر الاتصال بخدمة الذكاء الاصطناعي. حاول لاحقاً.')
+  console.error(`Cloudflare AI note edit failed for selected model ${model}`, lastError)
+  throw new Error('تعذر الاتصال بخدمة الذكاء الاصطناعي. حاول لاحقاً أو اختر نموذجاً آخر.')
 }

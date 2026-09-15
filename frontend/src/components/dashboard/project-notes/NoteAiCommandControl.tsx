@@ -7,9 +7,9 @@ import {
   type DiffHunkDecision,
 } from './note-ai-diff'
 import type { NoteAiProposal } from './NoteAiInlineDiff'
+import { NOTE_AI_DEFAULT_MODEL, NOTE_AI_MODELS, type NoteAiModelId } from './note-ai-models'
 
-/** Must match backend `NOTE_AI_PRIMARY_MODEL` (first model in the fallback chain). */
-export const NOTE_AI_PRIMARY_MODEL = '@cf/google/gemma-4-26b-a4b-it'
+export { NOTE_AI_DEFAULT_MODEL, NOTE_AI_PRIMARY_MODEL } from './note-ai-models'
 
 export interface NoteAiCommandControlProps {
   noteId: string
@@ -29,13 +29,14 @@ export function NoteAiCommandControl({
   onProposalReady,
 }: NoteAiCommandControlProps) {
   const panelId = useId()
+  const modelSelectId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [open, setOpen] = useState(false)
   const [command, setCommand] = useState('')
+  const [selectedModel, setSelectedModel] = useState<NoteAiModelId>(NOTE_AI_DEFAULT_MODEL)
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [usedModel, setUsedModel] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -90,16 +91,16 @@ export function NoteAiCommandControl({
         command: trimmed,
         content: original,
         contentType,
+        model: selectedModel,
       })
 
       const segments = buildNoteDiffSegments(original, edited.content, contentType)
       onProposalReady({
         segments,
         summary: edited.summary?.trim() || null,
-        model: edited.model?.trim() || NOTE_AI_PRIMARY_MODEL,
+        model: edited.model?.trim() || selectedModel,
         contentType,
       })
-      setUsedModel(edited.model?.trim() || NOTE_AI_PRIMARY_MODEL)
       setCommand('')
       setOpen(false)
     } catch (requestError) {
@@ -112,6 +113,8 @@ export function NoteAiCommandControl({
       setIsRunning(false)
     }
   }
+
+  const selectedMeta = NOTE_AI_MODELS.find((model) => model.id === selectedModel) ?? NOTE_AI_MODELS[0]
 
   return (
     <div className="relative" ref={rootRef}>
@@ -143,7 +146,7 @@ export function NoteAiCommandControl({
             <div className="min-w-0">
               <p className="text-[13px] font-semibold text-[#31302e]">تعديل بالذكاء الاصطناعي</p>
               <p className="mt-0.5 text-[11px] text-[#615d59]">
-                ستظهر التعديلات داخل الملف بالأحمر والأخضر للمراجعة.
+                اختر النموذج ثم اكتب الأمر — ستظهر التعديلات للمراجعة داخل الملف.
               </p>
             </div>
             <button
@@ -156,14 +159,33 @@ export function NoteAiCommandControl({
             </button>
           </div>
 
-          <div className="mb-2 rounded-lg border border-[#e6e6e6] bg-[#f6f5f4] px-2.5 py-2">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-[#a39e98]">النموذج</p>
-            <p className="mt-0.5 break-all font-mono text-[11px] text-[#31302e]" dir="ltr">
-              {usedModel || NOTE_AI_PRIMARY_MODEL}
-            </p>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-2">
+            <div>
+              <label
+                htmlFor={modelSelectId}
+                className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[#a39e98]"
+              >
+                النموذج
+              </label>
+              <select
+                id={modelSelectId}
+                value={selectedModel}
+                disabled={disabled || isRunning}
+                onChange={(event) => setSelectedModel(event.target.value as NoteAiModelId)}
+                className="w-full cursor-pointer rounded-lg border border-[#e6e6e6] bg-[#f6f5f4] px-2.5 py-2 text-[12px] font-medium text-[#31302e] outline-none focus:border-[#0075de]/50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {NOTE_AI_MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-[#615d59]">{selectedMeta.description}</p>
+              <p className="mt-0.5 break-all font-mono text-[10px] text-[#a39e98]" dir="ltr">
+                {selectedModel}
+              </p>
+            </div>
+
             <textarea
               ref={inputRef}
               value={command}

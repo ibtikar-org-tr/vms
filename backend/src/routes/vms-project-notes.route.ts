@@ -207,6 +207,7 @@ vmsProjectNotesRoute.post(
         noteTitle: note.title,
         projectId: note.projectId,
         noteId: note.id,
+        model: payload.model,
       })
 
       return c.json({ edited })
