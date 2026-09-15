@@ -5,6 +5,7 @@ const requiredTrimmedString = z.string().trim().min(1)
 
 /** Allowed Workers AI models for project-note AI edits. */
 export const NOTE_AI_MODEL_IDS = [
+  '@cf/google/gemma-4-26b-a4b-it',
   '@cf/qwen/qwen3-30b-a3b-fp8',
   '@cf/ibm-granite/granite-4.0-h-micro',
   '@cf/zai-org/glm-4.7-flash',

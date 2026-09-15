@@ -1,6 +1,11 @@
 /** Workers AI models available for project-note AI edits (must match backend schema). */
 export const NOTE_AI_MODELS = [
   {
+    id: '@cf/google/gemma-4-26b-a4b-it',
+    label: 'Gemma 4 26B',
+    description: 'افتراضي · قوي ومتوازن',
+  },
+  {
     id: '@cf/qwen/qwen3-30b-a3b-fp8',
     label: 'Qwen3 30B',
     description: 'قوي ومتعدد اللغات',

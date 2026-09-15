@@ -12,6 +12,7 @@ import { buildNoteRagContext } from './note-rag.service'
 export const NOTE_AI_PRIMARY_MODEL = NOTE_AI_DEFAULT_MODEL
 
 const JSON_MODE_MODELS = new Set<string>([
+  '@cf/google/gemma-4-26b-a4b-it',
   '@cf/qwen/qwen3-30b-a3b-fp8',
   '@cf/ibm-granite/granite-4.0-h-micro',
   '@cf/zai-org/glm-4.7-flash',
