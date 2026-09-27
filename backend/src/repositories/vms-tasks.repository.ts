@@ -76,6 +76,21 @@ export async function listTasks(db: D1DatabaseLike, options?: { statuses?: strin
   return Promise.all(result.results.map((row) => hydrateTaskRow(db, row)))
 }
 
+export async function listTasksByProjectId(db: D1DatabaseLike, projectId?: string) {
+  if (projectId?.trim()) {
+    const result = await db
+      .prepare(
+        'SELECT id, created_at, updated_at, project_id, name, description, created_by, status, priority, due_date, points, assigned_to, completed_by, completed_at, approved_by, last_reminded_at FROM tasks WHERE project_id = ? ORDER BY created_at DESC',
+      )
+      .bind(projectId.trim())
+      .all<TaskRow>()
+
+    return Promise.all(result.results.map((row) => hydrateTaskRow(db, row)))
+  }
+
+  return listTasks(db)
+}
+
 export async function getTaskById(db: D1DatabaseLike, id: string) {
   const row = await db
     .prepare(

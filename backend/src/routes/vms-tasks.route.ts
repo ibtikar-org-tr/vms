@@ -28,12 +28,46 @@ import { generateTaskWithAiSchema } from '../schemas/vms-ai-task.schema'
 import { createTaskSchema, taskParamsSchema, updateTaskSchema } from '../schemas/vms-task.schema'
 import { generateTaskFromPrompt } from '../services/ai-task-generation.service'
 import { notifyAssignedTask, notifyTaskReminder } from '../services/task-assignment-notification.service'
+import { deleteTaskVectors, reindexTaskVectors } from '../services/task-embeddings.service'
 import { syncTaskCompletionPoints, type TaskPointsState } from '../services/task-points.service'
 
 import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber } from '../utils/actor'
 import { canManageProject, getProjectAccess } from '../utils/project-access'
+
+async function queueTaskVectorReindex(
+  env: AppBindings,
+  task: {
+    id: string
+    projectId: string
+    name: string
+    description: string | null
+    status: string
+    priority: string
+    assignedTo: string | null
+    dueDate: string | null
+    points: number
+  },
+) {
+  try {
+    const subtasks = await listSubtasksByTaskId(env.VMS_DB, task.id)
+    await reindexTaskVectors(env, {
+      projectId: task.projectId,
+      taskId: task.id,
+      name: task.name,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      assignedTo: task.assignedTo,
+      dueDate: task.dueDate,
+      points: task.points,
+      subtasks: subtasks.map((subtask) => ({ name: subtask.name, status: subtask.status })),
+    })
+  } catch (error) {
+    console.warn(`Failed to reindex task vectors for ${task.id}`, error)
+  }
+}
 
 function toPointsState(task: {
   id: string
@@ -203,6 +237,8 @@ vmsTasksRoute.post('/tasks', zValidator('json', createTaskSchema), async (c) => 
       })
     }
 
+    await queueTaskVectorReindex(c.env, task)
+
     return c.json({ task }, 201)
   } catch (error) {
     console.error('Failed to create task', error)
@@ -278,6 +314,8 @@ vmsTasksRoute.put(
           points: task.points,
         })
       }
+
+      await queueTaskVectorReindex(c.env, task)
 
       return c.json({ task })
     } catch (error) {
@@ -376,6 +414,12 @@ vmsTasksRoute.delete('/tasks/:id', zValidator('param', taskParamsSchema), async 
       return c.json({ error: 'Task not found.' }, 404)
     }
 
+    try {
+      await deleteTaskVectors(c.env, id)
+    } catch (error) {
+      console.warn(`Failed to delete task vectors for ${id}`, error)
+    }
+
     return c.json({ message: 'Task deleted successfully.' })
   } catch (error) {
     console.error('Failed to delete task', error)
@@ -433,6 +477,7 @@ vmsTasksRoute.post(
 
       const subtaskId = crypto.randomUUID()
       const subtask = await createSubtask(c.env.VMS_DB, subtaskId, id, payload)
+      await queueTaskVectorReindex(c.env, task)
       return c.json({ subtask }, 201)
     } catch (error) {
       console.error('Failed to create task subtask', error)
@@ -476,6 +521,7 @@ vmsTasksRoute.put(
         return c.json({ error: 'Subtask not found.' }, 404)
       }
 
+      await queueTaskVectorReindex(c.env, task)
       return c.json({ subtask })
     } catch (error) {
       console.error('Failed to update task subtask', error)
@@ -517,6 +563,7 @@ vmsTasksRoute.delete(
         return c.json({ error: 'Subtask not found.' }, 404)
       }
 
+      await queueTaskVectorReindex(c.env, task)
       return c.json({ message: 'Subtask deleted successfully.' })
     } catch (error) {
       console.error('Failed to delete task subtask', error)

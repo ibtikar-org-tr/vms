@@ -42,7 +42,7 @@ export async function hashNoteContent(content: string) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-async function embedTexts(ai: CloudflareAiBindingLike, texts: string[]) {
+export async function embedTexts(ai: CloudflareAiBindingLike, texts: string[]) {
   const vectors: number[][] = []
 
   for (let offset = 0; offset < texts.length; offset += EMBED_BATCH_SIZE) {
