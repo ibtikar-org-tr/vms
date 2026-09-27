@@ -178,8 +178,10 @@ vmsTasksRoute.post('/tasks/ai-generate', zValidator('json', generateTaskWithAiSc
     }
 
     const generated = await generateTaskFromPrompt(c.env, payload.prompt, {
+      projectId: project.id,
       projectName: project.name,
       projectDescription: project.description,
+      model: payload.model,
     })
 
     return c.json({ generated })

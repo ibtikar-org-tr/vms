@@ -1,4 +1,5 @@
 import { listProjectNotes } from '../repositories/vms-project-notes.repository'
+import { listTasksByProjectId } from '../repositories/vms-tasks.repository'
 import type { AppBindings, VectorizeMetadataValue } from '../types/bindings'
 import { embedQueryText } from './note-embeddings.service'
 
@@ -6,6 +7,12 @@ const RAG_TOP_K = 8
 const RAG_CONTEXT_MAX_CHARS = 6_000
 const RAG_ROSTER_MAX_CHARS = 2_000
 const RAG_MIN_SCORE = 0.25
+
+export interface ProjectRagContext {
+  relatedContextBlock: string
+  noteRosterBlock: string
+  taskRosterBlock: string
+}
 
 export interface NoteRagContext {
   relatedNotesBlock: string
@@ -84,18 +91,18 @@ function formatRelatedMatches(
     return ''
   }
 
-  return `Related project context (retrieved by similarity — use only if relevant to the command):\n---\n${parts.join('\n---\n')}\n---`
+  return `Related project context (retrieved by similarity — use only if relevant):\n---\n${parts.join('\n---\n')}\n---`
 }
 
 function formatNoteRoster(
   notes: Array<{ id: string; title: string }>,
-  excludeNoteId: string,
+  excludeNoteId?: string | null,
 ) {
   const lines: string[] = []
   let used = 'Project notes roster:\n'.length
 
   for (const note of notes) {
-    if (note.id === excludeNoteId) {
+    if (excludeNoteId && note.id === excludeNoteId) {
       continue
     }
 
@@ -115,6 +122,98 @@ function formatNoteRoster(
   return `Project notes roster:\n${lines.join('\n')}`
 }
 
+function formatTaskRoster(tasks: Array<{ id: string; name: string; status: string }>) {
+  const lines: string[] = []
+  let used = 'Project tasks roster:\n'.length
+
+  for (const task of tasks) {
+    const line = `- ${task.name.trim() || task.id} [${task.status}] (${task.id})`
+    if (used + line.length + 1 > RAG_ROSTER_MAX_CHARS) {
+      break
+    }
+
+    lines.push(line)
+    used += line.length + 1
+  }
+
+  if (lines.length === 0) {
+    return ''
+  }
+
+  return `Project tasks roster:\n${lines.join('\n')}`
+}
+
+/**
+ * Build project-scoped RAG context (notes roster, optional task roster, vector matches).
+ * Soft-fails to empty blocks when Vectorize/AI are unavailable.
+ */
+export async function buildProjectRagContext(
+  env: AppBindings,
+  input: {
+    projectId: string
+    queryText: string
+    excludeNoteId?: string | null
+    includeTaskRoster?: boolean
+  },
+): Promise<ProjectRagContext> {
+  const empty: ProjectRagContext = {
+    relatedContextBlock: '',
+    noteRosterBlock: '',
+    taskRosterBlock: '',
+  }
+
+  try {
+    const notes = await listProjectNotes(env.VMS_DB, input.projectId)
+    const noteRosterBlock = formatNoteRoster(
+      notes.map((note) => ({ id: note.id, title: note.title })),
+      input.excludeNoteId,
+    )
+
+    let taskRosterBlock = ''
+    if (input.includeTaskRoster) {
+      const tasks = await listTasksByProjectId(env.VMS_DB, input.projectId)
+      taskRosterBlock = formatTaskRoster(
+        tasks.map((task) => ({ id: task.id, name: task.name, status: task.status })),
+      )
+    }
+
+    const vectorize = env.VMS_NOTES_VECTORIZE
+    if (!vectorize) {
+      return { relatedContextBlock: '', noteRosterBlock, taskRosterBlock }
+    }
+
+    const queryVector = await embedQueryText(env, input.queryText.trim())
+    if (!queryVector) {
+      return { relatedContextBlock: '', noteRosterBlock, taskRosterBlock }
+    }
+
+    const result = await vectorize.query(queryVector, {
+      topK: RAG_TOP_K,
+      returnMetadata: 'all',
+      filter: {
+        projectId: { $eq: input.projectId },
+      },
+    })
+
+    const matches = (result.matches ?? []).filter((match) => {
+      if (!input.excludeNoteId) {
+        return true
+      }
+      const noteId = metadataString(match.metadata, 'noteId')
+      return noteId !== input.excludeNoteId
+    })
+
+    return {
+      relatedContextBlock: formatRelatedMatches(matches),
+      noteRosterBlock,
+      taskRosterBlock,
+    }
+  } catch (error) {
+    console.warn('Project RAG context retrieval failed; continuing without vector context', error)
+    return empty
+  }
+}
+
 /**
  * Build RAG context for AI note edit. Soft-fails to empty blocks when Vectorize/AI are unavailable.
  */
@@ -127,43 +226,15 @@ export async function buildNoteRagContext(
     noteTitle?: string | null
   },
 ): Promise<NoteRagContext> {
-  const empty: NoteRagContext = { relatedNotesBlock: '', rosterBlock: '' }
+  const queryText = [input.noteTitle?.trim(), input.command.trim()].filter(Boolean).join('\n')
+  const rag = await buildProjectRagContext(env, {
+    projectId: input.projectId,
+    queryText,
+    excludeNoteId: input.noteId,
+  })
 
-  try {
-    const notes = await listProjectNotes(env.VMS_DB, input.projectId)
-    const rosterBlock = formatNoteRoster(
-      notes.map((note) => ({ id: note.id, title: note.title })),
-      input.noteId,
-    )
-
-    const vectorize = env.VMS_NOTES_VECTORIZE
-    if (!vectorize) {
-      return { relatedNotesBlock: '', rosterBlock }
-    }
-
-    const queryText = [input.noteTitle?.trim(), input.command.trim()].filter(Boolean).join('\n')
-    const queryVector = await embedQueryText(env, queryText)
-    if (!queryVector) {
-      return { relatedNotesBlock: '', rosterBlock }
-    }
-
-    const result = await vectorize.query(queryVector, {
-      topK: RAG_TOP_K,
-      returnMetadata: 'all',
-      filter: {
-        projectId: { $eq: input.projectId },
-      },
-    })
-
-    const matches = (result.matches ?? []).filter((match) => {
-      const noteId = metadataString(match.metadata, 'noteId')
-      return noteId !== input.noteId
-    })
-
-    const relatedNotesBlock = formatRelatedMatches(matches)
-    return { relatedNotesBlock, rosterBlock }
-  } catch (error) {
-    console.warn('Note RAG context retrieval failed; continuing without vector context', error)
-    return empty
+  return {
+    relatedNotesBlock: rag.relatedContextBlock,
+    rosterBlock: rag.noteRosterBlock,
   }
 }

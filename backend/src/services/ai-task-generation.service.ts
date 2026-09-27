@@ -1,14 +1,19 @@
-import { aiGeneratedTaskSchema, type AiGeneratedTask } from '../schemas/vms-ai-task.schema'
+import {
+  aiGeneratedTaskSchema,
+  TASK_AI_DEFAULT_MODEL,
+  type AiGeneratedTask,
+  type TaskAiModelId,
+} from '../schemas/vms-ai-task.schema'
 import type { AppBindings } from '../types/bindings'
-
-const TASK_GENERATION_MODELS = [
-  '@cf/google/gemma-4-26b-a4b-it',
-  '@cf/qwen/qwen3-30b-a3b-fp8',
-] as const
+import { buildProjectRagContext } from './note-rag.service'
 
 const JSON_MODE_MODELS = new Set<string>([
   '@cf/google/gemma-4-26b-a4b-it',
   '@cf/qwen/qwen3-30b-a3b-fp8',
+  '@cf/ibm-granite/granite-4.0-h-micro',
+  '@cf/zai-org/glm-4.7-flash',
+  '@cf/zai-org/glm-5.3-flash',
+  '@cf/deepseek-ai/deepseek-v4-flash-0731',
 ])
 
 const TASK_JSON_SCHEMA = {
@@ -35,7 +40,8 @@ Rules:
 - "description": clear summary of goals and acceptance criteria (optional string).
 - "priority": one of "low", "medium", "high".
 - "subtasks": array of 3–8 actionable subtask titles (each max 160 chars), ordered logically.
-- Subtasks must be concrete steps, not duplicates of the parent task title.`
+- Subtasks must be concrete steps, not duplicates of the parent task title.
+- You may receive project notes/tasks rosters and related project context retrieved by similarity. Use them to align the new task with existing work, avoid duplicate tasks, and reflect project decisions — but invent a fresh task for the user's request, not a copy of an existing one.`
 
 interface CloudflareAiBinding {
   run(
@@ -104,7 +110,8 @@ function normalizeAiResponsePayload(response: unknown): unknown {
     }
 
     if (Array.isArray(record.choices)) {
-      const content = (record.choices[0] as { message?: { content?: unknown } } | undefined)?.message?.content
+      const content = (record.choices[0] as { message?: { content?: unknown } } | undefined)?.message
+        ?.content
       if (typeof content === 'string') {
         try {
           return JSON.parse(extractJsonObject(content))
@@ -121,8 +128,11 @@ function normalizeAiResponsePayload(response: unknown): unknown {
   return null
 }
 
-function parseGeneratedTask(payload: unknown): AiGeneratedTask {
-  const result = aiGeneratedTaskSchema.safeParse(payload)
+function parseGeneratedTask(payload: unknown, model: string): AiGeneratedTask {
+  const result = aiGeneratedTaskSchema.safeParse({
+    ...(typeof payload === 'object' && payload !== null ? payload : {}),
+    model,
+  })
   if (!result.success) {
     throw new Error('استجابة الذكاء الاصطناعي غير صالحة. حاول صياغة الطلب بشكل أوضح.')
   }
@@ -133,65 +143,79 @@ function parseGeneratedTask(payload: unknown): AiGeneratedTask {
 export async function generateTaskFromPrompt(
   env: AppBindings,
   prompt: string,
-  projectContext?: { projectName?: string | null; projectDescription?: string | null },
+  projectContext: {
+    projectId: string
+    projectName?: string | null
+    projectDescription?: string | null
+    model?: TaskAiModelId | null
+  },
 ): Promise<AiGeneratedTask> {
   const ai = env.AI as CloudflareAiBinding | undefined
   if (!ai) {
     throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً.')
   }
 
+  const model = projectContext.model ?? TASK_AI_DEFAULT_MODEL
+
+  const rag = await buildProjectRagContext(env, {
+    projectId: projectContext.projectId,
+    queryText: prompt,
+    includeTaskRoster: true,
+  })
+
   const contextLines: string[] = []
-  if (projectContext?.projectName?.trim()) {
+  if (projectContext.projectName?.trim()) {
     contextLines.push(`Project name: ${projectContext.projectName.trim()}`)
   }
-  if (projectContext?.projectDescription?.trim()) {
+  if (projectContext.projectDescription?.trim()) {
     contextLines.push(`Project description: ${projectContext.projectDescription.trim()}`)
   }
 
-  const userMessage =
-    contextLines.length > 0
-      ? `${contextLines.join('\n')}\n\nUser request:\n${prompt}`
-      : prompt
+  const contextBlocks = [rag.noteRosterBlock, rag.taskRosterBlock, rag.relatedContextBlock]
+    .filter(Boolean)
+    .join('\n\n')
 
-  let parsedPayload: unknown
+  const contextSection = contextBlocks ? `${contextBlocks}\n\n` : ''
+  const projectHeader = contextLines.length > 0 ? `${contextLines.join('\n')}\n\n` : ''
+
+  const userMessage = `${projectHeader}${contextSection}User request:
+${prompt.trim()}`
+
+  const useJsonSchemaAttempts = JSON_MODE_MODELS.has(model) ? [true, false] : [false]
   let lastError: unknown
 
-  for (const model of TASK_GENERATION_MODELS) {
-    const useJsonSchemaAttempts = JSON_MODE_MODELS.has(model) ? [true, false] : [false]
-
-    for (const useJsonSchema of useJsonSchemaAttempts) {
-      try {
-        const inputs: Parameters<CloudflareAiBinding['run']>[1] = {
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: userMessage },
-          ],
-          max_tokens: 1200,
-          temperature: 0.4,
-        }
-
-        if (useJsonSchema) {
-          inputs.response_format = {
-            type: 'json_schema',
-            json_schema: TASK_JSON_SCHEMA,
-          }
-        }
-
-        const response = await ai.run(model, inputs)
-        parsedPayload = normalizeAiResponsePayload(response)
-        if (parsedPayload) {
-          return parseGeneratedTask(parsedPayload)
-        }
-      } catch (error) {
-        lastError = error
-        console.warn(
-          `Cloudflare AI task generation failed for model ${model}${useJsonSchema ? ' (json schema)' : ''}`,
-          error,
-        )
+  for (const useJsonSchema of useJsonSchemaAttempts) {
+    try {
+      const inputs: Parameters<CloudflareAiBinding['run']>[1] = {
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        max_tokens: 1200,
+        temperature: 0.4,
       }
+
+      if (useJsonSchema) {
+        inputs.response_format = {
+          type: 'json_schema',
+          json_schema: TASK_JSON_SCHEMA,
+        }
+      }
+
+      const response = await ai.run(model, inputs)
+      const parsedPayload = normalizeAiResponsePayload(response)
+      if (parsedPayload) {
+        return parseGeneratedTask(parsedPayload, model)
+      }
+    } catch (error) {
+      lastError = error
+      console.warn(
+        `Cloudflare AI task generation failed for model ${model}${useJsonSchema ? ' (json schema)' : ''}`,
+        error,
+      )
     }
   }
 
-  console.error('Cloudflare AI task generation failed for all models', lastError)
+  console.error(`Cloudflare AI task generation failed for model ${model}`, lastError)
   throw new Error('تعذر الاتصال بخدمة الذكاء الاصطناعي. حاول لاحقاً.')
 }

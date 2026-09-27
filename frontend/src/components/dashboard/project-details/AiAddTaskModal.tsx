@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { FiMic, FiPlus, FiSquare, FiTrash2, FiZap } from 'react-icons/fi'
 import type { VmsProjectMember } from '../../../types/vms'
 import { useSpeechToText } from '../../../hooks/useSpeechToText'
 import { DashboardModalOverlay } from '../DashboardModalOverlay'
+import {
+  NOTE_AI_DEFAULT_MODEL,
+  NOTE_AI_MODELS,
+  type NoteAiModelId,
+} from '../project-notes/note-ai-models'
 
 export interface AiGeneratedTaskDraft {
   name: string
@@ -18,7 +23,7 @@ interface AiAddTaskModalProps {
   createError: string | null
   memberOptions: VmsProjectMember[]
   onClose: () => void
-  onGenerate: (prompt: string) => Promise<AiGeneratedTaskDraft | null>
+  onGenerate: (prompt: string, model: NoteAiModelId) => Promise<AiGeneratedTaskDraft | null>
   onCreate: (draft: AiGeneratedTaskDraft & { assignedTo?: string; points: number }) => Promise<void>
 }
 
@@ -39,14 +44,17 @@ export function AiAddTaskModal({
   onGenerate,
   onCreate,
 }: AiAddTaskModalProps) {
+  const modelSelectId = useId()
   const [phase, setPhase] = useState<'prompt' | 'review'>('prompt')
   const [prompt, setPrompt] = useState('')
+  const [selectedModel, setSelectedModel] = useState<NoteAiModelId>(NOTE_AI_DEFAULT_MODEL)
   const [draft, setDraft] = useState<AiGeneratedTaskDraft>(emptyDraft)
   const [assignedTo, setAssignedTo] = useState('')
   const [points, setPoints] = useState(1)
   const [localError, setLocalError] = useState<string | null>(null)
 
   const isBusy = isGenerating || isCreating
+  const selectedMeta = NOTE_AI_MODELS.find((model) => model.id === selectedModel) ?? NOTE_AI_MODELS[0]
 
   const getPromptBaseText = useCallback(() => prompt, [prompt])
 
@@ -83,7 +91,7 @@ export function AiAddTaskModal({
       return
     }
 
-    const generated = await onGenerate(trimmedPrompt)
+    const generated = await onGenerate(trimmedPrompt, selectedModel)
     if (!generated) {
       return
     }
@@ -155,7 +163,7 @@ export function AiAddTaskModal({
               </p>
               <p className="mt-1 text-xs text-slate-600">
                 {phase === 'prompt'
-                  ? 'صف ما تحتاج إنجازه وسيقترح الذكاء الاصطناعي مهمة رئيسية ومهام فرعية.'
+                  ? 'اختر النموذج، صف المطلوب، وسيُولَّد اقتراح مستفيداً من ملاحظات ومهام المشروع.'
                   : 'راجع الاقتراح وعدّله قبل الحفظ.'}
               </p>
             </div>
@@ -172,51 +180,82 @@ export function AiAddTaskModal({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
           {phase === 'prompt' ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <label className="block text-xs font-semibold tracking-wide text-slate-500">وصف المطلوب</label>
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                <label
+                  htmlFor={modelSelectId}
+                  className="mb-1 block text-xs font-semibold tracking-wide text-slate-500"
+                >
+                  النموذج
+                </label>
+                <select
+                  id={modelSelectId}
+                  value={selectedModel}
+                  disabled={isBusy}
+                  onChange={(event) => setSelectedModel(event.target.value as NoteAiModelId)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 outline-none transition focus:border-violet-600 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {NOTE_AI_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-slate-500">{selectedMeta.description}</p>
+                <p className="mt-0.5 break-all font-mono text-[10px] text-slate-400" dir="ltr">
+                  {selectedModel}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  يُستخدم سياق المشروع من الملاحظات والمهام ذات الصلة في قاعدة المتجهات عند التوليد.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <label className="block text-xs font-semibold tracking-wide text-slate-500">وصف المطلوب</label>
+                  {isSpeechSupported ? (
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      disabled={isBusy}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                        isListening
+                          ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+                          : 'border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100'
+                      }`}
+                      aria-pressed={isListening}
+                    >
+                      {isListening ? (
+                        <>
+                          <FiSquare className="h-3.5 w-3.5" aria-hidden />
+                          إيقاف التحدث
+                        </>
+                      ) : (
+                        <>
+                          <FiMic className="h-3.5 w-3.5" aria-hidden />
+                          تحدّث
+                        </>
+                      )}
+                    </button>
+                  ) : null}
+                </div>
+                <textarea
+                  value={prompt}
+                  onChange={(event) => handlePromptChange(event.target.value)}
+                  placeholder="مثال: أحتاج مهمة لتنظيم ورشة عمل عن الذكاء الاصطناعي للمبتدئين، تشمل التحضير والترويج وتقييم الحضور..."
+                  className="min-h-40 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6 text-slate-800 outline-none transition focus:border-violet-600 focus:ring-2 focus:ring-violet-100"
+                  rows={6}
+                  disabled={isBusy}
+                />
                 {isSpeechSupported ? (
-                  <button
-                    type="button"
-                    onClick={toggleListening}
-                    disabled={isBusy}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      isListening
-                        ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
-                        : 'border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100'
-                    }`}
-                    aria-pressed={isListening}
-                  >
-                    {isListening ? (
-                      <>
-                        <FiSquare className="h-3.5 w-3.5" aria-hidden />
-                        إيقاف التحدث
-                      </>
-                    ) : (
-                      <>
-                        <FiMic className="h-3.5 w-3.5" aria-hidden />
-                        تحدّث
-                      </>
-                    )}
-                  </button>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    للإدخال الصوتي، يُفضّل التحدث بالعربية الفصحى للحصول على أفضل دقة.
+                  </p>
+                ) : null}
+                {isSpeechSupported && isListening ? (
+                  <p className="mt-1 text-xs text-violet-700">جار الاستماع… تحدّث الآن وسيُضاف النص إلى ما كتبته.</p>
                 ) : null}
               </div>
-              <textarea
-                value={prompt}
-                onChange={(event) => handlePromptChange(event.target.value)}
-                placeholder="مثال: أحتاج مهمة لتنظيم ورشة عمل عن الذكاء الاصطناعي للمبتدئين، تشمل التحضير والترويج وتقييم الحضور..."
-                className="min-h-40 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6 text-slate-800 outline-none transition focus:border-violet-600 focus:ring-2 focus:ring-violet-100"
-                rows={6}
-                disabled={isBusy}
-              />
-              {isSpeechSupported ? (
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  للإدخال الصوتي، يُفضّل التحدث بالعربية الفصحى للحصول على أفضل دقة.
-                </p>
-              ) : null}
-              {isSpeechSupported && isListening ? (
-                <p className="mt-1 text-xs text-violet-700">جار الاستماع… تحدّث الآن وسيُضاف النص إلى ما كتبته.</p>
-              ) : null}
             </div>
           ) : (
             <>
