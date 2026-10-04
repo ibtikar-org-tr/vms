@@ -26,6 +26,7 @@ import {
   formatEventDate,
   formatEventLocation,
   isEventUpcomingOrOngoing,
+  eventDescriptionPlainText,
 } from '@/src/utils/format'
 import {
   canSelfModifyRegistration,
@@ -38,8 +39,8 @@ export default function EventDetailScreen() {
   const { user } = useAuth()
   const [event, setEvent] = useState<VmsEvent | null>(null)
   const [tickets, setTickets] = useState<VmsEventTicket[]>([])
-  const [registration, setRegistration] = useState<VmsEventRegistration | null>(null)
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
+  const [registrations, setRegistrations] = useState<VmsEventRegistration[]>([])
+  const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isApplying, setIsApplying] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
@@ -65,8 +66,12 @@ export default function EventDetailScreen() {
       ])
       setEvent(eventPayload.event)
       setTickets(ticketsPayload.eventTickets)
-      setRegistration(registrationPayload.eventRegistrations[0] ?? null)
-      setSelectedTicketId(ticketsPayload.eventTickets[0]?.id ?? null)
+      setRegistrations(
+        registrationPayload.eventRegistrations.filter(
+          (item) => item.status === 'registered' || item.status === 'attended',
+        ),
+      )
+      setSelectedTicketIds([])
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'تعذر تحميل الفعالية.')
     } finally {
@@ -93,17 +98,30 @@ export default function EventDetailScreen() {
 
   const skillNames = event?.skills ? Object.keys(event.skills) : []
   const upcoming = event ? isEventUpcomingOrOngoing(event) : false
-  const canModify = event
-    ? canSelfModifyRegistration(event, registration, user?.membershipNumber)
-    : false
+  const ownedTicketIds = useMemo(
+    () => new Set(registrations.map((item) => item.ticketId)),
+    [registrations],
+  )
+  const remainingTickets = useMemo(
+    () => tickets.filter((ticket) => !ownedTicketIds.has(ticket.id)),
+    [ownedTicketIds, tickets],
+  )
+  const remainingAvailableTickets = remainingTickets.filter(
+    (ticket) => (ticket.activeRegistrationCount ?? 0) < ticket.quantity,
+  )
+  const newSelectedTicketIds = selectedTicketIds.filter((ticketId) =>
+    remainingAvailableTickets.some((ticket) => ticket.id === ticketId),
+  )
+  const hasSelectedTickets = newSelectedTicketIds.length > 0
 
-  const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? null
-  const registeredTicket = registration
-    ? tickets.find((ticket) => ticket.id === registration.ticketId) ?? null
-    : null
+  const toggleTicketSelection = (ticketId: string) => {
+    setSelectedTicketIds((current) =>
+      current.includes(ticketId) ? current.filter((id) => id !== ticketId) : [...current, ticketId],
+    )
+  }
 
   const handleRegister = async () => {
-    if (!event || !user?.membershipNumber || !selectedTicketId) return
+    if (!event || !user?.membershipNumber || !hasSelectedTickets) return
 
     setIsApplying(true)
     setActionError(null)
@@ -112,11 +130,18 @@ export default function EventDetailScreen() {
     try {
       const payload = await createEventRegistration({
         eventId: event.id,
-        ticketId: selectedTicketId,
+        ticketIds: newSelectedTicketIds,
         membershipNumber: user.membershipNumber,
+        status: 'registered',
       })
-      setRegistration(payload.eventRegistration)
-      setActionSuccess('تم التسجيل في الفعالية بنجاح.')
+      const created = payload.eventRegistrations?.length ? payload.eventRegistrations : [payload.eventRegistration]
+      setRegistrations((current) => [...created, ...current])
+      setSelectedTicketIds([])
+      const customMessage = eventDescriptionPlainText(event.registrationSuccessMessage)
+      setActionSuccess(
+        customMessage ||
+          (created.length > 1 ? 'تم تسجيل التذاكر المختارة بنجاح.' : 'تم التسجيل في الفعالية بنجاح.'),
+      )
     } catch (requestError) {
       setActionError(requestError instanceof Error ? requestError.message : 'تعذر التسجيل.')
     } finally {
@@ -124,8 +149,8 @@ export default function EventDetailScreen() {
     }
   }
 
-  const handleCancel = async () => {
-    if (!registration) return
+  const handleCancel = async (registration: VmsEventRegistration) => {
+    if (!event || !canSelfModifyRegistration(event, registration, user?.membershipNumber)) return
 
     setIsCancelling(true)
     setActionError(null)
@@ -133,8 +158,8 @@ export default function EventDetailScreen() {
 
     try {
       await selfCancelEventRegistration(registration.id)
-      setRegistration(null)
-      setActionSuccess('تم إلغاء التسجيل.')
+      setRegistrations((current) => current.filter((item) => item.id !== registration.id))
+      setActionSuccess('تم إلغاء التذكرة.')
     } catch (requestError) {
       setActionError(requestError instanceof Error ? requestError.message : 'تعذر الإلغاء.')
     } finally {
@@ -142,8 +167,8 @@ export default function EventDetailScreen() {
     }
   }
 
-  const handleChangeTicket = async (ticketId: string) => {
-    if (!registration) return
+  const handleChangeTicket = async (registration: VmsEventRegistration, ticketId: string) => {
+    if (!event || !canSelfModifyRegistration(event, registration, user?.membershipNumber)) return
 
     setIsApplying(true)
     setActionError(null)
@@ -151,7 +176,9 @@ export default function EventDetailScreen() {
 
     try {
       const payload = await changeEventRegistrationTicket(registration.id, ticketId)
-      setRegistration(payload.eventRegistration)
+      setRegistrations((current) =>
+        current.map((item) => (item.id === payload.eventRegistration.id ? payload.eventRegistration : item)),
+      )
       setActionSuccess('تم تغيير التذكرة.')
     } catch (requestError) {
       setActionError(requestError instanceof Error ? requestError.message : 'تعذر تغيير التذكرة.')
@@ -222,7 +249,7 @@ export default function EventDetailScreen() {
             {event.description ? (
               <View style={styles.descriptionBlock}>
                 <Text style={styles.label}>الوصف</Text>
-                <Text style={styles.description}>{event.description}</Text>
+                <Text style={styles.description}>{eventDescriptionPlainText(event.description) || event.description}</Text>
               </View>
             ) : null}
 
@@ -245,86 +272,118 @@ export default function EventDetailScreen() {
                 {actionError ? <ErrorBanner message={actionError} /> : null}
                 {actionSuccess ? <Text style={styles.successText}>{actionSuccess}</Text> : null}
 
-                {registration ? (
+                {registrations.length > 0 ? (
                   <View style={styles.registrationCard}>
-                    <StatusPill
-                      label={registrationStatusLabel(registration.status)}
-                      tone={registration.status === 'registered' ? 'success' : 'neutral'}
-                    />
-                    {registeredTicket ? (
-                      <Text style={styles.value}>التذكرة: {registeredTicket.name}</Text>
-                    ) : null}
+                    {registrations.map((item) => {
+                      const registeredTicket = tickets.find((ticket) => ticket.id === item.ticketId) ?? null
+                      const canModifyThis = event
+                        ? canSelfModifyRegistration(event, item, user?.membershipNumber)
+                        : false
 
-                    {canModify && tickets.length > 1 ? (
-                      <View style={styles.ticketList}>
-                        <Text style={styles.label}>تغيير التذكرة</Text>
-                        {tickets.map((ticket) => (
-                          <Pressable
-                            key={ticket.id}
-                            style={[
-                              styles.ticketOption,
-                              registration.ticketId === ticket.id && styles.ticketSelected,
-                            ]}
-                            disabled={isApplying || registration.ticketId === ticket.id}
-                            onPress={() => void handleChangeTicket(ticket.id)}
-                          >
-                            <Text style={styles.ticketName}>{ticket.name}</Text>
-                            <Text style={styles.ticketMeta}>
-                              {ticket.pointPrice} نقطة
-                              {ticket.currencyPrice ? ` · ${ticket.currencyPrice}` : ''}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    ) : null}
+                      return (
+                        <View key={item.id} style={styles.ownedTicketCard}>
+                          <StatusPill
+                            label={registrationStatusLabel(item.status)}
+                            tone={item.status === 'registered' ? 'success' : 'neutral'}
+                          />
+                          {registeredTicket ? (
+                            <Text style={styles.value}>التذكرة: {registeredTicket.name}</Text>
+                          ) : null}
 
-                    {canModify ? (
-                      <Pressable
-                        style={[styles.cancelButton, isCancelling && styles.disabled]}
-                        disabled={isCancelling}
-                        onPress={() => void handleCancel()}
-                      >
-                        <Text style={styles.cancelText}>
-                          {isCancelling ? 'جارٍ الإلغاء...' : 'إلغاء التسجيل'}
-                        </Text>
-                      </Pressable>
-                    ) : null}
+                          {canModifyThis && remainingTickets.length > 0 ? (
+                            <View style={styles.ticketList}>
+                              <Text style={styles.label}>تغيير هذه التذكرة</Text>
+                              {remainingTickets.map((ticket) => {
+                                const soldOut = (ticket.activeRegistrationCount ?? 0) >= ticket.quantity
+                                return (
+                                  <Pressable
+                                    key={ticket.id}
+                                    style={[styles.ticketOption, soldOut && styles.disabled]}
+                                    disabled={isApplying || soldOut}
+                                    onPress={() => void handleChangeTicket(item, ticket.id)}
+                                  >
+                                    <Text style={styles.ticketName}>{ticket.name}</Text>
+                                    <Text style={styles.ticketMeta}>
+                                      {ticket.pointPrice} نقطة
+                                      {ticket.currencyPrice ? ` · ${ticket.currencyPrice}` : ''}
+                                      {soldOut ? ' · نفدت' : ''}
+                                    </Text>
+                                  </Pressable>
+                                )
+                              })}
+                            </View>
+                          ) : null}
+
+                          {canModifyThis ? (
+                            <Pressable
+                              style={[styles.cancelButton, isCancelling && styles.disabled]}
+                              disabled={isCancelling}
+                              onPress={() => void handleCancel(item)}
+                            >
+                              <Text style={styles.cancelText}>
+                                {isCancelling ? 'جارٍ الإلغاء...' : 'إلغاء هذه التذكرة'}
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      )
+                    })}
                   </View>
-                ) : tickets.length > 0 ? (
+                ) : null}
+
+                {remainingTickets.length > 0 ? (
                   <View style={styles.ticketList}>
-                    {tickets.map((ticket) => (
-                      <Pressable
-                        key={ticket.id}
-                        style={[
-                          styles.ticketOption,
-                          selectedTicketId === ticket.id && styles.ticketSelected,
-                        ]}
-                        onPress={() => setSelectedTicketId(ticket.id)}
-                      >
-                        <Text style={styles.ticketName}>{ticket.name}</Text>
-                        <Text style={styles.ticketMeta}>
-                          {ticket.pointPrice} نقطة
-                          {ticket.currencyPrice ? ` · ${ticket.currencyPrice}` : ''}
-                        </Text>
-                        {ticket.description ? (
-                          <Text style={styles.ticketDescription}>{ticket.description}</Text>
-                        ) : null}
-                      </Pressable>
-                    ))}
+                    <Text style={styles.label}>
+                      {registrations.length > 0 ? 'أضف تذاكر أخرى' : 'اختر تذكرة واحدة أو أكثر'}
+                    </Text>
+                    {remainingTickets.map((ticket) => {
+                      const selected = selectedTicketIds.includes(ticket.id)
+                      const soldOut = (ticket.activeRegistrationCount ?? 0) >= ticket.quantity
+                      return (
+                        <Pressable
+                          key={ticket.id}
+                          style={[
+                            styles.ticketOption,
+                            selected && styles.ticketSelected,
+                            soldOut && styles.disabled,
+                          ]}
+                          disabled={soldOut}
+                          onPress={() => toggleTicketSelection(ticket.id)}
+                        >
+                          <Text style={styles.ticketName}>{ticket.name}</Text>
+                          <Text style={styles.ticketMeta}>
+                            {ticket.pointPrice} نقطة
+                            {ticket.currencyPrice ? ` · ${ticket.currencyPrice}` : ''}
+                            {soldOut ? ' · نفدت' : selected ? ' · مختارة' : ''}
+                          </Text>
+                          {ticket.description ? (
+                            <Text style={styles.ticketDescription}>{ticket.description}</Text>
+                          ) : null}
+                        </Pressable>
+                      )
+                    })}
 
                     <Pressable
-                      style={[styles.registerButton, (isApplying || !selectedTicket) && styles.disabled]}
-                      disabled={isApplying || !selectedTicket}
+                      style={[styles.registerButton, (isApplying || !hasSelectedTickets) && styles.disabled]}
+                      disabled={isApplying || !hasSelectedTickets}
                       onPress={() => void handleRegister()}
                     >
                       <Text style={styles.registerText}>
-                        {isApplying ? 'جارٍ التسجيل...' : 'سجّل الآن'}
+                        {isApplying
+                          ? 'جارٍ التسجيل...'
+                          : registrations.length > 0
+                            ? hasSelectedTickets && newSelectedTicketIds.length > 1
+                              ? `إضافة التذاكر (${newSelectedTicketIds.length})`
+                              : 'إضافة التذكرة المختارة'
+                            : hasSelectedTickets && newSelectedTicketIds.length > 1
+                              ? `سجّل الآن (${newSelectedTicketIds.length})`
+                              : 'سجّل الآن'}
                       </Text>
                     </Pressable>
                   </View>
-                ) : (
+                ) : registrations.length === 0 ? (
                   <Text style={styles.helperText}>لا تتوفر تذاكر لهذه الفعالية حالياً.</Text>
-                )}
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -419,6 +478,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderRadius: 14,
     padding: 12,
+  },
+  ownedTicketCard: {
+    gap: 10,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   ticketList: { gap: 8 },
   ticketOption: {

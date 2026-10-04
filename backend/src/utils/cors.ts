@@ -7,6 +7,8 @@ const LOCAL_DEV_ORIGINS = [
   'http://127.0.0.1:5173',
   'http://localhost:4173',
   'http://127.0.0.1:4173',
+  'http://localhost:5930',
+  'http://127.0.0.1:5930',
   'http://localhost:8081',
   'http://127.0.0.1:8081',
 ]

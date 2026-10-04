@@ -69,6 +69,7 @@ export interface VmsEvent {
   displayAttendeeNumbers: boolean
   cancellationDeadlineHours: number
   allowGuestRegistration: boolean
+  registrationSuccessMessage?: string | null
 }
 
 export interface VmsEventTicket {

@@ -26,6 +26,7 @@ interface EventRow {
   display_attendee_numbers: number | null
   cancellation_deadline_hours: number | null
   allow_guest_registration: number | null
+  registration_success_message: string | null
 }
 
 function mapDisplayAttendeeNumbers(value: number | null | undefined) {
@@ -79,6 +80,7 @@ function mapEventRow(row: EventRow) {
     displayAttendeeNumbers: mapDisplayAttendeeNumbers(row.display_attendee_numbers),
     cancellationDeadlineHours: mapCancellationDeadlineHours(row.cancellation_deadline_hours),
     allowGuestRegistration: mapAllowGuestRegistration(row.allow_guest_registration),
+    registrationSuccessMessage: row.registration_success_message ?? null,
   }
 }
 
@@ -102,28 +104,9 @@ export async function listEvents(db: D1DatabaseLike) {
   const result = await db
     .prepare(
       `SELECT
-         events.id,
-         events.created_at,
-         events.updated_at,
-         events.name,
-         events.description,
-         events.start_time,
-         events.end_time,
-         events.status,
-         events.image_url,
-         events.associated_urls,
-         events.created_by,
-         events.project_id,
+         events.*,
          projects.name AS project_name,
-         projects.owner AS project_owner,
-         events.telegram_group_id,
-         events.country,
-         events.region,
-         events.city,
-         events.address,
-         events.display_attendee_numbers,
-         events.cancellation_deadline_hours,
-         events.allow_guest_registration
+         projects.owner AS project_owner
        FROM events
        LEFT JOIN projects ON projects.id = events.project_id
        ORDER BY events.created_at DESC`,
@@ -138,28 +121,9 @@ export async function getEventById(db: D1DatabaseLike, id: string) {
   const row = await db
     .prepare(
       `SELECT
-         events.id,
-         events.created_at,
-         events.updated_at,
-         events.name,
-         events.description,
-         events.start_time,
-         events.end_time,
-         events.status,
-         events.image_url,
-         events.associated_urls,
-         events.created_by,
-         events.project_id,
+         events.*,
          projects.name AS project_name,
-         projects.owner AS project_owner,
-         events.telegram_group_id,
-         events.country,
-         events.region,
-         events.city,
-         events.address,
-         events.display_attendee_numbers,
-         events.cancellation_deadline_hours,
-         events.allow_guest_registration
+         projects.owner AS project_owner
        FROM events
        LEFT JOIN projects ON projects.id = events.project_id
        WHERE events.id = ?`,
@@ -205,7 +169,9 @@ export async function createEvent(db: D1DatabaseLike, id: string, input: CreateE
       input.startTime ?? null,
       input.endTime ?? null,
       input.imageUrl ?? null,
-      input.associatedUrls ? JSON.stringify(input.associatedUrls) : null,
+      input.associatedUrls && Object.keys(input.associatedUrls).length > 0
+        ? JSON.stringify(input.associatedUrls)
+        : null,
       input.createdBy,
       input.projectId ?? null,
       input.status,
@@ -222,6 +188,10 @@ export async function createEvent(db: D1DatabaseLike, id: string, input: CreateE
 
   await replaceAssociatedSkills(db, 'event', id, input.skills ?? null)
 
+  if (input.registrationSuccessMessage !== undefined) {
+    return updateEventById(db, id, { registrationSuccessMessage: input.registrationSuccessMessage })
+  }
+
   return getEventById(db, id)
 }
 
@@ -236,7 +206,7 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
 
   if (input.description !== undefined) {
     updates.push('description = ?')
-    values.push(input.description)
+    values.push(input.description?.trim() ? input.description : null)
   }
 
   if (input.startTime !== undefined) {
@@ -261,7 +231,11 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
 
   if (input.associatedUrls !== undefined) {
     updates.push('associated_urls = ?')
-    values.push(input.associatedUrls ? JSON.stringify(input.associatedUrls) : null)
+    values.push(
+      input.associatedUrls && Object.keys(input.associatedUrls).length > 0
+        ? JSON.stringify(input.associatedUrls)
+        : null,
+    )
   }
 
   if (input.createdBy !== undefined) {
@@ -314,16 +288,31 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
     values.push(input.allowGuestRegistration ? 1 : 0)
   }
 
-  if (updates.length === 0) {
-    return getEventById(db, id)
+  const registrationSuccessMessage = input.registrationSuccessMessage
+
+  if (updates.length > 0) {
+    updates.push("updated_at = datetime('now')")
+
+    await db
+      .prepare(`UPDATE events SET ${updates.join(', ')} WHERE id = ?`)
+      .bind(...values, id)
+      .run()
   }
 
-  updates.push("updated_at = datetime('now')")
+  if (registrationSuccessMessage !== undefined) {
+    try {
+      await db
+        .prepare(`UPDATE events SET registration_success_message = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(registrationSuccessMessage?.trim() ? registrationSuccessMessage : null, id)
+        .run()
+    } catch (error) {
+      console.error('Failed to save event registration success message', error)
+    }
+  }
 
-  await db
-    .prepare(`UPDATE events SET ${updates.join(', ')} WHERE id = ?`)
-    .bind(...values, id)
-    .run()
+  if (updates.length === 0 && registrationSuccessMessage === undefined) {
+    return getEventById(db, id)
+  }
 
   if (input.skills !== undefined) {
     await replaceAssociatedSkills(db, 'event', id, input.skills ?? null)

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { VmsEvent } from '../../../types/vms'
 import { EventCard } from './EventCard'
 import { normalizeToAsciiLower } from '../../../utils/normalizeText'
+import { eventRichTextToPlain } from '../../../utils/event-rich-text'
 
 type GroupKey = 'started' | 'ongoing' | 'ended'
 
@@ -57,7 +58,7 @@ export function EventsCatalog({
       const matchesSearch =
         !normalizedQuery ||
         normalizeToAsciiLower(eventItem.name).includes(normalizedQuery) ||
-        normalizeToAsciiLower(eventItem.description ?? '').includes(normalizedQuery)
+        normalizeToAsciiLower(eventRichTextToPlain(eventItem.description ?? '')).includes(normalizedQuery)
 
       return matchesCountry && matchesRegion && matchesSearch
     })

@@ -24,13 +24,18 @@ export function fetchMyEventRegistration(eventId: string, membershipNumber: stri
 
 export function createEventRegistration(payload: {
   eventId: string
-  ticketId: string
+  ticketId?: string
+  ticketIds?: string[]
   membershipNumber: string
+  status?: 'registered' | 'attended' | 'cancelled' | 'no_show'
 }) {
-  return apiPostJson<{ eventRegistration: VmsEventRegistration }, typeof payload>(
-    '/event-registrations',
-    payload,
-  )
+  return apiPostJson<
+    { eventRegistration: VmsEventRegistration; eventRegistrations?: VmsEventRegistration[] },
+    typeof payload
+  >('/event-registrations', {
+    status: 'registered',
+    ...payload,
+  })
 }
 
 export function selfCancelEventRegistration(registrationId: string) {
