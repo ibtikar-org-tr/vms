@@ -291,7 +291,7 @@ export function createTask(payload: {
   )
 }
 
-export function generateTaskWithAi(payload: { projectId: string; prompt: string }) {
+export function generateTaskWithAi(payload: { projectId: string; prompt: string; model: string }) {
   return postJson<
     {
       generated: {
@@ -299,6 +299,7 @@ export function generateTaskWithAi(payload: { projectId: string; prompt: string 
         description?: string
         priority: 'low' | 'medium' | 'high'
         subtasks: string[]
+        model?: string
       }
     },
     typeof payload
@@ -859,6 +860,7 @@ export function editProjectNoteWithAi(
     command: string
     content: string
     contentType: 'html' | 'markdown'
+    model: string
   },
 ) {
   return postJson<

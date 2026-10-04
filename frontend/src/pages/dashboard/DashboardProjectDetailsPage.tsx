@@ -727,7 +727,10 @@ export function DashboardProjectDetailsPage() {
     }
   }
 
-  const handleGenerateAiTask = async (prompt: string): Promise<AiGeneratedTaskDraft | null> => {
+  const handleGenerateAiTask = async (
+    prompt: string,
+    model: string,
+  ): Promise<AiGeneratedTaskDraft | null> => {
     setAiTaskGenerateError(null)
 
     if (!projectID || !user) {
@@ -746,6 +749,7 @@ export function DashboardProjectDetailsPage() {
       const payload = await generateTaskWithAi({
         projectId: projectID,
         prompt,
+        model,
       })
 
       return {
