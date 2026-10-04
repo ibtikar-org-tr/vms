@@ -78,6 +78,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           VECTORIZE_INDEX_NAME: ${{ vars.VECTORIZE_INDEX_NAME }}
+          WRANGLER_CONFIG: wrangler.local.jsonc
         run: bash ./scripts/ensure-vectorize-index.sh
 
       - name: Deploy to Cloudflare Workers

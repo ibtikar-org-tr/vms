@@ -7,6 +7,20 @@ DIMENSIONS="${VECTORIZE_DIMENSIONS:-1024}"
 METRIC="${VECTORIZE_METRIC:-cosine}"
 METADATA_PROPERTY="${VECTORIZE_METADATA_PROPERTY:-projectId}"
 METADATA_TYPE="${VECTORIZE_METADATA_TYPE:-string}"
+WRANGLER_CONFIG="${WRANGLER_CONFIG:-}"
+
+if [[ -z "$WRANGLER_CONFIG" && -f wrangler.local.jsonc ]]; then
+  WRANGLER_CONFIG="wrangler.local.jsonc"
+fi
+
+WRANGLER_CONFIG_ARGS=()
+if [[ -n "$WRANGLER_CONFIG" ]]; then
+  WRANGLER_CONFIG_ARGS=(--config "$WRANGLER_CONFIG")
+fi
+
+wrangler_vectorize() {
+  wrangler vectorize "$@" "${WRANGLER_CONFIG_ARGS[@]}"
+}
 
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
   echo "CLOUDFLARE_API_TOKEN is required to manage Vectorize."
@@ -25,13 +39,16 @@ is_auth_error() {
 
 is_missing_index() {
   local output="$1"
-  echo "$output" | grep -qiE 'not found|does not exist|couldn.t find|10159'
+  echo "$output" | grep -qiE 'not found|does not exist|couldn.t find|10159|code: 404'
 }
 
 echo "Ensuring Vectorize index '${INDEX_NAME}' (dimensions=${DIMENSIONS}, metric=${METRIC})"
+if [[ -n "$WRANGLER_CONFIG" ]]; then
+  echo "Using wrangler config: ${WRANGLER_CONFIG}"
+fi
 
 set +e
-GET_OUTPUT="$(wrangler vectorize get "$INDEX_NAME" --json 2>&1)"
+GET_OUTPUT="$(wrangler_vectorize get "$INDEX_NAME" --json 2>&1)"
 GET_STATUS=$?
 set -e
 
@@ -43,7 +60,7 @@ elif is_auth_error "$GET_OUTPUT"; then
   exit 0
 elif is_missing_index "$GET_OUTPUT"; then
   echo "Creating Vectorize index: ${INDEX_NAME}"
-  wrangler vectorize create "$INDEX_NAME" \
+  wrangler_vectorize create "$INDEX_NAME" \
     --dimensions="$DIMENSIONS" \
     --metric="$METRIC" \
     --description="VMS notes and tasks embeddings for @cf/baai/bge-m3"
@@ -53,7 +70,7 @@ else
 fi
 
 set +e
-META_OUTPUT="$(wrangler vectorize list-metadata-index "$INDEX_NAME" --json 2>&1)"
+META_OUTPUT="$(wrangler_vectorize list-metadata-index "$INDEX_NAME" --json 2>&1)"
 META_STATUS=$?
 set -e
 
@@ -74,7 +91,7 @@ fi
 
 echo "Creating metadata index: ${METADATA_PROPERTY} (${METADATA_TYPE})"
 set +e
-CREATE_META_OUTPUT="$(wrangler vectorize create-metadata-index "$INDEX_NAME" --propertyName="$METADATA_PROPERTY" --type="$METADATA_TYPE" 2>&1)"
+CREATE_META_OUTPUT="$(wrangler_vectorize create-metadata-index "$INDEX_NAME" --propertyName="$METADATA_PROPERTY" --type="$METADATA_TYPE" 2>&1)"
 CREATE_META_STATUS=$?
 set -e
 
