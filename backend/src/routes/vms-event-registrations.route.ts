@@ -1,10 +1,10 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import {
-  createEventRegistration,
   deleteEventRegistrationById,
   getEventRegistrationById,
   getEventRegistrationByEventAndMember,
+  getEventRegistrationByEventMemberAndTicket,
   claimGuestEventRegistrations,
   countActiveEventRegistrationsByTicket,
   countEventRegistrations,
@@ -23,6 +23,10 @@ import {
   eventRegistrantContactParamsSchema,
   updateEventRegistrationSchema,
 } from '../schemas/vms-event-registration.schema'
+import {
+  isEventRegistrationUniqueConflict,
+  registerSelectedEventTickets,
+} from '../services/event-ticket-registration.service'
 import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber, getActorUser } from '../utils/actor'
@@ -31,6 +35,7 @@ import {
   canSelfCancelRegistration,
   canSelfModifyRegistration,
 } from '../utils/event-registration-cancellation'
+import { uniqueTicketIds, validateRequestedTicketIds } from '../utils/event-ticket-ids'
 
 export const vmsEventRegistrationsRoute = new Hono<AppEnv>()
 
@@ -284,42 +289,52 @@ vmsEventRegistrationsRoute.post('/event-registrations', zValidator('json', creat
       return c.json({ error: 'التسجيل متاح فقط للفعاليات المنشورة.' }, 403)
     }
 
+    const ticketIds = uniqueTicketIds(payload)
+    const ticketIdsError = validateRequestedTicketIds(ticketIds)
+    if (ticketIdsError) {
+      return c.json({ error: ticketIdsError }, 400)
+    }
+
     try {
       await claimGuestEventRegistrations(c.env.VMS_DB, actorMembershipNumber, getActorUser(c).email)
     } catch (error) {
       console.error('Failed to claim guest event registrations before member apply', error)
     }
 
-    const existingRegistration = await getEventRegistrationByEventAndMember(
-      c.env.VMS_DB,
-      payload.eventId,
-      actorMembershipNumber,
-    )
-    if (existingRegistration) {
-      return c.json({ error: 'لديك تسجيل سابق في هذه الفعالية.' }, 409)
-    }
-
-    const ticket = await getEventTicketById(c.env.VMS_DB, payload.ticketId)
-    if (!ticket || ticket.eventId !== payload.eventId) {
-      return c.json({ error: 'التذكرة المختارة غير متاحة لهذه الفعالية.' }, 400)
-    }
-
-    const activeRegistrations = ticket.activeRegistrationCount
-    if (activeRegistrations >= ticket.quantity) {
-      return c.json({ error: 'لم يعد هناك مقاعد متاحة لهذه التذكرة.' }, 409)
-    }
-
-    const eventRegistrationId = crypto.randomUUID()
-    const eventRegistration = await createEventRegistration(c.env.VMS_DB, eventRegistrationId, {
-      ...payload,
-      status: 'registered',
+    const existingRegistrations = await listEventRegistrations(c.env.VMS_DB, {
+      eventId: payload.eventId,
+      membershipNumber: actorMembershipNumber,
     })
-    const [enrichedRegistration] = await enrichEventRegistrationsWithDisplayNames(c.env.MEMBERS_DB, [
-      eventRegistration!,
+
+    const result = await registerSelectedEventTickets(c.env.VMS_DB, {
+      eventId: payload.eventId,
+      ticketIds,
+      ownedTicketIds: existingRegistrations
+        .filter((registration) => registration.status === 'registered' || registration.status === 'attended')
+        .map((registration) => registration.ticketId),
+      membershipNumber: actorMembershipNumber,
+    })
+
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status)
+    }
+
+    const [enrichedRegistrations] = await Promise.all([
+      enrichEventRegistrationsWithDisplayNames(c.env.MEMBERS_DB, result.created),
     ])
 
-    return c.json({ eventRegistration: enrichedRegistration }, 201)
+    return c.json(
+      {
+        eventRegistration: enrichedRegistrations[0],
+        eventRegistrations: enrichedRegistrations,
+      },
+      201,
+    )
   } catch (error) {
+    if (isEventRegistrationUniqueConflict(error)) {
+      return c.json({ error: 'لديك تسجيل سابق على إحدى هذه التذاكر.' }, 409)
+    }
+
     console.error('Failed to create event registration', error)
     return c.json({ error: 'Could not create event registration.' }, 500)
   }
@@ -417,6 +432,19 @@ vmsEventRegistrationsRoute.post(
         return c.json({ error: 'أنت مسجّل بالفعل على هذه التذكرة.' }, 400)
       }
 
+      const existingForTicket = await getEventRegistrationByEventMemberAndTicket(
+        c.env.VMS_DB,
+        registration.eventId,
+        actorMembershipNumber,
+        ticketId,
+      )
+      if (
+        existingForTicket &&
+        (existingForTicket.status === 'registered' || existingForTicket.status === 'attended')
+      ) {
+        return c.json({ error: 'لديك تسجيل سابق على التذكرة المختارة.' }, 409)
+      }
+
       const event = await getEventCancellationSettingsById(c.env.VMS_DB, registration.eventId)
       if (!event) {
         return c.json({ error: 'Event not found.' }, 404)
@@ -444,6 +472,10 @@ vmsEventRegistrationsRoute.post(
 
       return c.json({ eventRegistration: enrichedRegistration })
     } catch (error) {
+      if (isEventRegistrationUniqueConflict(error)) {
+        return c.json({ error: 'لديك تسجيل سابق على التذكرة المختارة.' }, 409)
+      }
+
       console.error('Failed to change event registration ticket', error)
       return c.json({ error: 'Could not change event registration ticket.' }, 500)
     }

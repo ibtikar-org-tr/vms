@@ -2,14 +2,18 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { getUserByEmail } from '../repositories/users.repository'
 import {
-  createEventRegistration,
-  getEventRegistrationByEventAndGuestEmail,
+  listEventRegistrationsByEventAndGuestEmail,
 } from '../repositories/vms-event-registrations.repository'
-import { getEventTicketById, listEventTickets } from '../repositories/vms-event-tickets.repository'
+import { listEventTickets } from '../repositories/vms-event-tickets.repository'
 import { getEventById } from '../repositories/vms-events.repository'
 import { createGuestEventRegistrationSchema } from '../schemas/vms-event-registration.schema'
 import { eventParamsSchema } from '../schemas/vms-event.schema'
+import {
+  isEventRegistrationUniqueConflict,
+  registerSelectedEventTickets,
+} from '../services/event-ticket-registration.service'
 import type { AppBindings } from '../types/bindings'
+import { uniqueTicketIds, validateRequestedTicketIds } from '../utils/event-ticket-ids'
 import { stripTicketActiveRegistrationCounts } from '../utils/event-registration-counts'
 
 export const vmsPublicEventsRoute = new Hono<{ Bindings: AppBindings }>()
@@ -75,50 +79,49 @@ vmsPublicEventsRoute.post(
         return c.json({ error: 'هذا البريد مرتبط بحساب. يرجى تسجيل الدخول للتقديم.' }, 409)
       }
 
-      const existingGuestRegistration = await getEventRegistrationByEventAndGuestEmail(
+      const ticketIds = uniqueTicketIds(payload)
+      const ticketIdsError = validateRequestedTicketIds(ticketIds)
+      if (ticketIdsError) {
+        return c.json({ error: ticketIdsError }, 400)
+      }
+
+      const existingGuestRegistrations = await listEventRegistrationsByEventAndGuestEmail(
         c.env.VMS_DB,
         eventId,
         payload.guestEmail,
       )
-      if (existingGuestRegistration) {
-        return c.json({ error: 'هذا البريد مسجّل مسبقاً في هذه الفعالية.' }, 409)
-      }
 
-      const ticket = await getEventTicketById(c.env.VMS_DB, payload.ticketId)
-      if (!ticket || ticket.eventId !== eventId) {
-        return c.json({ error: 'التذكرة المختارة غير متاحة لهذه الفعالية.' }, 400)
-      }
-
-      if (ticket.activeRegistrationCount >= ticket.quantity) {
-        return c.json({ error: 'لم يعد هناك مقاعد متاحة لهذه التذكرة.' }, 409)
-      }
-
-      const eventRegistration = await createEventRegistration(c.env.VMS_DB, crypto.randomUUID(), {
+      const result = await registerSelectedEventTickets(c.env.VMS_DB, {
         eventId,
+        ticketIds,
+        ownedTicketIds: existingGuestRegistrations
+          .filter((registration) => registration.status === 'registered' || registration.status === 'attended')
+          .map((registration) => registration.ticketId),
         membershipNumber: null,
-        ticketId: payload.ticketId,
-        status: 'registered',
         guestEmail: payload.guestEmail,
         guestName: payload.guestName,
         guestPhone: payload.guestPhone,
       })
 
+      if (!result.ok) {
+        return c.json({ error: result.error }, result.status)
+      }
+
+      const eventRegistrations = result.created.map((eventRegistration) => ({
+        ...eventRegistration,
+        displayName: eventRegistration.guestName ?? payload.guestName,
+      }))
+
       return c.json(
         {
-          eventRegistration: {
-            ...eventRegistration,
-            displayName: eventRegistration.guestName ?? payload.guestName,
-          },
+          eventRegistration: eventRegistrations[0],
+          eventRegistrations,
         },
         201,
       )
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('UNIQUE constraint failed') &&
-        (error.message.includes('guest_email') || error.message.includes('idx_event_registrations_event_guest_email'))
-      ) {
-        return c.json({ error: 'هذا البريد مسجّل مسبقاً في هذه الفعالية.' }, 409)
+      if (isEventRegistrationUniqueConflict(error)) {
+        return c.json({ error: 'هذا البريد مسجّل مسبقاً على إحدى هذه التذاكر.' }, 409)
       }
 
       console.error('Failed to create guest event registration', error)

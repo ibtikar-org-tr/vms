@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import type { FormEvent } from 'react'
-import { ArrowRight, ImageIcon, Link2, Pencil, Plus, Save, Ticket, Trash2, X } from 'lucide-react'
+import { ArrowRight, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Ticket, Trash2, X } from 'lucide-react'
 import {
   createEventTicket,
   deleteEventTicket,
@@ -18,6 +18,8 @@ import { getStoredUser } from '../../utils/auth'
 import { ImageUploader } from '../../components/ImageUploader'
 import { SkillsField } from '../../components/SkillsField'
 import { LocationDetailsComponent } from '../../components/registration/sections/personal-info-section/LocationDetailsComponent'
+import { EventRichTextEditor } from '../../components/events/EventRichTextEditor'
+import { isEventRichTextEmpty } from '../../utils/event-rich-text'
 import { initialRegistrationFormData } from '../../types/registration'
 import type { RegistrationFormData } from '../../types/registration'
 
@@ -62,6 +64,8 @@ export function DashboardEventEditPage() {
   const [selectedBannerFile, setSelectedBannerFile] = useState<File | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [associatedUrls, setAssociatedUrls] = useState<{ label: string; url: string }[]>([])
+  const [description, setDescription] = useState('')
+  const [registrationSuccessMessage, setRegistrationSuccessMessage] = useState('')
   const [eventSkills, setEventSkills] = useState('')
   const [newUrlLabel, setNewUrlLabel] = useState('')
   const [newUrlValue, setNewUrlValue] = useState('')
@@ -143,6 +147,8 @@ export function DashboardEventEditPage() {
         url: String(url),
       })),
     )
+    setDescription(eventItem.description ?? '')
+    setRegistrationSuccessMessage(eventItem.registrationSuccessMessage ?? '')
     setEventSkills(JSON.stringify(eventItem.skills ?? {}))
     setTelegramGroupId(eventItem.telegramGroupId ?? '')
   }, [eventItem])
@@ -171,6 +177,10 @@ export function DashboardEventEditPage() {
     setAssociatedUrls((previous) => previous.filter((_, i) => i !== index))
   }
 
+  const handleAssociatedUrlChange = (index: number, field: 'label' | 'url', value: string) => {
+    setAssociatedUrls((previous) => previous.map((item, i) => (i === index ? { ...item, [field]: value } : item)))
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault()
@@ -187,7 +197,6 @@ export function DashboardEventEditPage() {
 
     const formData = new FormData(event.currentTarget)
     const name = String(formData.get('name') ?? '').trim()
-    const description = String(formData.get('description') ?? '').trim()
     const startTime = String(formData.get('startTime') ?? '').trim()
     const endTime = String(formData.get('endTime') ?? '').trim()
     const statusRaw = String(formData.get('status') ?? eventItem.status).trim()
@@ -225,13 +234,16 @@ export function DashboardEventEditPage() {
     }
 
     const validUrls = associatedUrls.filter((item) => item.label.trim() && item.url.trim())
-    const associatedUrlsObject = validUrls.length > 0 ? Object.fromEntries(validUrls.map((item) => [item.label.trim(), item.url.trim()])) : undefined
+    const associatedUrlsObject =
+      validUrls.length > 0 ? Object.fromEntries(validUrls.map((item) => [item.label.trim(), item.url.trim()])) : null
 
     setIsSaving(true)
     try {
       const payload = await updateEvent(eventID, {
         name,
-        ...(description ? { description } : {}),
+        description: isEventRichTextEmpty(description) ? null : description,
+        registrationSuccessMessage: isEventRichTextEmpty(registrationSuccessMessage) ? null : registrationSuccessMessage,
+        associatedUrls: associatedUrlsObject,
         ...(startTime ? { startTime: new Date(startTime).toISOString() } : {}),
         ...(endTime ? { endTime: new Date(endTime).toISOString() } : {}),
         status,
@@ -239,7 +251,6 @@ export function DashboardEventEditPage() {
         allowGuestRegistration,
         cancellationDeadlineHours,
         ...(skills ? { skills } : {}),
-        ...(associatedUrlsObject ? { associatedUrls: associatedUrlsObject } : {}),
         ...(locationType === 'online'
           ? { address: 'online' }
           : { country: country || undefined, region: region || undefined, city: city || undefined, address: address || undefined }),
@@ -548,16 +559,30 @@ export function DashboardEventEditPage() {
               عدد الساعات قبل بداية الفعالية التي يسمح بعدها للمسجّلين بإلغاء تذكرتهم (مثال: 48 = يومان). اجعل القيمة 0 لتعطيل الإلغاء الذاتي.
             </span>
           </label>
-          <label className="md:col-span-4 space-y-1">
+          <div className="md:col-span-4 space-y-1">
             <span className="text-xs font-medium text-slate-700">وصف الفعالية</span>
-            <textarea
-              name="description"
-              defaultValue={eventItem.description ?? ''}
-              placeholder="وصف الفعالية"
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-              rows={3}
+            <EventRichTextEditor
+              value={description}
+              onChange={setDescription}
+              placeholder="اكتب وصف الفعالية. يمكنك وضع أسطر جديدة وجعل النص سميكاً."
             />
-          </label>
+          </div>
+
+          <div className="md:col-span-4 space-y-1">
+            <span className="flex items-center gap-2 text-xs font-medium text-slate-700">
+              <MessageSquareText className="h-3.5 w-3.5 text-slate-500" />
+              رسالة بعد التسجيل
+            </span>
+            <EventRichTextEditor
+              value={registrationSuccessMessage}
+              onChange={setRegistrationSuccessMessage}
+              placeholder="تظهر هذه الرسالة للمسجّل بعد إتمام التسجيل. اتركها فارغة لاستخدام الرسالة الافتراضية."
+              minHeightClassName="min-h-28"
+            />
+            <span className="text-xs leading-6 text-slate-500">
+              اختيارية. يمكن استخدام أسطر جديدة وخط سميك، وتظهر في صفحة الفعالية بعد التسجيل الناجح.
+            </span>
+          </div>
 
           <div className="md:col-span-4">
             <SkillsField
@@ -611,17 +636,37 @@ export function DashboardEventEditPage() {
               <Link2 className="h-4 w-4 text-slate-500" />
               الروابط المرتبطة
             </h3>
-            {associatedUrls.length > 0 && (
-              <ul className="flex flex-wrap gap-2">
+            {associatedUrls.length > 0 ? (
+              <ul className="space-y-2">
                 {associatedUrls.map((item, index) => (
-                  <li key={`${item.label}-${index}`} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs">
-                    <span>{item.label}</span>
-                    <button type="button" onClick={() => handleRemoveUrl(index)} className="text-red-600 hover:text-red-700">
-                      <X className="h-3.5 w-3.5" />
+                  <li key={`associated-url-${index}`} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={item.label}
+                      onChange={(event) => handleAssociatedUrlChange(index, 'label', event.target.value)}
+                      placeholder="العنوان"
+                      className="w-40 shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 sm:w-48"
+                    />
+                    <input
+                      type="url"
+                      value={item.url}
+                      onChange={(event) => handleAssociatedUrlChange(index, 'url', event.target.value)}
+                      placeholder="الرابط"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveUrl(index)}
+                      className="rounded-lg border border-red-200 bg-red-50 p-2 text-red-600 transition hover:bg-red-100"
+                      aria-label="حذف الرابط"
+                    >
+                      <X className="h-4 w-4" />
                     </button>
                   </li>
                 ))}
               </ul>
+            ) : (
+              <p className="text-xs text-slate-500">لا توجد روابط مرتبطة. أضف عنواناً ورابطاً ثم اضغط +، واحفظ التعديلات.</p>
             )}
             <div className="flex items-center gap-2">
               <input

@@ -405,7 +405,7 @@ export function updateEvent(
   eventId: string,
   payload: Partial<{
     name: string
-    description: string
+    description: string | null
     startTime: string
     endTime: string
     status: 'draft' | 'public' | 'archived'
@@ -414,10 +414,11 @@ export function updateEvent(
     skills: Record<string, string>
     telegramGroupId: string
     imageUrl: string
-    associatedUrls: Record<string, unknown>
+    associatedUrls: Record<string, unknown> | null
     displayAttendeeNumbers: boolean
     cancellationDeadlineHours: number
     allowGuestRegistration: boolean
+    registrationSuccessMessage: string | null
   }>,
 ) {
   return putJson<{ event: VmsEvent }, typeof payload>(`/events/${encodeURIComponent(eventId)}`, payload)
@@ -495,28 +496,32 @@ export function fetchEventRegistrations(
 export function createPublicEventRegistration(
   eventId: string,
   payload: {
-    ticketId: string
+    ticketId?: string
+    ticketIds?: string[]
     guestName: string
     guestEmail: string
     guestPhone: string
   },
 ) {
-  return postJson<{ eventRegistration: VmsEventRegistration }, typeof payload>(
-    `/public/events/${encodeURIComponent(eventId)}/registrations`,
-    payload,
-    { auth: false },
-  )
+  return postJson<
+    { eventRegistration: VmsEventRegistration; eventRegistrations?: VmsEventRegistration[] },
+    typeof payload
+  >(`/public/events/${encodeURIComponent(eventId)}/registrations`, payload, { auth: false })
 }
 
 export function createEventRegistration(payload: {
   eventId: string
   membershipNumber: string
-  ticketId: string
+  ticketId?: string
+  ticketIds?: string[]
   status: 'registered' | 'attended' | 'cancelled' | 'no_show'
   paymentApprovedBy?: string
   attendanceApprovedBy?: string
 }) {
-  return postJson<{ eventRegistration: VmsEventRegistration }, typeof payload>('/event-registrations', payload)
+  return postJson<
+    { eventRegistration: VmsEventRegistration; eventRegistrations?: VmsEventRegistration[] },
+    typeof payload
+  >('/event-registrations', payload)
 }
 
 export function updateEventRegistration(

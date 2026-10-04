@@ -16,6 +16,7 @@ import { EmptyState, ErrorBanner, SectionTitle, StatusPill } from '@/src/compone
 import { colors } from '@/src/theme/colors'
 import type { VmsEvent } from '@/src/types/events'
 import {
+  eventDescriptionPlainText,
   formatEventDateShort,
   formatEventLocation,
   isEventUpcomingOrOngoing,
@@ -60,7 +61,7 @@ export default function EventsListScreen() {
       if (!needle) return true
       return (
         event.name.toLowerCase().includes(needle) ||
-        (event.description ?? '').toLowerCase().includes(needle) ||
+        eventDescriptionPlainText(event.description).toLowerCase().includes(needle) ||
         formatEventLocation(event).toLowerCase().includes(needle) ||
         (event.projectName ?? '').toLowerCase().includes(needle)
       )
@@ -158,9 +159,9 @@ export default function EventsListScreen() {
                       </Text>
                     </View>
                   </View>
-                  {event.description?.trim() ? (
+                  {eventDescriptionPlainText(event.description) ? (
                     <Text style={styles.description} numberOfLines={2}>
-                      {event.description}
+                      {eventDescriptionPlainText(event.description)}
                     </Text>
                   ) : null}
                   {event.projectName ? <Text style={styles.project}>{event.projectName}</Text> : null}

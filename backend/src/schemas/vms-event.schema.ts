@@ -2,12 +2,13 @@ import { z } from 'zod'
 
 const requiredTrimmedString = z.string().trim().min(1)
 const optionalTrimmedString = z.string().trim().min(1).optional()
+const optionalRichText = z.string().max(20000).nullable().optional()
 const eventSkillsSchema = z.record(z.string().trim().min(1), z.string().trim().min(1)).optional()
-const eventUrlsSchema = z.object({}).passthrough().optional()
+const eventUrlsSchema = z.object({}).passthrough().nullable().optional()
 
 export const createEventSchema = z.object({
   name: requiredTrimmedString.max(160),
-  description: optionalTrimmedString,
+  description: optionalRichText,
   startTime: optionalTrimmedString,
   endTime: optionalTrimmedString,
   status: z.enum(['draft', 'public', 'archived']),
@@ -24,6 +25,7 @@ export const createEventSchema = z.object({
   displayAttendeeNumbers: z.boolean().optional(),
   cancellationDeadlineHours: z.number().int().min(0).max(24 * 365).optional(),
   allowGuestRegistration: z.boolean().optional(),
+  registrationSuccessMessage: optionalRichText,
 })
 
 export const updateEventSchema = createEventSchema

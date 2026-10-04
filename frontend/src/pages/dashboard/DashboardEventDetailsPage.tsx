@@ -45,7 +45,9 @@ import {
 import { EmailField } from '../../components/registration/sections/personal-info-section/EmailField'
 import { PhoneNumberField } from '../../components/registration/sections/personal-info-section/PhoneNumberField'
 import { TextField } from '../../components/registration/TextField'
+import { EventRichText } from '../../components/events/EventRichText'
 import { getEmailValidationMessage } from '../../utils/email'
+import { isEventRichTextEmpty } from '../../utils/event-rich-text'
 
 function eventStatusLabel(status: string) {
   if (status === 'draft') return 'مسودة'
@@ -60,6 +62,17 @@ function registrationStatusLabel(status: string) {
   if (status === 'cancelled') return 'ملغي'
   if (status === 'no_show') return 'لم يحضر'
   return status
+}
+
+function isTicketSoldOut(ticket: VmsEventTicket) {
+  return (ticket.activeRegistrationCount ?? 0) >= ticket.quantity
+}
+
+function createdRegistrationsFromPayload(payload: {
+  eventRegistration: VmsEventRegistration
+  eventRegistrations?: VmsEventRegistration[]
+}) {
+  return payload.eventRegistrations?.length ? payload.eventRegistrations : [payload.eventRegistration]
 }
 
 const ATTENDEE_AVATAR_COLORS = ['#92A1C6', '#146A7C', '#F0AB3D', '#C271B4', '#C20D90']
@@ -80,10 +93,10 @@ export function DashboardEventDetailsPage() {
   const ticketBuyingSectionRef = useRef<HTMLDivElement | null>(null)
   const [eventItem, setEventItem] = useState<VmsEvent | null>(null)
   const [tickets, setTickets] = useState<VmsEventTicket[]>([])
-  const [myRegistration, setMyRegistration] = useState<VmsEventRegistration | null>(null)
+  const [myRegistrations, setMyRegistrations] = useState<VmsEventRegistration[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
+  const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([])
   const [isApplying, setIsApplying] = useState(false)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [applySuccess, setApplySuccess] = useState<string | null>(null)
@@ -98,11 +111,13 @@ export function DashboardEventDetailsPage() {
   const [changeTicketError, setChangeTicketError] = useState<string | null>(null)
   const [changeTicketSuccess, setChangeTicketSuccess] = useState<string | null>(null)
   const [selectedChangeTicketId, setSelectedChangeTicketId] = useState<string | null>(null)
+  const [changingRegistrationId, setChangingRegistrationId] = useState<string | null>(null)
   const [isChangeTicketPickerOpen, setIsChangeTicketPickerOpen] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestEmail, setGuestEmail] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
   const [guestApplyComplete, setGuestApplyComplete] = useState(false)
+  const [guestOwnedTicketIds, setGuestOwnedTicketIds] = useState<string[]>([])
   const [guestApplyPrompt, setGuestApplyPrompt] = useState<GuestApplyPrompt>('member')
 
   function adjustTicketActiveCount(ticketId: string, delta: number) {
@@ -123,8 +138,12 @@ export function DashboardEventDetailsPage() {
   }
 
   function selectTicketForApply(ticketId: string) {
-    setSelectedTicketId((current) => (current === ticketId ? null : ticketId))
-    setGuestApplyPrompt('member')
+    setSelectedTicketIds((current) =>
+      current.includes(ticketId) ? current.filter((id) => id !== ticketId) : [...current, ticketId],
+    )
+    if (!user && !guestApplyComplete) {
+      setGuestApplyPrompt('member')
+    }
   }
 
   useEffect(() => {
@@ -151,7 +170,7 @@ export function DashboardEventDetailsPage() {
 
           setEventItem(eventPayload.event)
           setTickets(ticketsPayload.eventTickets)
-          setMyRegistration(myRegistrationPayload.eventRegistrations[0] ?? null)
+          setMyRegistrations(myRegistrationPayload.eventRegistrations)
           return
         }
 
@@ -233,17 +252,44 @@ export function DashboardEventDetailsPage() {
   }, [eventItem, projectMembers, user])
 
   const totalTicketCapacity = useMemo(() => tickets.reduce((sum, ticket) => sum + ticket.quantity, 0), [tickets])
-  const hasUserRegistered = useMemo(() => myRegistration?.status === 'registered' || guestApplyComplete, [guestApplyComplete, myRegistration])
-  const userRegistration = myRegistration
-  const userRegisteredTicket = useMemo(() => {
-    if (!userRegistration) {
-      return null
+  const activeMyRegistrations = useMemo(
+    () =>
+      myRegistrations.filter(
+        (registration) => registration.status === 'registered' || registration.status === 'attended',
+      ),
+    [myRegistrations],
+  )
+  const ownedTicketIds = useMemo(() => {
+    if (user) {
+      return new Set(activeMyRegistrations.map((registration) => registration.ticketId))
     }
 
-    return tickets.find((ticket) => ticket.id === userRegistration.ticketId) ?? null
-  }, [tickets, userRegistration])
+    return new Set(guestOwnedTicketIds)
+  }, [activeMyRegistrations, guestOwnedTicketIds, user])
+  const remainingTickets = useMemo(
+    () => tickets.filter((ticket) => !ownedTicketIds.has(ticket.id)),
+    [ownedTicketIds, tickets],
+  )
+  const remainingAvailableTickets = useMemo(
+    () => remainingTickets.filter((ticket) => !isTicketSoldOut(ticket)),
+    [remainingTickets],
+  )
+  const hasRemainingTickets = remainingAvailableTickets.length > 0
+  const newSelectedTicketIds = selectedTicketIds.filter((ticketId) =>
+    remainingAvailableTickets.some((ticket) => ticket.id === ticketId),
+  )
+  const hasSelectedTickets = newSelectedTicketIds.length > 0
+  const hasUserRegistered = activeMyRegistrations.length > 0 || guestApplyComplete
+  const userRegisteredTickets = useMemo(
+    () => tickets.filter((ticket) => ownedTicketIds.has(ticket.id)),
+    [ownedTicketIds, tickets],
+  )
+  const changingRegistration = useMemo(
+    () => myRegistrations.find((registration) => registration.id === changingRegistrationId) ?? null,
+    [changingRegistrationId, myRegistrations],
+  )
   const canSendTelegramInvite = Boolean(
-    eventItem?.telegramGroupId && user?.membershipNumber && userRegistration?.status === 'registered',
+    eventItem?.telegramGroupId && user?.membershipNumber && activeMyRegistrations.length > 0,
   )
   const canViewAttendeeNumbers = eventItem?.displayAttendeeNumbers !== false || canEditEvent
   const ticketRegistrationCounts = useMemo(
@@ -255,27 +301,32 @@ export function DashboardEventDetailsPage() {
     [tickets],
   )
   const canModifyRegistration = useMemo(() => {
-    if (!eventItem || !userRegistration) {
+    if (!eventItem || !changingRegistration) {
       return false
     }
 
-    return canSelfModifyRegistration(eventItem, userRegistration, user?.membershipNumber)
-  }, [eventItem, user?.membershipNumber, userRegistration])
-  const hasMultipleTicketTypes = tickets.length > 1
-  const alternateTickets = useMemo(() => {
-    if (!userRegistration) {
-      return tickets
-    }
-
-    return tickets.filter((ticket) => ticket.id !== userRegistration.ticketId)
-  }, [tickets, userRegistration])
-  const canChangeTicket = canModifyRegistration && hasMultipleTicketTypes
+    return canSelfModifyRegistration(eventItem, changingRegistration, user?.membershipNumber)
+  }, [changingRegistration, eventItem, user?.membershipNumber])
+  const alternateTickets = remainingTickets
+  const canChangeTicket = canModifyRegistration && remainingTickets.length > 0
   const modificationPolicyText = eventItem ? selfCancellationHelperText(eventItem) : null
   const telegramInviteHelperText = !user
     ? 'سجّل الدخول أولاً ثم سجّل في هذه الفعالية لإرسال دعوة مجموعة التلغرام.'
     : !hasUserRegistered
       ? 'أرسل دعوة مجموعة التلغرام متاح فقط للمسجلين في هذه الفعالية.'
       : null
+  const canShowTicketPicker =
+    remainingTickets.length > 0 &&
+    Boolean(user || eventItem?.allowGuestRegistration === true)
+  const applyButtonLabel = isApplying
+    ? 'جار الإرسال...'
+    : hasUserRegistered
+      ? newSelectedTicketIds.length > 1
+        ? `إضافة التذاكر المختارة (${newSelectedTicketIds.length})`
+        : 'إضافة التذكرة المختارة'
+      : newSelectedTicketIds.length > 1
+        ? `تقديم الطلب (${newSelectedTicketIds.length} تذاكر)`
+        : 'تقديم الطلب'
 
   const handleApplyToEvent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -291,19 +342,8 @@ export function DashboardEventDetailsPage() {
       return
     }
 
-    if (hasUserRegistered) {
-      setApplyError('لقد قمت بالتسجيل في هذه الفعالية مسبقاً.')
-      return
-    }
-
-    const existingRegistration = myRegistration
-    if (existingRegistration) {
-      setApplyError('لديك تسجيل سابق في هذه الفعالية. تواصل مع المنظمين إذا كنت بحاجة للمساعدة.')
-      return
-    }
-
-    if (!selectedTicketId) {
-      setApplyError('يرجى اختيار تذكرة للتسجيل.')
+    if (!hasSelectedTickets) {
+      setApplyError('يرجى اختيار تذكرة واحدة على الأقل.')
       return
     }
 
@@ -314,14 +354,19 @@ export function DashboardEventDetailsPage() {
       const payload = await createEventRegistration({
         eventId: eventID,
         membershipNumber: user.membershipNumber,
-        ticketId: selectedTicketId,
+        ticketIds: newSelectedTicketIds,
         status: 'registered',
       })
+      const created = createdRegistrationsFromPayload(payload)
 
-      setMyRegistration(payload.eventRegistration)
-      adjustTicketActiveCount(payload.eventRegistration.ticketId, 1)
-      setApplySuccess('تم إرسال طلب التسجيل بنجاح.')
-      setSelectedTicketId(null)
+      setMyRegistrations((current) => [...created, ...current])
+      for (const registration of created) {
+        adjustTicketActiveCount(registration.ticketId, 1)
+      }
+      setApplySuccess(
+        created.length > 1 ? 'تم تسجيل التذاكر المختارة بنجاح.' : 'تم إرسال طلب التسجيل بنجاح.',
+      )
+      setSelectedTicketIds([])
       applyForm.reset()
     } catch (requestError) {
       if (requestError instanceof Error) {
@@ -343,13 +388,8 @@ export function DashboardEventDetailsPage() {
       return
     }
 
-    if (guestApplyComplete) {
-      setApplyError('لقد قمت بالتسجيل في هذه الفعالية مسبقاً.')
-      return
-    }
-
-    if (!selectedTicketId) {
-      setApplyError('يرجى اختيار تذكرة للتسجيل.')
+    if (!hasSelectedTickets) {
+      setApplyError('يرجى اختيار تذكرة واحدة على الأقل.')
       return
     }
 
@@ -377,17 +417,26 @@ export function DashboardEventDetailsPage() {
     setIsApplying(true)
 
     try {
-      await createPublicEventRegistration(eventID, {
-        ticketId: selectedTicketId,
+      const payload = await createPublicEventRegistration(eventID, {
+        ticketIds: newSelectedTicketIds,
         guestName: name,
         guestEmail: email,
         guestPhone: phone,
       })
+      const created = createdRegistrationsFromPayload(payload)
 
-      adjustTicketActiveCount(selectedTicketId, 1)
+      for (const registration of created) {
+        adjustTicketActiveCount(registration.ticketId, 1)
+      }
+      setGuestOwnedTicketIds((current) => [...new Set([...current, ...created.map((registration) => registration.ticketId)])])
       setGuestApplyComplete(true)
-      setApplySuccess('تم إرسال طلب التسجيل بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.')
-      setSelectedTicketId(null)
+      setGuestApplyPrompt('guest')
+      setApplySuccess(
+        created.length > 1
+          ? 'تم تسجيل التذاكر المختارة بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.'
+          : 'تم إرسال طلب التسجيل بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.',
+      )
+      setSelectedTicketIds([])
     } catch (requestError) {
       if (requestError instanceof Error) {
         setApplyError(requestError.message)
@@ -399,16 +448,19 @@ export function DashboardEventDetailsPage() {
     }
   }
 
-  const handleCancelRegistration = async () => {
+  const handleCancelRegistration = async (registration: VmsEventRegistration) => {
     setCancelRegistrationError(null)
     setCancelRegistrationSuccess(null)
 
-    if (!userRegistration || !user || !canModifyRegistration) {
+    if (!user || !eventItem || !canSelfModifyRegistration(eventItem, registration, user.membershipNumber)) {
       return
     }
 
+    const ticket = tickets.find((item) => item.id === registration.ticketId)
     const confirmed = window.confirm(
-      'هل أنت متأكد من إلغاء تسجيلك في هذه الفعالية؟ يمكنك التسجيل مجدداً إذا بقيت مقاعد متاحة.',
+      ticket
+        ? `هل أنت متأكد من إلغاء تذكرة «${ticket.name}»؟ يمكنك التسجيل عليها مجدداً إذا بقيت مقاعد متاحة.`
+        : 'هل أنت متأكد من إلغاء هذه التذكرة؟ يمكنك التسجيل مجدداً إذا بقيت مقاعد متاحة.',
     )
     if (!confirmed) {
       return
@@ -417,14 +469,17 @@ export function DashboardEventDetailsPage() {
     setIsCancellingRegistration(true)
 
     try {
-      await selfCancelEventRegistration(userRegistration.id)
-      setMyRegistration(null)
-      adjustTicketActiveCount(userRegistration.ticketId, -1)
-      setCancelRegistrationSuccess('تم إلغاء تسجيلك. يمكنك التسجيل مجدداً إذا رغبت.')
+      await selfCancelEventRegistration(registration.id)
+      setMyRegistrations((current) => current.filter((item) => item.id !== registration.id))
+      adjustTicketActiveCount(registration.ticketId, -1)
+      setCancelRegistrationSuccess('تم إلغاء التذكرة. يمكنك التسجيل مجدداً إذا رغبت.')
       setChangeTicketSuccess(null)
       setChangeTicketError(null)
-      setIsChangeTicketPickerOpen(false)
-      setSelectedChangeTicketId(null)
+      if (changingRegistrationId === registration.id) {
+        setIsChangeTicketPickerOpen(false)
+        setSelectedChangeTicketId(null)
+        setChangingRegistrationId(null)
+      }
       setTelegramInviteSuccess(null)
       setTelegramInviteError(null)
     } catch (requestError) {
@@ -442,14 +497,14 @@ export function DashboardEventDetailsPage() {
     setChangeTicketError(null)
     setChangeTicketSuccess(null)
 
-    if (!userRegistration || !user || !canChangeTicket || !selectedChangeTicketId) {
+    if (!changingRegistration || !user || !canChangeTicket || !selectedChangeTicketId) {
       return
     }
 
     const targetTicket = tickets.find((ticket) => ticket.id === selectedChangeTicketId)
     const confirmed = window.confirm(
       targetTicket
-        ? `هل تريد تغيير تذكرتك إلى «${targetTicket.name}»؟`
+        ? `هل تريد تغيير هذه التذكرة إلى «${targetTicket.name}»؟`
         : 'هل تريد تغيير التذكرة؟',
     )
     if (!confirmed) {
@@ -459,15 +514,18 @@ export function DashboardEventDetailsPage() {
     setIsChangingTicket(true)
 
     try {
-      const payload = await changeEventRegistrationTicket(userRegistration.id, selectedChangeTicketId)
-      setMyRegistration(payload.eventRegistration)
-      adjustTicketActiveCount(userRegistration.ticketId, -1)
+      const payload = await changeEventRegistrationTicket(changingRegistration.id, selectedChangeTicketId)
+      setMyRegistrations((current) =>
+        current.map((item) => (item.id === payload.eventRegistration.id ? payload.eventRegistration : item)),
+      )
+      adjustTicketActiveCount(changingRegistration.ticketId, -1)
       adjustTicketActiveCount(payload.eventRegistration.ticketId, 1)
       setChangeTicketSuccess('تم تغيير التذكرة بنجاح.')
       setCancelRegistrationSuccess(null)
       setCancelRegistrationError(null)
       setIsChangeTicketPickerOpen(false)
       setSelectedChangeTicketId(null)
+      setChangingRegistrationId(null)
     } catch (requestError) {
       if (requestError instanceof Error) {
         setChangeTicketError(requestError.message)
@@ -559,9 +617,11 @@ export function DashboardEventDetailsPage() {
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-cyan-700/90">تفاصيل الفعالية</p>
             <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{eventItem.name}</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
-              {eventItem.description ?? 'لا يوجد وصف متاح للفعالية.'}
-            </p>
+            <EventRichText
+              value={eventItem.description}
+              className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base"
+              emptyText="لا يوجد وصف متاح للفعالية."
+            />
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-stretch sm:gap-2 lg:flex-row">
             {canEditEvent ? (
@@ -585,19 +645,19 @@ export function DashboardEventDetailsPage() {
             <button
               type="button"
               onClick={() => {
-                if (!hasUserRegistered) {
+                if (!hasUserRegistered || hasRemainingTickets) {
                   scrollToTicketBuyingSection()
                 }
               }}
-              disabled={hasUserRegistered}
+              disabled={hasUserRegistered && !hasRemainingTickets}
               className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-medium shadow-sm transition ${
-                hasUserRegistered
+                hasUserRegistered && !hasRemainingTickets
                   ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500'
                   : 'border-cyan-200 bg-transparent text-cyan-700 hover:bg-cyan-50 hover:text-cyan-800'
               }`}
             >
-              {hasUserRegistered ? 'مسجّل بالفعل' : 'سجّل الآن'}
-              {hasUserRegistered ? (
+              {hasUserRegistered && !hasRemainingTickets ? 'مسجّل بالفعل' : hasUserRegistered ? 'أضف تذاكر' : 'سجّل الآن'}
+              {hasUserRegistered && !hasRemainingTickets ? (
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-7.25 7.25a1 1 0 01-1.414 0l-3.25-3.25a1 1 0 111.414-1.415l2.543 2.543 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
@@ -607,12 +667,21 @@ export function DashboardEventDetailsPage() {
             </button>
           </div>
         </div>
-        {hasUserRegistered && userRegisteredTicket ? (
+        {hasUserRegistered && userRegisteredTickets.length > 0 ? (
           <div className="border-t border-slate-100 px-5 pb-5 sm:px-6 md:px-8">
-            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-              أنت مسجّل في هذه الفعالية. التذكرة المختارة:{' '}
-              <span className="font-semibold">{userRegisteredTicket.name}</span>
-            </p>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p>
+                أنت مسجّل في هذه الفعالية.{' '}
+                {userRegisteredTickets.length === 1 ? 'التذكرة المختارة:' : 'التذاكر المختارة:'}{' '}
+                <span className="font-semibold">{userRegisteredTickets.map((ticket) => ticket.name).join('، ')}</span>
+              </p>
+              {!isEventRichTextEmpty(eventItem.registrationSuccessMessage) ? (
+                <EventRichText
+                  value={eventItem.registrationSuccessMessage}
+                  className="mt-3 border-t border-emerald-200/80 pt-3 text-sm text-emerald-950"
+                />
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
@@ -824,27 +893,29 @@ export function DashboardEventDetailsPage() {
                 </Link>
               </div>
             ) : null}
-            {!user && eventItem.allowGuestRegistration === true && tickets.length > 0 && !guestApplyComplete ? (
+            {!user && eventItem.allowGuestRegistration === true && remainingTickets.length > 0 ? (
               <div className="mt-5 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-sm text-cyan-950">
-                <p className="font-semibold">اختر تذكرة للمتابعة</p>
+                <p className="font-semibold">{hasUserRegistered ? 'أضف تذاكر أخرى' : 'اختر تذكرة واحدة أو أكثر للمتابعة'}</p>
                 <p className="mt-2 leading-7">
-                  نفضّل الانتساب إلى تجمّع إبتكار لإدارة تسجيلك والاستفادة من عضويتك. يمكنك التقديم كزائر إذا لم ترغب بذلك.
+                  يمكنك اختيار أكثر من نوع تذكرة في نفس الطلب. نفضّل الانتساب إلى تجمّع إبتكار لإدارة تسجيلك والاستفادة من عضويتك. يمكنك التقديم كزائر إذا لم ترغب بذلك.
                 </p>
               </div>
             ) : null}
-            {((user && tickets.length > 0 && !hasUserRegistered) ||
-              (!user && eventItem.allowGuestRegistration === true && tickets.length > 0 && !guestApplyComplete)) ? (
+            {canShowTicketPicker ? (
               <div className="mt-5">
-              <p className="mb-3 text-sm font-medium text-slate-700">اختر تذكرة للتقديم:</p>
+              <p className="mb-3 text-sm font-medium text-slate-700">
+                {hasUserRegistered ? 'اختر تذاكر إضافية:' : 'اختر تذكرة واحدة أو أكثر للتقديم:'}
+              </p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {tickets.map((ticket) => {
-                  const isSelected = selectedTicketId === ticket.id
-                  const isDisabled = isApplying || tickets.length === 0
+                {remainingTickets.map((ticket) => {
+                  const isSelected = selectedTicketIds.includes(ticket.id)
+                  const soldOut = isTicketSoldOut(ticket)
+                  const isDisabled = isApplying || soldOut
                   return (
                     <button
                       key={ticket.id}
                       type="button"
-                      onClick={() => !isDisabled && (user ? setSelectedTicketId(isSelected ? null : ticket.id) : selectTicketForApply(ticket.id))}
+                      onClick={() => !isDisabled && selectTicketForApply(ticket.id)}
                       disabled={isDisabled}
                       className={`group rounded-xl border-2 p-4 text-left shadow-sm transition-all duration-200 hover:scale-[1.01] hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
                         isSelected
@@ -859,12 +930,14 @@ export function DashboardEventDetailsPage() {
                             <p className="mt-1 text-xs text-slate-500 line-clamp-2">{ticket.description}</p>
                           ) : null}
                         </div>
-                        {isSelected ? (
+                        {soldOut ? (
+                          <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">نفدت</span>
+                        ) : isSelected ? (
                           <svg className="h-5 w-5 shrink-0 text-cyan-600" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                           </svg>
                         ) : (
-                          <ArrowLeft className="h-5 w-5 shrink-0 text-slate-400 transition-colors group-hover:text-slate-600" />
+                          <span className="h-5 w-5 shrink-0 rounded-full border-2 border-slate-300" />
                         )}
                       </div>
                       <div className="mt-3 flex items-center gap-2 text-xs">
@@ -888,18 +961,18 @@ export function DashboardEventDetailsPage() {
                   )
                 })}
               </div>
-              {selectedTicketId && user ? (
+              {hasSelectedTickets && user ? (
                 <form onSubmit={handleApplyToEvent} className="mt-4">
                   <button
                     type="submit"
-                    disabled={isApplying || !selectedTicketId}
+                    disabled={isApplying || !hasSelectedTickets}
                     className="w-full rounded-lg bg-cyan-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                   >
-                    {isApplying ? 'جار الإرسال...' : 'تقديم الطلب'}
+                    {applyButtonLabel}
                   </button>
                 </form>
               ) : null}
-              {selectedTicketId && !user && guestApplyPrompt === 'member' ? (
+              {hasSelectedTickets && !user && !guestApplyComplete && guestApplyPrompt === 'member' ? (
                 <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-semibold text-slate-900">هل أنت عضو في تجمّع إبتكار؟</p>
                   <p className="text-xs leading-6 text-slate-600">
@@ -923,7 +996,7 @@ export function DashboardEventDetailsPage() {
                   </div>
                 </div>
               ) : null}
-              {selectedTicketId && !user && guestApplyPrompt === 'join' ? (
+              {hasSelectedTickets && !user && !guestApplyComplete && guestApplyPrompt === 'join' ? (
                 <div className="mt-4 space-y-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
                   <p className="text-sm font-semibold text-cyan-950">هل ترغب بالانتساب إلى تجمّع إبتكار؟</p>
                   <p className="text-xs leading-6 text-cyan-900">
@@ -954,7 +1027,7 @@ export function DashboardEventDetailsPage() {
                   </button>
                 </div>
               ) : null}
-              {selectedTicketId && !user && guestApplyPrompt === 'guest' ? (
+              {hasSelectedTickets && !user && guestApplyPrompt === 'guest' ? (
                 <form onSubmit={handleGuestApplyToEvent} className="mt-4 space-y-4">
                   <p className="text-sm font-medium text-slate-800">تقديم الطلب كزائر</p>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -980,25 +1053,29 @@ export function DashboardEventDetailsPage() {
                   </div>
                   <button
                     type="submit"
-                    disabled={isApplying || !selectedTicketId}
+                    disabled={isApplying || !hasSelectedTickets}
                     className="w-full rounded-lg bg-cyan-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                   >
-                    {isApplying ? 'جار الإرسال...' : 'تقديم الطلب'}
+                    {applyButtonLabel}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setGuestApplyPrompt('join')}
-                    className="text-xs font-semibold text-cyan-800 underline-offset-4 hover:underline"
-                  >
-                    رجوع
-                  </button>
+                  {!guestApplyComplete ? (
+                    <button
+                      type="button"
+                      onClick={() => setGuestApplyPrompt('join')}
+                      className="text-xs font-semibold text-cyan-800 underline-offset-4 hover:underline"
+                    >
+                      رجوع
+                    </button>
+                  ) : null}
                 </form>
               ) : null}
             </div>
             ) : null}
             {hasUserRegistered ? (
               <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <p className="text-center text-sm font-medium text-emerald-800">✓ مسجّل مسبقاً في هذه الفعالية</p>
+                <p className="text-center text-sm font-medium text-emerald-800">
+                  {userRegisteredTickets.length > 1 ? '✓ مسجّل مسبقاً على التذاكر التالية' : '✓ مسجّل مسبقاً في هذه الفعالية'}
+                </p>
                 {guestApplyComplete && !user ? (
                   <p className="mt-2 text-center text-sm leading-7 text-emerald-800">
                     يمكنك{' '}
@@ -1008,132 +1085,164 @@ export function DashboardEventDetailsPage() {
                     بنفس البريد لربط هذا التسجيل بعضويتك.
                   </p>
                 ) : null}
-                {userRegisteredTicket ? (
-                  <div className="mt-4 rounded-xl border border-emerald-200 bg-white p-4 text-right shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-slate-500">التذكرة التي اخترتها</p>
-                        <p className="mt-1 font-semibold text-slate-900">{userRegisteredTicket.name}</p>
-                        {userRegisteredTicket.description ? (
-                          <p className="mt-1 text-xs leading-6 text-slate-500">{userRegisteredTicket.description}</p>
-                        ) : null}
-                      </div>
-                      <Ticket className="h-5 w-5 shrink-0 text-emerald-700" />
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-700">
-                        {userRegisteredTicket.quantity} مقعد
-                      </span>
-                      <span className="rounded-lg bg-cyan-100 px-2 py-1 font-medium text-cyan-800">
-                        {userRegisteredTicket.pointPrice} نقطة
-                      </span>
-                      {userRegisteredTicket.currencyPrice ? (
-                        <span className="rounded-lg bg-amber-100 px-2 py-1 font-medium text-amber-800">
-                          {userRegisteredTicket.currencyPrice}
-                        </span>
-                      ) : (
-                        <span className="rounded-lg bg-emerald-100 px-2 py-1 font-medium text-emerald-800">
-                          مجاني
-                        </span>
-                      )}
-                      {userRegistration ? (
-                        <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-800">
-                          الحالة: {registrationStatusLabel(userRegistration.status)}
-                        </span>
-                      ) : null}
-                    </div>
-                    {user && userRegistration?.status === 'registered' ? (
-                      <div className="mt-4 space-y-2 border-t border-emerald-100 pt-4">
-                        {canModifyRegistration ? (
-                          <div className={`grid gap-2 ${canChangeTicket ? 'sm:grid-cols-2' : ''}`}>
-                            {canChangeTicket ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setChangeTicketError(null)
-                                  setChangeTicketSuccess(null)
-                                  setIsChangeTicketPickerOpen((previous) => !previous)
-                                  setSelectedChangeTicketId(null)
-                                }}
-                                disabled={isChangingTicket || isCancellingRegistration}
-                                className="inline-flex w-full items-center justify-center rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {isChangeTicketPickerOpen ? 'إخفاء التذاكر' : 'تغيير التذكرة'}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => void handleCancelRegistration()}
-                              disabled={isCancellingRegistration || isChangingTicket}
-                              className="inline-flex w-full items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {isCancellingRegistration ? 'جار الإلغاء...' : 'إلغاء التسجيل'}
-                            </button>
-                          </div>
-                        ) : modificationPolicyText ? (
-                          <p className="text-xs leading-6 text-slate-600">{modificationPolicyText}</p>
-                        ) : null}
-                        {canChangeTicket && isChangeTicketPickerOpen ? (
-                          <div className="space-y-2 rounded-xl border border-cyan-100 bg-cyan-50/50 p-3">
-                            <p className="text-xs font-medium text-slate-700">اختر التذكرة الجديدة:</p>
-                            <div className="space-y-2">
-                              {alternateTickets.map((ticket) => (
-                                <label
-                                  key={ticket.id}
-                                  className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition ${
-                                    selectedChangeTicketId === ticket.id
-                                      ? 'border-cyan-400 bg-white shadow-sm'
-                                      : 'border-slate-200 bg-white hover:border-cyan-200'
-                                  }`}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="changeTicket"
-                                    value={ticket.id}
-                                    checked={selectedChangeTicketId === ticket.id}
-                                    onChange={() => setSelectedChangeTicketId(ticket.id)}
-                                    className="mt-1"
-                                  />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block text-sm font-semibold text-slate-900">{ticket.name}</span>
-                                    {ticket.description ? (
-                                      <span className="mt-0.5 block text-xs leading-5 text-slate-500">{ticket.description}</span>
-                                    ) : null}
-                                    <span className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
-                                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">{ticket.pointPrice} نقطة</span>
-                                      {ticket.currencyPrice ? (
-                                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{ticket.currencyPrice}</span>
-                                      ) : (
-                                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800">مجاني</span>
-                                      )}
-                                    </span>
-                                  </span>
-                                </label>
-                              ))}
+                {userRegisteredTickets.length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    {(user ? activeMyRegistrations : userRegisteredTickets.map((ticket) => ({ ticketId: ticket.id, status: 'registered' as const, id: ticket.id }))).map((registration) => {
+                      const ticket = tickets.find((item) => item.id === registration.ticketId)
+                      if (!ticket) {
+                        return null
+                      }
+
+                      const registrationRecord = user
+                        ? activeMyRegistrations.find((item) => item.id === registration.id) ?? null
+                        : null
+                      const canModifyThis =
+                        Boolean(eventItem && registrationRecord) &&
+                        canSelfModifyRegistration(eventItem!, registrationRecord, user?.membershipNumber)
+                      const canChangeThis = canModifyThis && remainingTickets.length > 0
+                      const isChangingThis = changingRegistrationId === registration.id && isChangeTicketPickerOpen
+
+                      return (
+                        <div key={registration.id} className="rounded-xl border border-emerald-200 bg-white p-4 text-right shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-slate-500">التذكرة</p>
+                              <p className="mt-1 font-semibold text-slate-900">{ticket.name}</p>
+                              {ticket.description ? (
+                                <p className="mt-1 text-xs leading-6 text-slate-500">{ticket.description}</p>
+                              ) : null}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => void handleChangeTicket()}
-                              disabled={isChangingTicket || !selectedChangeTicketId}
-                              className="inline-flex w-full items-center justify-center rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                            >
-                              {isChangingTicket ? 'جار التغيير...' : 'تأكيد تغيير التذكرة'}
-                            </button>
+                            <Ticket className="h-5 w-5 shrink-0 text-emerald-700" />
                           </div>
-                        ) : null}
-                        {changeTicketError ? (
-                          <p className="text-sm text-red-600">{changeTicketError}</p>
-                        ) : null}
-                        {changeTicketSuccess ? (
-                          <p className="text-sm font-medium text-emerald-700">{changeTicketSuccess}</p>
-                        ) : null}
-                        {cancelRegistrationError ? (
-                          <p className="text-sm text-red-600">{cancelRegistrationError}</p>
-                        ) : null}
-                        {cancelRegistrationSuccess ? (
-                          <p className="text-sm font-medium text-emerald-700">{cancelRegistrationSuccess}</p>
-                        ) : null}
-                      </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-700">
+                              {ticket.quantity} مقعد
+                            </span>
+                            <span className="rounded-lg bg-cyan-100 px-2 py-1 font-medium text-cyan-800">
+                              {ticket.pointPrice} نقطة
+                            </span>
+                            {ticket.currencyPrice ? (
+                              <span className="rounded-lg bg-amber-100 px-2 py-1 font-medium text-amber-800">
+                                {ticket.currencyPrice}
+                              </span>
+                            ) : (
+                              <span className="rounded-lg bg-emerald-100 px-2 py-1 font-medium text-emerald-800">
+                                مجاني
+                              </span>
+                            )}
+                            <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-800">
+                              الحالة: {registrationStatusLabel(registration.status)}
+                            </span>
+                          </div>
+                          {user && registrationRecord?.status === 'registered' ? (
+                            <div className="mt-4 space-y-2 border-t border-emerald-100 pt-4">
+                              {canModifyThis ? (
+                                <div className={`grid gap-2 ${canChangeThis ? 'sm:grid-cols-2' : ''}`}>
+                                  {canChangeThis ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setChangeTicketError(null)
+                                        setChangeTicketSuccess(null)
+                                        setChangingRegistrationId(registration.id)
+                                        setIsChangeTicketPickerOpen((previous) =>
+                                          changingRegistrationId === registration.id ? !previous : true,
+                                        )
+                                        setSelectedChangeTicketId(null)
+                                      }}
+                                      disabled={isChangingTicket || isCancellingRegistration}
+                                      className="inline-flex w-full items-center justify-center rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {isChangingThis ? 'إخفاء التذاكر' : 'تغيير التذكرة'}
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleCancelRegistration(registrationRecord)}
+                                    disabled={isCancellingRegistration || isChangingTicket}
+                                    className="inline-flex w-full items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isCancellingRegistration && changingRegistrationId === registration.id
+                                      ? 'جار الإلغاء...'
+                                      : 'إلغاء هذه التذكرة'}
+                                  </button>
+                                </div>
+                              ) : modificationPolicyText ? (
+                                <p className="text-xs leading-6 text-slate-600">{modificationPolicyText}</p>
+                              ) : null}
+                              {canChangeThis && isChangingThis ? (
+                                <div className="space-y-2 rounded-xl border border-cyan-100 bg-cyan-50/50 p-3">
+                                  <p className="text-xs font-medium text-slate-700">اختر التذكرة الجديدة:</p>
+                                  <div className="space-y-2">
+                                    {alternateTickets.map((changeTicket) => {
+                                      const soldOut = isTicketSoldOut(changeTicket)
+                                      return (
+                                      <label
+                                        key={changeTicket.id}
+                                        className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 transition ${
+                                          soldOut
+                                            ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-60'
+                                            : selectedChangeTicketId === changeTicket.id
+                                              ? 'cursor-pointer border-cyan-400 bg-white shadow-sm'
+                                              : 'cursor-pointer border-slate-200 bg-white hover:border-cyan-200'
+                                        }`}
+                                      >
+                                        <input
+                                          type="radio"
+                                          name={`changeTicket-${registration.id}`}
+                                          value={changeTicket.id}
+                                          checked={selectedChangeTicketId === changeTicket.id}
+                                          disabled={soldOut}
+                                          onChange={() => setSelectedChangeTicketId(changeTicket.id)}
+                                          className="mt-1"
+                                        />
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block text-sm font-semibold text-slate-900">{changeTicket.name}</span>
+                                          {changeTicket.description ? (
+                                            <span className="mt-0.5 block text-xs leading-5 text-slate-500">{changeTicket.description}</span>
+                                          ) : null}
+                                          <span className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
+                                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">{changeTicket.pointPrice} نقطة</span>
+                                            {changeTicket.currencyPrice ? (
+                                              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{changeTicket.currencyPrice}</span>
+                                            ) : (
+                                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800">مجاني</span>
+                                            )}
+                                            {soldOut ? (
+                                              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">نفدت</span>
+                                            ) : null}
+                                          </span>
+                                        </span>
+                                      </label>
+                                      )
+                                    })}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleChangeTicket()}
+                                    disabled={isChangingTicket || !selectedChangeTicketId}
+                                    className="inline-flex w-full items-center justify-center rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                  >
+                                    {isChangingTicket ? 'جار التغيير...' : 'تأكيد تغيير التذكرة'}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                    {changeTicketError ? (
+                      <p className="text-sm text-red-600">{changeTicketError}</p>
+                    ) : null}
+                    {changeTicketSuccess ? (
+                      <p className="text-sm font-medium text-emerald-700">{changeTicketSuccess}</p>
+                    ) : null}
+                    {cancelRegistrationError ? (
+                      <p className="text-sm text-red-600">{cancelRegistrationError}</p>
+                    ) : null}
+                    {cancelRegistrationSuccess ? (
+                      <p className="text-sm font-medium text-emerald-700">{cancelRegistrationSuccess}</p>
                     ) : null}
                   </div>
                 ) : (
@@ -1145,7 +1254,17 @@ export function DashboardEventDetailsPage() {
               <p className="mt-5 text-center text-sm text-slate-500">لا توجد تذاكر متاحة لهذه الفعالية بعد.</p>
             ) : null}
             {applyError ? <p className="mt-3 text-sm text-red-600">{applyError}</p> : null}
-            {applySuccess ? <p className="mt-3 text-sm font-medium text-emerald-700">{applySuccess}</p> : null}
+            {applySuccess ? (
+              <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-medium text-emerald-800">{applySuccess}</p>
+                {!isEventRichTextEmpty(eventItem.registrationSuccessMessage) ? (
+                  <EventRichText
+                    value={eventItem.registrationSuccessMessage}
+                    className="mt-2 text-sm text-emerald-950"
+                  />
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-2">

@@ -107,7 +107,8 @@ CREATE TABLE IF NOT EXISTS events (
     telegram_group_id TEXT, -- Telegram group ID for event communication (e.g., "-123456789"); the same group may be linked to multiple events
     display_attendee_numbers INTEGER NOT NULL DEFAULT 1, -- 1 = show attendee counts publicly, 0 = hide from non-managers
     cancellation_deadline_hours INTEGER NOT NULL DEFAULT 48, -- hours before start_time when self-cancellation closes; 0 = disabled
-    allow_guest_registration INTEGER NOT NULL DEFAULT 0 -- 1 = unauthenticated visitors may register with name/email/phone
+    allow_guest_registration INTEGER NOT NULL DEFAULT 0, -- 1 = unauthenticated visitors may register with name/email/phone
+    registration_success_message TEXT -- optional rich text shown to the registrant after a successful apply
 );
 
 CREATE TRIGGER IF NOT EXISTS update_event_updated_at AFTER UPDATE ON events
@@ -133,7 +134,7 @@ BEGIN
     UPDATE event_tickets SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
-CREATE TABLE IF NOT EXISTS event_registrations ( -- the registrations of users to the events, each registration is for one ticket
+CREATE TABLE IF NOT EXISTS event_registrations ( -- one row per ticket type; a person may hold multiple tickets for the same event
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -145,8 +146,7 @@ CREATE TABLE IF NOT EXISTS event_registrations ( -- the registrations of users t
     attendance_approved_by TEXT, -- membership_number of the user who approved the attendance status (e.g., marking as attended, marking as no_show etc.)
     guest_email TEXT, -- lowercased email for unauthenticated registrations; kept as a snapshot after claim
     guest_name TEXT,
-    guest_phone TEXT,
-    UNIQUE (event_id, membership_number) -- a user can only register once for an event, but can have multiple registrations for different events. TODO: check that the app doesn't run into issues
+    guest_phone TEXT
 );
 
 CREATE TRIGGER IF NOT EXISTS update_event_registration_updated_at AFTER UPDATE ON event_registrations
@@ -154,13 +154,21 @@ BEGIN
     UPDATE event_registrations SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_event_registrations_event_guest_email
-    ON event_registrations (event_id, guest_email)
-    WHERE guest_email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_event_registrations_event_member_ticket
+    ON event_registrations (event_id, membership_number, ticket_id)
+    WHERE membership_number IS NOT NULL AND status IN ('registered', 'attended');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_event_registrations_event_guest_email_ticket
+    ON event_registrations (event_id, guest_email, ticket_id)
+    WHERE guest_email IS NOT NULL AND status IN ('registered', 'attended');
 
 CREATE INDEX IF NOT EXISTS idx_event_registrations_guest_email
     ON event_registrations (guest_email)
     WHERE guest_email IS NOT NULL AND membership_number IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_event_registrations_event_member
+    ON event_registrations (event_id, membership_number)
+    WHERE membership_number IS NOT NULL;
 
 
 CREATE TABLE IF NOT EXISTS skills (

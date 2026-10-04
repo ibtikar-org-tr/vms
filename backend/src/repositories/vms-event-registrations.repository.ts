@@ -1,6 +1,9 @@
-import type { CreateEventRegistrationInput, UpdateEventRegistrationInput } from '../schemas/vms-event-registration.schema'
+import type { UpdateEventRegistrationInput } from '../schemas/vms-event-registration.schema'
 import type { D1DatabaseLike } from '../types/bindings'
-import { applyRegistrationCountTransition } from '../utils/event-registration-counts'
+import {
+  applyRegistrationCountTransition,
+  isActiveEventRegistrationStatus,
+} from '../utils/event-registration-counts'
 import { listEventTickets } from './vms-event-tickets.repository'
 
 interface EventRegistrationRow {
@@ -49,6 +52,8 @@ function mapEventRegistrationRow(row: EventRegistrationRow) {
 export interface ListEventRegistrationsOptions {
   eventId?: string
   membershipNumber?: string
+  guestEmail?: string
+  ticketId?: string
   limit?: number
   offset?: number
 }
@@ -60,12 +65,15 @@ function normalizeGuestEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-function isMembershipUniqueConflict(error: unknown) {
+export function isEventRegistrationUniqueConflict(error: unknown) {
+  if (!(error instanceof Error) || !error.message.includes('UNIQUE constraint failed')) {
+    return false
+  }
+
   return (
-    error instanceof Error &&
-    error.message.includes('UNIQUE constraint failed') &&
-    error.message.includes('event_registrations') &&
-    error.message.includes('membership_number')
+    error.message.includes('event_registrations') ||
+    error.message.includes('idx_event_registrations_event_member_ticket') ||
+    error.message.includes('idx_event_registrations_event_guest_email_ticket')
   )
 }
 
@@ -84,6 +92,16 @@ export async function countEventRegistrations(
   if (options.membershipNumber) {
     conditions.push('membership_number = ?')
     values.push(options.membershipNumber)
+  }
+
+  if (options.guestEmail) {
+    conditions.push('guest_email = ?')
+    values.push(normalizeGuestEmail(options.guestEmail))
+  }
+
+  if (options.ticketId) {
+    conditions.push('ticket_id = ?')
+    values.push(options.ticketId)
   }
 
   const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''
@@ -122,6 +140,16 @@ export async function listEventRegistrations(db: D1DatabaseLike, options: ListEv
     values.push(options.membershipNumber)
   }
 
+  if (options.guestEmail) {
+    conditions.push('guest_email = ?')
+    values.push(normalizeGuestEmail(options.guestEmail))
+  }
+
+  if (options.ticketId) {
+    conditions.push('ticket_id = ?')
+    values.push(options.ticketId)
+  }
+
   const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''
   let query = `${EVENT_REGISTRATION_SELECT}${whereClause} ORDER BY created_at DESC`
 
@@ -154,7 +182,9 @@ export async function getEventRegistrationByEventAndMember(
   membershipNumber: string,
 ) {
   const row = await db
-    .prepare(`${EVENT_REGISTRATION_SELECT} WHERE event_id = ? AND membership_number = ?`)
+    .prepare(
+      `${EVENT_REGISTRATION_SELECT} WHERE event_id = ? AND membership_number = ? AND status IN ('registered', 'attended') ORDER BY created_at DESC`,
+    )
     .bind(eventId, membershipNumber)
     .first<EventRegistrationRow>()
 
@@ -174,10 +204,32 @@ export async function getEventRegistrationByEventAndGuestEmail(
   return row ? mapEventRegistrationRow(row) : null
 }
 
+export async function getEventRegistrationByEventMemberAndTicket(
+  db: D1DatabaseLike,
+  eventId: string,
+  membershipNumber: string,
+  ticketId: string,
+) {
+  const row = await db
+    .prepare(`${EVENT_REGISTRATION_SELECT} WHERE event_id = ? AND membership_number = ? AND ticket_id = ?`)
+    .bind(eventId, membershipNumber, ticketId)
+    .first<EventRegistrationRow>()
+
+  return row ? mapEventRegistrationRow(row) : null
+}
+
+export async function listEventRegistrationsByEventAndGuestEmail(
+  db: D1DatabaseLike,
+  eventId: string,
+  guestEmail: string,
+) {
+  return listEventRegistrations(db, { eventId, guestEmail })
+}
+
 export async function createEventRegistration(
   db: D1DatabaseLike,
   id: string,
-  input: CreateEventRegistrationInput | CreateEventRegistrationRecord,
+  input: CreateEventRegistrationRecord,
 ) {
   await db
     .prepare(
@@ -223,8 +275,13 @@ export async function claimGuestEventRegistrations(
   let claimed = 0
 
   for (const row of result.results) {
-    const existingMemberRegistration = await getEventRegistrationByEventAndMember(db, row.event_id, membershipNumber)
-    if (existingMemberRegistration) {
+    const existingMemberRegistration = await getEventRegistrationByEventMemberAndTicket(
+      db,
+      row.event_id,
+      membershipNumber,
+      row.ticket_id,
+    )
+    if (existingMemberRegistration && isActiveEventRegistrationStatus(existingMemberRegistration.status)) {
       continue
     }
 
@@ -239,7 +296,7 @@ export async function claimGuestEventRegistrations(
         .run()
       claimed += 1
     } catch (error) {
-      if (isMembershipUniqueConflict(error)) {
+      if (isEventRegistrationUniqueConflict(error)) {
         continue
       }
       throw error
