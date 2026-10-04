@@ -44,7 +44,8 @@
   "vectorize": [
     {
       "binding": "VMS_NOTES_VECTORIZE",
-      "index_name": "vms-project-notes"
+      "index_name": "vms-project-notes",
+      "remote": true
     }
   ],
   "services": [

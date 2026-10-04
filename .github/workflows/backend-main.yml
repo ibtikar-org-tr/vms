@@ -49,6 +49,7 @@ jobs:
           | .vars.CORS_ALLOW_ORIGINS = $corsAllowOrigins
           | .services[0].service = $telegramMsName
           | .account_id = $accountId
+          | .vectorize[0].index_name = (if $vectorizeIndex == "" then .vectorize[0].index_name else $vectorizeIndex end)
           | del(.vars.INTERNAL_SECRET, .vars.SMTP_PASS, .vars.JWT_SECRET)'
 
           jq \
@@ -68,8 +69,16 @@ jobs:
             --arg corsAllowOrigins "${{ vars.CORS_ALLOW_ORIGINS }}" \
             --arg telegramMsName "${{ vars.TELEGRAM_MS_NAME }}" \
             --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
+            --arg vectorizeIndex "${{ vars.VECTORIZE_INDEX_NAME }}" \
             "$jq_filter" \
             wrangler.jsonc > wrangler.local.jsonc
+
+      - name: Ensure Vectorize index exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VECTORIZE_INDEX_NAME: ${{ vars.VECTORIZE_INDEX_NAME }}
+        run: bash ./scripts/ensure-vectorize-index.sh
 
       - name: Deploy to Cloudflare Workers
         env:
