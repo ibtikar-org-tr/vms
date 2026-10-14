@@ -8,12 +8,12 @@ import {
   fetchEventById,
   fetchEventRegistrations,
   fetchEventTickets,
-  fetchProjectMembers,
   updateEventRegistration,
 } from '../../api/vms'
-import type { VmsEvent, VmsEventRegistration, VmsEventTicket, VmsProjectMember } from '../../types/vms'
+import type { VmsEvent, VmsEventRegistration, VmsEventTicket } from '../../types/vms'
 import { MemberInfoModal } from '../../components/dashboard/project-details/MemberInfoModal'
 import { getStoredUser } from '../../utils/auth'
+import { canManageVmsEvent } from '../../utils/event-access'
 
 function registrationStatusLabel(status: string) {
   if (status === 'registered') return 'مسجل'
@@ -43,7 +43,6 @@ export function DashboardEventAdminPage() {
   const [hasMoreRegistrations, setHasMoreRegistrations] = useState(false)
   const [isLoadingMoreRegistrations, setIsLoadingMoreRegistrations] = useState(false)
   const [isLoadingRegistrations, setIsLoadingRegistrations] = useState(false)
-  const [projectMembers, setProjectMembers] = useState<VmsProjectMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [busyRegistrationId, setBusyRegistrationId] = useState<string | null>(null)
@@ -121,33 +120,7 @@ export function DashboardEventAdminPage() {
     return () => controller.abort()
   }, [eventID, registrationQuery])
 
-  useEffect(() => {
-    if (!eventItem || !eventItem.projectId) {
-      setProjectMembers([])
-      return
-    }
-    const projectId = eventItem.projectId!
-    const controller = new AbortController()
-    async function loadMembers() {
-      try {
-        const payload = await fetchProjectMembers(projectId)
-        if (!controller.signal.aborted) setProjectMembers(payload.projectMembers)
-      } catch {
-        if (!controller.signal.aborted) setProjectMembers([])
-      }
-    }
-    void loadMembers()
-    return () => controller.abort()
-  }, [eventItem])
-
-  const canManageEvent = useMemo(() => {
-    if (!user || !eventItem) return false
-    if (eventItem.projectId && eventItem.projectOwner) {
-      const managers = new Set(projectMembers.filter((m) => m.role === 'manager').map((m) => m.membershipNumber))
-      return eventItem.projectOwner === user.membershipNumber || managers.has(user.membershipNumber)
-    }
-    return eventItem.createdBy === user.membershipNumber
-  }, [eventItem, projectMembers, user])
+  const canManageEvent = Boolean(user) && canManageVmsEvent(eventItem)
 
   const ticketMap = useMemo(() => new Map(tickets.map((t) => [t.id, t])), [tickets])
   const allRegistrationsCount = useMemo(
@@ -249,7 +222,7 @@ export function DashboardEventAdminPage() {
     try {
       await downloadEventRegistrationsCsv(eventID, {
         ...registrationQuery,
-        filename: `${eventItem?.name || 'event'}-المسجلون.csv`,
+        filename: 'registrations.csv',
       })
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'تعذر تصدير التسجيلات.')

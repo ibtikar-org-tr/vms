@@ -198,7 +198,7 @@ export async function listEventRegistrations(db: D1DatabaseLike, options: ListEv
   }
 
   const result = await db.prepare(query).bind(...values).all<EventRegistrationRow>()
-  return result.results.map(mapEventRegistrationRow)
+  return (result.results ?? []).map(mapEventRegistrationRow)
 }
 
 export async function getEventRegistrationById(db: D1DatabaseLike, id: string) {

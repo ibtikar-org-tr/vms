@@ -70,6 +70,14 @@ export interface VmsEvent {
   cancellationDeadlineHours: number
   allowGuestRegistration: boolean
   registrationSuccessMessage?: string | null
+  canManage?: boolean
+}
+
+export interface VmsEventAdmin {
+  membershipNumber: string
+  displayName: string
+  source: 'creator' | 'assigned' | string
+  grantedBy?: string | null
 }
 
 export interface VmsEventTicket {

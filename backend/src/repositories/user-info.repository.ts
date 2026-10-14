@@ -282,8 +282,8 @@ export async function getUserProfileByMembershipNumber(
     .first<UserProfileRow>()
 }
 
-// SQLite limits bound variables per statement (999 by default).
-const MEMBERSHIP_NUMBER_IN_CLAUSE_BATCH_SIZE = 500
+// D1 allows at most 100 bound parameters per statement.
+const MEMBERSHIP_NUMBER_IN_CLAUSE_BATCH_SIZE = 80
 
 export async function searchMembershipNumbers(db: D1DatabaseLike, query: string, limit = 100): Promise<string[]> {
   const needle = query.trim()
@@ -345,7 +345,7 @@ export async function getMemberExportContactsByMembershipNumbers(
         arName: string | null
       }>()
 
-    for (const row of rows.results) {
+    for (const row of rows.results ?? []) {
       contacts.set(row.membershipNumber, {
         email: row.email,
         phoneNumber: row.phoneNumber,
@@ -381,7 +381,7 @@ export async function getUserDisplayNamesByMembershipNumbers(
       .bind(...batch)
       .all<UserDisplayNameRow>()
 
-    for (const row of rows.results) {
+    for (const row of rows.results ?? []) {
       const displayName = row.ar_name?.trim() || row.en_name?.trim() || row.membership_number
 
       displayNameMap.set(row.membership_number, displayName)
