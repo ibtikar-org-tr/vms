@@ -129,10 +129,8 @@ CREATE TABLE IF NOT EXISTS event_tickets ( -- the available tickets for the even
     active_registration_count INTEGER NOT NULL DEFAULT 0 -- denormalized count of registrations with status registered or attended
 );
 
-CREATE TRIGGER IF NOT EXISTS update_event_ticket_updated_at AFTER UPDATE ON event_tickets
-BEGIN
-    UPDATE event_tickets SET updated_at = datetime('now') WHERE id = NEW.id;
-END;
+-- updated_at is written by the application. Do not add a same-row AFTER UPDATE trigger;
+-- that pattern can abort D1 ticket updates (including raising quantity).
 
 CREATE TABLE IF NOT EXISTS event_registrations ( -- one row per ticket type; a person may hold multiple tickets for the same event
     id TEXT PRIMARY KEY,

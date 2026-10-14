@@ -20,6 +20,7 @@ import { SkillsField } from '../../components/SkillsField'
 import { LocationDetailsComponent } from '../../components/registration/sections/personal-info-section/LocationDetailsComponent'
 import { EventRichTextEditor } from '../../components/events/EventRichTextEditor'
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
+import { parseIntegerInput } from '../../utils/parse-int'
 import { initialRegistrationFormData } from '../../types/registration'
 import type { RegistrationFormData } from '../../types/registration'
 
@@ -73,6 +74,7 @@ export function DashboardEventEditPage() {
   const [tickets, setTickets] = useState<VmsEventTicket[]>([])
   const [registrations, setRegistrations] = useState<VmsEventRegistration[]>([])
   const [ticketError, setTicketError] = useState<string | null>(null)
+  const [ticketSuccess, setTicketSuccess] = useState<string | null>(null)
   const [isCreatingTicket, setIsCreatingTicket] = useState(false)
   const [editingTicketId, setEditingTicketId] = useState<string | null>(null)
   const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null)
@@ -281,6 +283,7 @@ export function DashboardEventEditPage() {
   const handleCreateTicket = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setTicketError(null)
+    setTicketSuccess(null)
 
     if (!eventID) {
       return
@@ -289,11 +292,11 @@ export function DashboardEventEditPage() {
     const formData = new FormData(event.currentTarget)
     const name = String(formData.get('name') ?? '').trim()
     const description = String(formData.get('description') ?? '').trim()
-    const pointPriceRaw = Number(formData.get('pointPrice') ?? 0)
+    const pointPriceRaw = parseIntegerInput(formData.get('pointPrice'))
     const currencyPriceRaw = String(formData.get('currencyPrice') ?? '').trim()
-    const quantityRaw = Number(formData.get('quantity') ?? 0)
+    const quantityRaw = parseIntegerInput(formData.get('quantity'))
 
-    if (!name || Number.isNaN(pointPriceRaw) || Number.isNaN(quantityRaw)) {
+    if (!name || pointPriceRaw === null || quantityRaw === null) {
       setTicketError('يرجى إدخال جميع حقول التذكرة المطلوبة بشكل صحيح.')
       return
     }
@@ -311,13 +314,14 @@ export function DashboardEventEditPage() {
         eventId: eventID,
         name,
         description: description || undefined,
-        pointPrice: Math.trunc(pointPriceRaw),
+        pointPrice: pointPriceRaw,
         currencyPrice: currencyPriceRaw || undefined,
-        quantity: Math.trunc(quantityRaw),
+        quantity: quantityRaw,
       })
 
       setTickets((previous) => [payload.eventTicket, ...previous])
       ticketForm.reset()
+      setTicketSuccess('تمت إضافة التذكرة.')
     } catch (requestError) {
       if (requestError instanceof Error) {
         setTicketError(requestError.message)
@@ -332,16 +336,18 @@ export function DashboardEventEditPage() {
   const handleUpdateTicket = async (event: FormEvent<HTMLFormElement>, ticketId: string) => {
     event.preventDefault()
     setTicketError(null)
+    setTicketSuccess(null)
 
-    const form = event.currentTarget
-    const formData = new FormData(form)
+    const formData = new FormData(event.currentTarget)
     const name = String(formData.get('name') ?? '').trim()
     const description = String(formData.get('description') ?? '').trim()
-    const pointPriceRaw = Number(formData.get('pointPrice') ?? 0)
+    const pointPriceRaw = parseIntegerInput(formData.get('pointPrice'))
     const currencyPrice = String(formData.get('currencyPrice') ?? '').trim()
-    const quantityRaw = Number(formData.get('quantity') ?? 0)
+    const quantityRaw = parseIntegerInput(formData.get('quantity'))
+    const currentTicket = tickets.find((ticket) => ticket.id === ticketId)
+    const occupied = currentTicket?.activeRegistrationCount ?? 0
 
-    if (!name || Number.isNaN(pointPriceRaw) || Number.isNaN(quantityRaw)) {
+    if (!name || pointPriceRaw === null || quantityRaw === null) {
       setTicketError('يرجى إدخال جميع حقول التذكرة المطلوبة بشكل صحيح.')
       return
     }
@@ -351,24 +357,66 @@ export function DashboardEventEditPage() {
       return
     }
 
+    if (quantityRaw < occupied) {
+      setTicketError(`لا يمكن تقليل المقاعد إلى ${quantityRaw} لأن ${occupied} مسجّلاً حالياً على هذه التذكرة.`)
+      return
+    }
+
     setUpdatingTicketId(ticketId)
 
     try {
       const payload = await updateEventTicket(ticketId, {
         name,
-        description: description || undefined,
-        pointPrice: Math.trunc(pointPriceRaw),
-        currencyPrice: currencyPrice || undefined,
-        quantity: Math.trunc(quantityRaw),
+        description: description || null,
+        pointPrice: pointPriceRaw,
+        currencyPrice: currencyPrice || null,
+        quantity: quantityRaw,
       })
 
       setTickets((previous) => previous.map((ticket) => (ticket.id === ticketId ? payload.eventTicket : ticket)))
       setEditingTicketId(null)
+      setTicketSuccess('تم حفظ تعديلات التذكرة.')
     } catch (requestError) {
       if (requestError instanceof Error) {
         setTicketError(requestError.message)
       } else {
         setTicketError('تعذر تحديث التذكرة.')
+      }
+    } finally {
+      setUpdatingTicketId(null)
+    }
+  }
+
+  const handleUpdateTicketSeats = async (event: FormEvent<HTMLFormElement>, ticketId: string) => {
+    event.preventDefault()
+    setTicketError(null)
+    setTicketSuccess(null)
+
+    const quantityRaw = parseIntegerInput(new FormData(event.currentTarget).get('quantity'))
+    const currentTicket = tickets.find((ticket) => ticket.id === ticketId)
+    const occupied = currentTicket?.activeRegistrationCount ?? 0
+
+    if (quantityRaw === null || quantityRaw < 0) {
+      setTicketError('يرجى إدخال عدد مقاعد صحيح.')
+      return
+    }
+
+    if (quantityRaw < occupied) {
+      setTicketError(`لا يمكن تقليل المقاعد إلى ${quantityRaw} لأن ${occupied} مسجّلاً حالياً على هذه التذكرة.`)
+      return
+    }
+
+    setUpdatingTicketId(ticketId)
+
+    try {
+      const payload = await updateEventTicket(ticketId, { quantity: quantityRaw })
+      setTickets((previous) => previous.map((ticket) => (ticket.id === ticketId ? payload.eventTicket : ticket)))
+      setTicketSuccess(`تم تحديث المقاعد إلى ${payload.eventTicket.quantity}.`)
+    } catch (requestError) {
+      if (requestError instanceof Error) {
+        setTicketError(requestError.message)
+      } else {
+        setTicketError('تعذر تحديث عدد المقاعد.')
       }
     } finally {
       setUpdatingTicketId(null)
@@ -387,6 +435,7 @@ export function DashboardEventEditPage() {
     }
 
     setTicketError(null)
+    setTicketSuccess(null)
     setDeletingTicketId(ticketId)
 
     try {
@@ -394,6 +443,7 @@ export function DashboardEventEditPage() {
       setTickets((previous) => previous.filter((ticket) => ticket.id !== ticketId))
       setRegistrations((previous) => previous.filter((registration) => registration.ticketId !== ticketId))
       setEditingTicketId((current) => (current === ticketId ? null : current))
+      setTicketSuccess('تم حذف التذكرة.')
     } catch (requestError) {
       if (requestError instanceof Error) {
         setTicketError(requestError.message)
@@ -769,10 +819,12 @@ export function DashboardEventEditPage() {
           />
         </form>
         {ticketError ? <p className="mt-3 text-sm text-red-600">{ticketError}</p> : null}
+        {ticketSuccess ? <p className="mt-3 text-sm font-medium text-emerald-700">{ticketSuccess}</p> : null}
 
         <ul className="mt-4 space-y-2">
           {tickets.map((ticket) => {
             const registrantsCount = registrations.filter((registration) => registration.ticketId === ticket.id).length
+            const occupied = ticket.activeRegistrationCount ?? 0
             const cannotDelete = registrantsCount > 0
             const deleteHint = cannotDelete
               ? 'يجب إزالة جميع المسجلين على هذه التذكرة قبل حذفها.'
@@ -811,15 +863,16 @@ export function DashboardEventEditPage() {
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-xs font-medium text-slate-600">الكمية</span>
+                    <span className="text-xs font-medium text-slate-600">المقاعد</span>
                     <input
                       name="quantity"
                       type="number"
-                      min={0}
+                      min={occupied}
                       defaultValue={ticket.quantity}
                       required
                       className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                     />
+                    <span className="text-[11px] text-slate-500">لا يمكن أن يقل العدد عن {occupied} مسجّل نشط.</span>
                   </label>
                   <label className="space-y-1 sm:col-span-2">
                     <span className="text-xs font-medium text-slate-600">الوصف (اختياري)</span>
@@ -860,8 +913,33 @@ export function DashboardEventEditPage() {
                     )}
                   </div>
                   <p className="mt-2 text-xs text-slate-600">
-                    الكمية: {ticket.quantity} • النقاط: {ticket.pointPrice} • المسجلون: {registrantsCount}
+                    المقاعد: {ticket.quantity} • النقاط: {ticket.pointPrice} • المسجلون النشطون: {occupied}
+                    {registrantsCount !== occupied ? ` • كل التسجيلات: ${registrantsCount}` : ''}
                   </p>
+                  <form
+                    key={`${ticket.id}-${ticket.quantity}`}
+                    onSubmit={(event) => void handleUpdateTicketSeats(event, ticket.id)}
+                    className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3"
+                  >
+                    <label className="min-w-32 flex-1 space-y-1">
+                      <span className="text-xs font-medium text-slate-600">رفع/تعديل المقاعد</span>
+                      <input
+                        name="quantity"
+                        type="number"
+                        min={occupied}
+                        defaultValue={ticket.quantity}
+                        required
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={updatingTicketId === ticket.id}
+                      className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {updatingTicketId === ticket.id ? 'جار التحديث...' : 'تحديث المقاعد'}
+                    </button>
+                  </form>
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                     <button
                       type="button"

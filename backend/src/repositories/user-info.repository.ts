@@ -285,6 +285,78 @@ export async function getUserProfileByMembershipNumber(
 // SQLite limits bound variables per statement (999 by default).
 const MEMBERSHIP_NUMBER_IN_CLAUSE_BATCH_SIZE = 500
 
+export async function searchMembershipNumbers(db: D1DatabaseLike, query: string, limit = 100): Promise<string[]> {
+  const needle = query.trim()
+  if (!needle) {
+    return []
+  }
+
+  const like = `%${needle.replace(/[%_]/g, '')}%`
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT u.membership_number AS membershipNumber
+       FROM users u
+       LEFT JOIN user_info ui ON ui.membership_number = u.membership_number
+       WHERE u.membership_number LIKE ?
+          OR u.email LIKE ?
+          OR IFNULL(ui.en_name, '') LIKE ?
+          OR IFNULL(ui.ar_name, '') LIKE ?
+          OR IFNULL(ui.phone_number, '') LIKE ?
+       LIMIT ?`,
+    )
+    .bind(like, like, like, like, like, Math.max(1, Math.min(limit, 200)))
+    .all<{ membershipNumber: string }>()
+
+  return rows.results.map((row) => row.membershipNumber).filter(Boolean)
+}
+
+export async function getMemberExportContactsByMembershipNumbers(
+  db: D1DatabaseLike,
+  membershipNumbers: string[],
+): Promise<Map<string, { email: string; phoneNumber: string | null; displayName: string }>> {
+  const uniqueMembershipNumbers = [...new Set(membershipNumbers.map((value) => value.trim()).filter(Boolean))]
+  const contacts = new Map<string, { email: string; phoneNumber: string | null; displayName: string }>()
+
+  if (uniqueMembershipNumbers.length === 0) {
+    return contacts
+  }
+
+  for (let offset = 0; offset < uniqueMembershipNumbers.length; offset += MEMBERSHIP_NUMBER_IN_CLAUSE_BATCH_SIZE) {
+    const batch = uniqueMembershipNumbers.slice(offset, offset + MEMBERSHIP_NUMBER_IN_CLAUSE_BATCH_SIZE)
+    const placeholders = batch.map(() => '?').join(', ')
+    const rows = await db
+      .prepare(
+        `SELECT
+           u.membership_number AS membershipNumber,
+           u.email AS email,
+           ui.phone_number AS phoneNumber,
+           ui.en_name AS enName,
+           ui.ar_name AS arName
+         FROM users u
+         LEFT JOIN user_info ui ON ui.membership_number = u.membership_number
+         WHERE u.membership_number IN (${placeholders})`,
+      )
+      .bind(...batch)
+      .all<{
+        membershipNumber: string
+        email: string
+        phoneNumber: string | null
+        enName: string | null
+        arName: string | null
+      }>()
+
+    for (const row of rows.results) {
+      contacts.set(row.membershipNumber, {
+        email: row.email,
+        phoneNumber: row.phoneNumber,
+        displayName: row.arName?.trim() || row.enName?.trim() || row.membershipNumber,
+      })
+    }
+  }
+
+  return contacts
+}
+
 export async function getUserDisplayNamesByMembershipNumbers(
   db: D1DatabaseLike,
   membershipNumbers: string[],

@@ -138,6 +138,21 @@ export async function apiDelete(path: string): Promise<void> {
   }
 }
 
+export async function apiDownload(path: string): Promise<{ blob: Blob; filename: string | null }> {
+  const response = await apiFetch(path, { method: 'GET' })
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response, `Request failed (${response.status})`))
+  }
+
+  const disposition = response.headers.get('Content-Disposition')
+  const filenameMatch = disposition?.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+  const encodedName = filenameMatch?.[1]
+  const plainName = filenameMatch?.[2]
+  const filename = encodedName ? decodeURIComponent(encodedName) : plainName || null
+
+  return { blob: await response.blob(), filename }
+}
+
 export async function logoutRequest() {
   clearStoredAuth()
   try {
