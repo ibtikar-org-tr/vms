@@ -13,6 +13,7 @@ import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber } from '../utils/actor'
 import { canManageEvent } from '../utils/event-permissions'
 import { stripTicketActiveRegistrationCounts } from '../utils/event-registration-counts'
+import { jsonValidationHook } from '../utils/zod-json-error'
 
 export const vmsEventTicketsRoute = new Hono<AppEnv>()
 
@@ -80,23 +81,37 @@ vmsEventTicketsRoute.get('/event-tickets/:id', zValidator('param', eventTicketPa
   }
 })
 
-vmsEventTicketsRoute.post('/event-tickets', zValidator('json', createEventTicketSchema), async (c) => {
-  try {
-    const payload = c.req.valid('json')
-    const eventTicketId = crypto.randomUUID()
-    const eventTicket = await createEventTicket(c.env.VMS_DB, eventTicketId, payload)
+vmsEventTicketsRoute.post(
+  '/event-tickets',
+  zValidator('json', createEventTicketSchema, jsonValidationHook),
+  async (c) => {
+    try {
+      const payload = c.req.valid('json')
+      const event = await getEventById(c.env.VMS_DB, payload.eventId)
+      if (!event) {
+        return c.json({ error: 'Event not found.' }, 404)
+      }
 
-    return c.json({ eventTicket }, 201)
-  } catch (error) {
-    console.error('Failed to create event ticket', error)
-    return c.json({ error: 'Could not create event ticket.' }, 500)
-  }
-})
+      const canManage = await canManageEvent(c.env.VMS_DB, event, getActorMembershipNumber(c))
+      if (!canManage) {
+        return c.json({ error: 'Only the project owner or managers can create event tickets.' }, 403)
+      }
+
+      const eventTicketId = crypto.randomUUID()
+      const eventTicket = await createEventTicket(c.env.VMS_DB, eventTicketId, payload)
+
+      return c.json({ eventTicket }, 201)
+    } catch (error) {
+      console.error('Failed to create event ticket', error)
+      return c.json({ error: 'Could not create event ticket.' }, 500)
+    }
+  },
+)
 
 vmsEventTicketsRoute.put(
   '/event-tickets/:id',
   zValidator('param', eventTicketParamsSchema),
-  zValidator('json', updateEventTicketSchema),
+  zValidator('json', updateEventTicketSchema, jsonValidationHook),
   async (c) => {
     try {
       const { id } = c.req.valid('param')
@@ -107,7 +122,30 @@ vmsEventTicketsRoute.put(
         return c.json({ error: 'Event ticket not found.' }, 404)
       }
 
+      const event = await getEventById(c.env.VMS_DB, existing.eventId)
+      if (!event) {
+        return c.json({ error: 'Event not found.' }, 404)
+      }
+
+      const canManage = await canManageEvent(c.env.VMS_DB, event, getActorMembershipNumber(c))
+      if (!canManage) {
+        return c.json({ error: 'Only the project owner or managers can update event tickets.' }, 403)
+      }
+
+      if (payload.quantity !== undefined && payload.quantity < existing.activeRegistrationCount) {
+        return c.json(
+          {
+            error: `لا يمكن تقليل المقاعد إلى ${payload.quantity} لأن ${existing.activeRegistrationCount} مسجّلاً حالياً على هذه التذكرة.`,
+          },
+          409,
+        )
+      }
+
       const eventTicket = await updateEventTicketById(c.env.VMS_DB, id, payload)
+      if (!eventTicket) {
+        return c.json({ error: 'Event ticket not found.' }, 404)
+      }
+
       return c.json({ eventTicket })
     } catch (error) {
       console.error('Failed to update event ticket', error)
@@ -119,6 +157,20 @@ vmsEventTicketsRoute.put(
 vmsEventTicketsRoute.delete('/event-tickets/:id', zValidator('param', eventTicketParamsSchema), async (c) => {
   try {
     const { id } = c.req.valid('param')
+    const existing = await getEventTicketById(c.env.VMS_DB, id)
+
+    if (!existing) {
+      return c.json({ error: 'Event ticket not found.' }, 404)
+    }
+
+    const event = await getEventById(c.env.VMS_DB, existing.eventId)
+    if (event) {
+      const canManage = await canManageEvent(c.env.VMS_DB, event, getActorMembershipNumber(c))
+      if (!canManage) {
+        return c.json({ error: 'Only the project owner or managers can delete event tickets.' }, 403)
+      }
+    }
+
     const deleted = await deleteEventTicketById(c.env.VMS_DB, id)
 
     if (!deleted) {

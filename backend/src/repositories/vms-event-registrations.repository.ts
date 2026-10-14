@@ -54,6 +54,9 @@ export interface ListEventRegistrationsOptions {
   membershipNumber?: string
   guestEmail?: string
   ticketId?: string
+  status?: string
+  search?: string
+  matchingMembershipNumbers?: string[]
   limit?: number
   offset?: number
 }
@@ -77,13 +80,15 @@ export function isEventRegistrationUniqueConflict(error: unknown) {
   )
 }
 
-export async function countEventRegistrations(
-  db: D1DatabaseLike,
-  options: Pick<ListEventRegistrationsOptions, 'eventId' | 'membershipNumber'> = {},
-) {
-  const conditions: string[] = []
-  const values: unknown[] = []
+function escapeLikeQuery(value: string) {
+  return value.replace(/[%_]/g, '')
+}
 
+function appendRegistrationFilters(
+  conditions: string[],
+  values: unknown[],
+  options: ListEventRegistrationsOptions,
+) {
   if (options.eventId) {
     conditions.push('event_id = ?')
     values.push(options.eventId)
@@ -104,6 +109,40 @@ export async function countEventRegistrations(
     values.push(options.ticketId)
   }
 
+  if (options.status) {
+    conditions.push('status = ?')
+    values.push(options.status)
+  }
+
+  const search = options.search?.trim()
+  if (search) {
+    const like = `%${escapeLikeQuery(search)}%`
+    const parts = [
+      'IFNULL(membership_number, \'\') LIKE ?',
+      'IFNULL(guest_name, \'\') LIKE ?',
+      'IFNULL(guest_email, \'\') LIKE ?',
+      'IFNULL(guest_phone, \'\') LIKE ?',
+    ]
+    values.push(like, like, like, like)
+
+    const matchingMembershipNumbers = (options.matchingMembershipNumbers ?? []).filter(Boolean)
+    if (matchingMembershipNumbers.length > 0) {
+      parts.push(`membership_number IN (${matchingMembershipNumbers.map(() => '?').join(', ')})`)
+      values.push(...matchingMembershipNumbers)
+    }
+
+    conditions.push(`(${parts.join(' OR ')})`)
+  }
+}
+
+export async function countEventRegistrations(
+  db: D1DatabaseLike,
+  options: ListEventRegistrationsOptions = {},
+) {
+  const conditions: string[] = []
+  const values: unknown[] = []
+  appendRegistrationFilters(conditions, values, options)
+
   const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''
   const row = await db
     .prepare(`SELECT COUNT(*) as count FROM event_registrations${whereClause}`)
@@ -111,6 +150,20 @@ export async function countEventRegistrations(
     .first<{ count: number }>()
 
   return row?.count ?? 0
+}
+
+export async function countEventRegistrationsGroupedByTicket(db: D1DatabaseLike, eventId: string) {
+  const result = await db
+    .prepare(
+      `SELECT ticket_id as ticketId, COUNT(*) as count
+       FROM event_registrations
+       WHERE event_id = ?
+       GROUP BY ticket_id`,
+    )
+    .bind(eventId)
+    .all<{ ticketId: string; count: number }>()
+
+  return new Map(result.results.map((row) => [row.ticketId, Number(row.count ?? 0)]))
 }
 
 export async function countActiveEventRegistrationsByTicket(db: D1DatabaseLike, eventId: string) {
@@ -129,26 +182,7 @@ export async function countActiveEventRegistrationsByTicket(db: D1DatabaseLike, 
 export async function listEventRegistrations(db: D1DatabaseLike, options: ListEventRegistrationsOptions = {}) {
   const conditions: string[] = []
   const values: unknown[] = []
-
-  if (options.eventId) {
-    conditions.push('event_id = ?')
-    values.push(options.eventId)
-  }
-
-  if (options.membershipNumber) {
-    conditions.push('membership_number = ?')
-    values.push(options.membershipNumber)
-  }
-
-  if (options.guestEmail) {
-    conditions.push('guest_email = ?')
-    values.push(normalizeGuestEmail(options.guestEmail))
-  }
-
-  if (options.ticketId) {
-    conditions.push('ticket_id = ?')
-    values.push(options.ticketId)
-  }
+  appendRegistrationFilters(conditions, values, options)
 
   const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''
   let query = `${EVENT_REGISTRATION_SELECT}${whereClause} ORDER BY created_at DESC`

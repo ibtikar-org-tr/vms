@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { CheckCircle, Clock, Trash2, Users } from 'lucide-react'
+import { CheckCircle, Clock, Download, Search, Trash2, Users } from 'lucide-react'
 import {
   approveRegistration,
   deleteEventRegistration,
+  downloadEventRegistrationsCsv,
   fetchEventById,
   fetchEventRegistrations,
   fetchEventTickets,
@@ -22,6 +23,14 @@ function registrationStatusLabel(status: string) {
   return status
 }
 
+const STATUS_FILTERS = [
+  { value: '', label: 'كل الحالات' },
+  { value: 'registered', label: 'مسجل' },
+  { value: 'attended', label: 'حضر' },
+  { value: 'cancelled', label: 'ملغي' },
+  { value: 'no_show', label: 'لم يحضر' },
+] as const
+
 export function DashboardEventAdminPage() {
   const { eventID } = useParams()
   const user = useMemo(() => getStoredUser(), [])
@@ -30,35 +39,52 @@ export function DashboardEventAdminPage() {
   const [tickets, setTickets] = useState<VmsEventTicket[]>([])
   const [registrations, setRegistrations] = useState<VmsEventRegistration[]>([])
   const [registrationsTotal, setRegistrationsTotal] = useState(0)
+  const [ticketCounts, setTicketCounts] = useState<Record<string, number>>({})
   const [hasMoreRegistrations, setHasMoreRegistrations] = useState(false)
   const [isLoadingMoreRegistrations, setIsLoadingMoreRegistrations] = useState(false)
+  const [isLoadingRegistrations, setIsLoadingRegistrations] = useState(false)
   const [projectMembers, setProjectMembers] = useState<VmsProjectMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [busyRegistrationId, setBusyRegistrationId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [ticketFilter, setTicketFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [isExporting, setIsExporting] = useState(false)
   const [memberInfoTarget, setMemberInfoTarget] = useState<{
     membershipNumber: string
     displayName: string
   } | null>(null)
 
   useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 300)
+    return () => window.clearTimeout(handle)
+  }, [searchInput])
+
+  const registrationQuery = useMemo(
+    () => ({
+      ticketId: ticketFilter || undefined,
+      status: statusFilter || undefined,
+      q: debouncedSearch || undefined,
+    }),
+    [debouncedSearch, statusFilter, ticketFilter],
+  )
+
+  useEffect(() => {
     if (!eventID) return
     const controller = new AbortController()
     async function load() {
       try {
-        const [eventPayload, ticketsPayload, registrationsPayload] = await Promise.all([
+        const [eventPayload, ticketsPayload] = await Promise.all([
           fetchEventById(eventID as string),
           fetchEventTickets(eventID as string),
-          fetchEventRegistrations(eventID as string),
         ])
         if (controller.signal.aborted) return
         setEventItem(eventPayload.event)
         setTickets(ticketsPayload.eventTickets)
-        setRegistrations(registrationsPayload.eventRegistrations)
-        setRegistrationsTotal(registrationsPayload.total ?? registrationsPayload.eventRegistrations.length)
-        setHasMoreRegistrations(registrationsPayload.hasMore ?? false)
       } catch {
         if (!controller.signal.aborted) setNotFound(true)
       } finally {
@@ -68,6 +94,32 @@ export function DashboardEventAdminPage() {
     void load()
     return () => controller.abort()
   }, [eventID])
+
+  useEffect(() => {
+    if (!eventID) return
+    const controller = new AbortController()
+    async function loadRegistrations() {
+      setIsLoadingRegistrations(true)
+      try {
+        const payload = await fetchEventRegistrations(eventID as string, registrationQuery)
+        if (controller.signal.aborted) return
+        setRegistrations(payload.eventRegistrations)
+        setRegistrationsTotal(payload.total ?? payload.eventRegistrations.length)
+        setHasMoreRegistrations(payload.hasMore ?? false)
+        if (payload.ticketCounts) {
+          setTicketCounts(payload.ticketCounts)
+        }
+      } catch (requestError) {
+        if (!controller.signal.aborted) {
+          setError(requestError instanceof Error ? requestError.message : 'تعذر تحميل التسجيلات.')
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingRegistrations(false)
+      }
+    }
+    void loadRegistrations()
+    return () => controller.abort()
+  }, [eventID, registrationQuery])
 
   useEffect(() => {
     if (!eventItem || !eventItem.projectId) {
@@ -98,6 +150,11 @@ export function DashboardEventAdminPage() {
   }, [eventItem, projectMembers, user])
 
   const ticketMap = useMemo(() => new Map(tickets.map((t) => [t.id, t])), [tickets])
+  const allRegistrationsCount = useMemo(
+    () => Object.values(ticketCounts).reduce((sum, count) => sum + count, 0),
+    [ticketCounts],
+  )
+  const hasActiveFilters = Boolean(ticketFilter || statusFilter || debouncedSearch)
 
   const handleStatus = async (registrationId: string, status: 'attended' | 'no_show' | 'cancelled') => {
     setError(null)
@@ -105,7 +162,17 @@ export function DashboardEventAdminPage() {
     setBusyRegistrationId(registrationId)
     try {
       const payload = await updateEventRegistration(registrationId, { status })
-      setRegistrations((previous) => previous.map((item) => (item.id === registrationId ? payload.eventRegistration : item)))
+      const next = payload.eventRegistration
+      const stillMatches = !statusFilter || next.status === statusFilter
+      setRegistrations((previous) => {
+        if (!stillMatches) {
+          return previous.filter((item) => item.id !== registrationId)
+        }
+        return previous.map((item) => (item.id === registrationId ? next : item))
+      })
+      if (!stillMatches) {
+        setRegistrationsTotal((previous) => Math.max(0, previous - 1))
+      }
       setSuccess('تم تحديث حالة التسجيل بنجاح.')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'تعذر تحديث الحالة.')
@@ -139,6 +206,12 @@ export function DashboardEventAdminPage() {
       await deleteEventRegistration(registrationId)
       setRegistrations((previous) => previous.filter((item) => item.id !== registrationId))
       setRegistrationsTotal((previous) => Math.max(0, previous - 1))
+      setTicketCounts((previous) => {
+        const registration = registrations.find((item) => item.id === registrationId)
+        if (!registration) return previous
+        const current = previous[registration.ticketId] ?? 0
+        return { ...previous, [registration.ticketId]: Math.max(0, current - 1) }
+      })
       setSuccess('تم حذف التسجيل.')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'تعذر حذف التسجيل.')
@@ -155,7 +228,10 @@ export function DashboardEventAdminPage() {
     setIsLoadingMoreRegistrations(true)
 
     try {
-      const payload = await fetchEventRegistrations(eventID, { offset: registrations.length })
+      const payload = await fetchEventRegistrations(eventID, {
+        ...registrationQuery,
+        offset: registrations.length,
+      })
       setRegistrations((previous) => [...previous, ...payload.eventRegistrations])
       setRegistrationsTotal(payload.total ?? registrationsTotal)
       setHasMoreRegistrations(payload.hasMore ?? false)
@@ -163,6 +239,22 @@ export function DashboardEventAdminPage() {
       setError(requestError instanceof Error ? requestError.message : 'تعذر تحميل المزيد من التسجيلات.')
     } finally {
       setIsLoadingMoreRegistrations(false)
+    }
+  }
+
+  const handleExport = async () => {
+    if (!eventID) return
+    setError(null)
+    setIsExporting(true)
+    try {
+      await downloadEventRegistrationsCsv(eventID, {
+        ...registrationQuery,
+        filename: `${eventItem?.name || 'event'}-المسجلون.csv`,
+      })
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'تعذر تصدير التسجيلات.')
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -208,15 +300,92 @@ export function DashboardEventAdminPage() {
       </div>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
-        <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
           <Users className="h-5 w-5 text-slate-700" />
           <h2 className="text-base font-semibold text-slate-900">المسجلون</h2>
           <span className="mr-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
             {registrationsTotal} تسجيل
           </span>
+          <button
+            type="button"
+            onClick={() => void handleExport()}
+            disabled={isExporting || registrationsTotal === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {isExporting ? 'جار التصدير...' : 'تصدير Excel'}
+          </button>
         </div>
 
-        {registrationsTotal === 0 ? <p className="text-sm text-slate-500">لا توجد تسجيلات بعد.</p> : null}
+        <div className="mb-4 space-y-3">
+          {tickets.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setTicketFilter('')}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  ticketFilter === ''
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                كل التذاكر
+                <span className="mr-1 opacity-80">({allRegistrationsCount || registrationsTotal})</span>
+              </button>
+              {tickets.map((ticket) => {
+                const count = ticketCounts[ticket.id] ?? 0
+                const selected = ticketFilter === ticket.id
+                return (
+                  <button
+                    key={ticket.id}
+                    type="button"
+                    onClick={() => setTicketFilter(ticket.id)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      selected
+                        ? 'border-cyan-700 bg-cyan-700 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {ticket.name}
+                    <span className="mr-1 opacity-80">({count})</span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="بحث بالاسم أو البريد أو رقم العضوية أو الهاتف"
+                className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pr-10 pl-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+              />
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+            >
+              {STATUS_FILTERS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {isLoadingRegistrations ? <p className="text-sm text-slate-500">جار تصفية التسجيلات...</p> : null}
+
+        {!isLoadingRegistrations && registrationsTotal === 0 ? (
+          <p className="text-sm text-slate-500">
+            {hasActiveFilters ? 'لا توجد نتائج مطابقة للبحث أو التصفية.' : 'لا توجد تسجيلات بعد.'}
+          </p>
+        ) : null}
 
         <ul className="space-y-2">
           {registrations.map((registration) => {
