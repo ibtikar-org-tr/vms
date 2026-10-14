@@ -222,7 +222,7 @@ export function DashboardEventAdminPage() {
     try {
       await downloadEventRegistrationsCsv(eventID, {
         ...registrationQuery,
-        filename: 'registrations.csv',
+        filename: 'event-registrations.csv',
       })
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'تعذر تصدير التسجيلات.')
@@ -286,7 +286,7 @@ export function DashboardEventAdminPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Download className="h-3.5 w-3.5" />
-            {isExporting ? 'جار التصدير...' : 'تصدير Excel'}
+            {isExporting ? 'جار التصدير...' : 'تصدير CSV'}
           </button>
         </div>
 

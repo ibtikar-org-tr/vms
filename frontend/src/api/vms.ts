@@ -602,13 +602,13 @@ export async function downloadEventRegistrationsCsv(
     `/events/${encodeURIComponent(eventId)}/registrations/export${query}`,
   )
 
-  const csvBlob = blob.type.includes('csv') || blob.type.includes('octet-stream') || blob.type === ''
-    ? blob
-    : new Blob([blob], { type: 'text/csv;charset=utf-8' })
+  const csvBlob = new Blob([await blob.arrayBuffer()], { type: 'text/csv;charset=utf-8' })
+  const requestedName = options?.filename || filename || 'event-registrations.csv'
+  const downloadName = `${requestedName.replace(/\.(csv|xlsx|xls)$/i, '') || 'event-registrations'}.csv`
   const objectUrl = URL.createObjectURL(csvBlob)
   const link = document.createElement('a')
   link.href = objectUrl
-  link.download = options?.filename || filename || 'registrations.csv'
+  link.download = downloadName
   link.rel = 'noopener'
   document.body.appendChild(link)
   link.click()

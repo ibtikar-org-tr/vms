@@ -291,13 +291,13 @@ vmsEventRegistrationsRoute.get(
             registration.createdAt,
           ]
         }),
-        ';',
       )
 
       const filename = asciiDownloadFilename(`registrations-${eventId.slice(0, 8)}`, 'csv')
       c.header('Content-Type', 'text/csv; charset=utf-8')
-      c.header('Content-Disposition', `attachment; filename="${filename}"`)
+      c.header('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`)
       c.header('Cache-Control', 'no-store')
+      c.header('X-Content-Type-Options', 'nosniff')
       return c.body(csv, 200)
     } catch (error) {
       console.error('Failed to export event registrations', error)
