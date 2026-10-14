@@ -153,6 +153,13 @@ export function changePassword(payload: { currentPassword: string; newPassword: 
   )
 }
 
+export function fetchMemberDisplayTitle() {
+  return fetchJson<{ title: string; source: 'position' | 'project_role' | 'platform_role' }>(
+    '/me/display-title',
+    { cache: false },
+  )
+}
+
 export function fetchProfile(membershipNumber: string) {
   return fetchJson<{ profile: MemberProfile }>(`/profile/${encodeURIComponent(membershipNumber)}`)
 }
