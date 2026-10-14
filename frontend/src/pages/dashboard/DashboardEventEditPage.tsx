@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import type { FormEvent } from 'react'
-import { ArrowRight, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Ticket, Trash2, X } from 'lucide-react'
+import { ArrowRight, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Ticket, Trash2, Users, X } from 'lucide-react'
 import {
+  addEventAdmin,
   createEventTicket,
   deleteEventTicket,
+  fetchEventAdmins,
   fetchEventById,
-  fetchEventRegistrations,
   fetchEventTickets,
-  fetchProjectMembers,
+  removeEventAdmin,
+  searchEventAdminCandidates,
   updateEvent,
   updateEventTicket,
   uploadEventBanner,
 } from '../../api/vms'
-import type { VmsEvent, VmsEventRegistration, VmsEventTicket, VmsProjectMember } from '../../types/vms'
+import type { VmsEvent, VmsEventAdmin, VmsEventTicket } from '../../types/vms'
 import { getStoredUser } from '../../utils/auth'
 import { ImageUploader } from '../../components/ImageUploader'
 import { SkillsField } from '../../components/SkillsField'
@@ -21,6 +23,7 @@ import { LocationDetailsComponent } from '../../components/registration/sections
 import { EventRichTextEditor } from '../../components/events/EventRichTextEditor'
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
 import { parseIntegerInput } from '../../utils/parse-int'
+import { canManageVmsEvent } from '../../utils/event-access'
 import { initialRegistrationFormData } from '../../types/registration'
 import type { RegistrationFormData } from '../../types/registration'
 
@@ -55,7 +58,6 @@ export function DashboardEventEditPage() {
   const user = useMemo(() => getStoredUser(), [])
 
   const [eventItem, setEventItem] = useState<VmsEvent | null>(null)
-  const [projectMembers, setProjectMembers] = useState<VmsProjectMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -72,7 +74,13 @@ export function DashboardEventEditPage() {
   const [newUrlValue, setNewUrlValue] = useState('')
   const [locationData, setLocationData] = useState<RegistrationFormData>(initialRegistrationFormData)
   const [tickets, setTickets] = useState<VmsEventTicket[]>([])
-  const [registrations, setRegistrations] = useState<VmsEventRegistration[]>([])
+  const [eventAdmins, setEventAdmins] = useState<VmsEventAdmin[]>([])
+  const [adminQuery, setAdminQuery] = useState('')
+  const [adminCandidates, setAdminCandidates] = useState<Array<{ membershipNumber: string; displayName: string }>>([])
+  const [isSearchingAdmins, setIsSearchingAdmins] = useState(false)
+  const [isSavingAdmin, setIsSavingAdmin] = useState(false)
+  const [removingAdminNumber, setRemovingAdminNumber] = useState<string | null>(null)
+  const [adminError, setAdminError] = useState<string | null>(null)
   const [ticketError, setTicketError] = useState<string | null>(null)
   const [ticketSuccess, setTicketSuccess] = useState<string | null>(null)
   const [isCreatingTicket, setIsCreatingTicket] = useState(false)
@@ -88,15 +96,21 @@ export function DashboardEventEditPage() {
 
     async function loadEvent() {
       try {
-        const [eventPayload, ticketsPayload, registrationsPayload] = await Promise.all([
-          fetchEventById(currentEventId),
-          fetchEventTickets(currentEventId),
-          fetchEventRegistrations(currentEventId, { limit: 0 }),
-        ])
+        const eventPayload = await fetchEventById(currentEventId)
         if (controller.signal.aborted) return
         setEventItem(eventPayload.event)
-        setTickets(ticketsPayload.eventTickets)
-        setRegistrations(registrationsPayload.eventRegistrations)
+
+        const [ticketsPayload, adminsPayload] = await Promise.allSettled([
+          fetchEventTickets(currentEventId),
+          fetchEventAdmins(currentEventId),
+        ])
+        if (controller.signal.aborted) return
+        if (ticketsPayload.status === 'fulfilled') {
+          setTickets(ticketsPayload.value.eventTickets)
+        }
+        if (adminsPayload.status === 'fulfilled') {
+          setEventAdmins(adminsPayload.value.admins)
+        }
       } catch {
         if (!controller.signal.aborted) setNotFound(true)
       } finally {
@@ -107,28 +121,6 @@ export function DashboardEventEditPage() {
     void loadEvent()
     return () => controller.abort()
   }, [eventID])
-
-  useEffect(() => {
-    if (!eventItem || !eventItem.projectId) {
-      setProjectMembers([])
-      return
-    }
-    const projectId = eventItem.projectId
-
-    const controller = new AbortController()
-
-    async function loadProjectMembers() {
-      try {
-        const payload = await fetchProjectMembers(projectId)
-        if (!controller.signal.aborted) setProjectMembers(payload.projectMembers)
-      } catch {
-        if (!controller.signal.aborted) setProjectMembers([])
-      }
-    }
-
-    void loadProjectMembers()
-    return () => controller.abort()
-  }, [eventItem])
 
   useEffect(() => {
     if (!eventItem) {
@@ -155,18 +147,40 @@ export function DashboardEventEditPage() {
     setTelegramGroupId(eventItem.telegramGroupId ?? '')
   }, [eventItem])
 
-  const canEditEvent = useMemo(() => {
-    if (!user || !eventItem) {
-      return false
+  const canEditEvent = Boolean(user) && canManageVmsEvent(eventItem)
+
+  useEffect(() => {
+    if (!eventID || !canEditEvent) {
+      setAdminCandidates([])
+      return
     }
 
-    if (eventItem.projectId && eventItem.projectOwner) {
-      const managers = new Set(projectMembers.filter((member) => member.role === 'manager').map((member) => member.membershipNumber))
-      return eventItem.projectOwner === user.membershipNumber || managers.has(user.membershipNumber)
+    const query = adminQuery.trim()
+    if (query.length < 2) {
+      setAdminCandidates([])
+      return
     }
 
-    return eventItem.createdBy === user.membershipNumber
-  }, [eventItem, projectMembers, user])
+    const controller = new AbortController()
+    const handle = window.setTimeout(() => {
+      setIsSearchingAdmins(true)
+      void searchEventAdminCandidates(eventID, query)
+        .then((payload) => {
+          if (!controller.signal.aborted) setAdminCandidates(payload.candidates)
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setAdminCandidates([])
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsSearchingAdmins(false)
+        })
+    }, 250)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(handle)
+    }
+  }, [adminQuery, canEditEvent, eventID])
 
   const handleAddUrl = () => {
     if (!newUrlLabel.trim() || !newUrlValue.trim()) return
@@ -423,9 +437,43 @@ export function DashboardEventEditPage() {
     }
   }
 
+  const handleAddAdmin = async (membershipNumber: string) => {
+    if (!eventID) return
+    setAdminError(null)
+    setIsSavingAdmin(true)
+    try {
+      const payload = await addEventAdmin(eventID, membershipNumber)
+      setEventAdmins((previous) =>
+        previous.some((admin) => admin.membershipNumber === payload.admin.membershipNumber)
+          ? previous
+          : [...previous, payload.admin],
+      )
+      setAdminQuery('')
+      setAdminCandidates([])
+    } catch (requestError) {
+      setAdminError(requestError instanceof Error ? requestError.message : 'تعذر إضافة مدير الفعالية.')
+    } finally {
+      setIsSavingAdmin(false)
+    }
+  }
+
+  const handleRemoveAdmin = async (membershipNumber: string) => {
+    if (!eventID) return
+    setAdminError(null)
+    setRemovingAdminNumber(membershipNumber)
+    try {
+      await removeEventAdmin(eventID, membershipNumber)
+      setEventAdmins((previous) => previous.filter((admin) => admin.membershipNumber !== membershipNumber))
+    } catch (requestError) {
+      setAdminError(requestError instanceof Error ? requestError.message : 'تعذر إزالة مدير الفعالية.')
+    } finally {
+      setRemovingAdminNumber(null)
+    }
+  }
+
   const handleDeleteTicket = async (ticketId: string) => {
-    const hasRegistrants = registrations.some((registration) => registration.ticketId === ticketId)
-    if (hasRegistrants) {
+    const occupied = tickets.find((ticket) => ticket.id === ticketId)?.activeRegistrationCount ?? 0
+    if (occupied > 0) {
       setTicketError('لا يمكن حذف التذكرة قبل إزالة جميع المسجلين عليها.')
       return
     }
@@ -441,7 +489,6 @@ export function DashboardEventEditPage() {
     try {
       await deleteEventTicket(ticketId)
       setTickets((previous) => previous.filter((ticket) => ticket.id !== ticketId))
-      setRegistrations((previous) => previous.filter((registration) => registration.ticketId !== ticketId))
       setEditingTicketId((current) => (current === ticketId ? null : current))
       setTicketSuccess('تم حذف التذكرة.')
     } catch (requestError) {
@@ -770,6 +817,77 @@ export function DashboardEventEditPage() {
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
         <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Users className="h-5 w-5 text-slate-700" />
+          <h2 className="text-base font-semibold text-slate-900">مدراء الفعالية</h2>
+        </div>
+        <p className="mb-4 text-sm leading-6 text-slate-600">
+          مدراء المشروع ومجلس الإدارة في المشاريع الأب يملكون صلاحية الإدارة تلقائياً. يمكنك إضافة أعضاء إضافيين لإدارة هذه الفعالية فقط.
+        </p>
+        <ul className="space-y-2">
+          {eventAdmins.map((admin) => (
+            <li
+              key={`${admin.source}-${admin.membershipNumber}`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5"
+            >
+              <div>
+                <p className="text-sm font-medium text-slate-900">{admin.displayName}</p>
+                <p className="font-mono text-xs text-slate-500">{admin.membershipNumber}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                  {admin.source === 'creator' ? 'منشئ الفعالية' : 'مدير مضاف'}
+                </span>
+                {admin.source === 'assigned' ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveAdmin(admin.membershipNumber)}
+                    disabled={removingAdminNumber === admin.membershipNumber}
+                    className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {removingAdminNumber === admin.membershipNumber ? 'جار الإزالة...' : 'إزالة'}
+                  </button>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="relative mt-4">
+          <input
+            type="search"
+            value={adminQuery}
+            onChange={(event) => setAdminQuery(event.target.value)}
+            placeholder="ابحث بالاسم أو رقم العضوية لإضافة مدير"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+          />
+          {adminQuery.trim().length >= 2 ? (
+            <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+              {isSearchingAdmins ? (
+                <li className="px-3 py-2 text-sm text-slate-500">جار البحث...</li>
+              ) : adminCandidates.length === 0 ? (
+                <li className="px-3 py-2 text-sm text-slate-500">لا توجد نتائج.</li>
+              ) : (
+                adminCandidates.map((candidate) => (
+                  <li key={candidate.membershipNumber}>
+                    <button
+                      type="button"
+                      disabled={isSavingAdmin}
+                      onClick={() => void handleAddAdmin(candidate.membershipNumber)}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-right text-sm hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <span className="font-medium text-slate-900">{candidate.displayName}</span>
+                      <span className="font-mono text-xs text-slate-500">{candidate.membershipNumber}</span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          ) : null}
+        </div>
+        {adminError ? <p className="mt-3 text-sm text-red-600">{adminError}</p> : null}
+      </article>
+
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+        <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
           <Ticket className="h-5 w-5 text-slate-700" />
           <h2 className="text-base font-semibold text-slate-900">إدارة التذاكر</h2>
           <span className="mr-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
@@ -823,9 +941,8 @@ export function DashboardEventEditPage() {
 
         <ul className="mt-4 space-y-2">
           {tickets.map((ticket) => {
-            const registrantsCount = registrations.filter((registration) => registration.ticketId === ticket.id).length
             const occupied = ticket.activeRegistrationCount ?? 0
-            const cannotDelete = registrantsCount > 0
+            const cannotDelete = occupied > 0
             const deleteHint = cannotDelete
               ? 'يجب إزالة جميع المسجلين على هذه التذكرة قبل حذفها.'
               : 'حذف التذكرة'
@@ -914,7 +1031,6 @@ export function DashboardEventEditPage() {
                   </div>
                   <p className="mt-2 text-xs text-slate-600">
                     المقاعد: {ticket.quantity} • النقاط: {ticket.pointPrice} • المسجلون النشطون: {occupied}
-                    {registrantsCount !== occupied ? ` • كل التسجيلات: ${registrantsCount}` : ''}
                   </p>
                   <form
                     key={`${ticket.id}-${ticket.quantity}`}

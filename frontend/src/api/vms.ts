@@ -3,6 +3,7 @@ import type {
   VmsClubDashboard,
   VmsClubMember,
   VmsEvent,
+  VmsEventAdmin,
   VmsEventRegistration,
   VmsEventTicket,
   VmsLeaderboardEntry,
@@ -50,6 +51,7 @@ function invalidateGetCache(match?: (path: string) => boolean) {
 function invalidateEventTicketCaches() {
   invalidateGetCache(
     (path) =>
+      path.startsWith('/events') ||
       path.startsWith('/event-tickets') ||
       path.includes('/event-registrations') ||
       path.includes('/registration-counts'),
@@ -417,7 +419,39 @@ export function createEvent(payload: {
 }
 
 export function fetchEventById(eventId: string) {
-  return fetchJson<{ event: VmsEvent }>(`/events/${encodeURIComponent(eventId)}`)
+  return fetchJson<{ event: VmsEvent }>(`/events/${encodeURIComponent(eventId)}`, { cache: false })
+}
+
+export function fetchEventAdmins(eventId: string) {
+  return fetchJson<{ admins: VmsEventAdmin[] }>(`/events/${encodeURIComponent(eventId)}/admins`, { cache: false })
+}
+
+export function searchEventAdminCandidates(eventId: string, query: string) {
+  const params = new URLSearchParams()
+  if (query.trim()) {
+    params.set('q', query.trim())
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : ''
+  return fetchJson<{ candidates: Array<{ membershipNumber: string; displayName: string }> }>(
+    `/events/${encodeURIComponent(eventId)}/admin-candidates${suffix}`,
+    { cache: false },
+  )
+}
+
+export async function addEventAdmin(eventId: string, membershipNumber: string) {
+  const result = await postJson<{ admin: VmsEventAdmin }, { membershipNumber: string }>(
+    `/events/${encodeURIComponent(eventId)}/admins`,
+    { membershipNumber },
+  )
+  invalidateEventTicketCaches()
+  return result
+}
+
+export async function removeEventAdmin(eventId: string, membershipNumber: string) {
+  await deleteJson(
+    `/events/${encodeURIComponent(eventId)}/admins/${encodeURIComponent(membershipNumber)}`,
+  )
+  invalidateEventTicketCaches()
 }
 
 export function fetchPublicEventById(eventId: string) {
@@ -568,14 +602,18 @@ export async function downloadEventRegistrationsCsv(
     `/events/${encodeURIComponent(eventId)}/registrations/export${query}`,
   )
 
-  const objectUrl = URL.createObjectURL(blob)
+  const csvBlob = blob.type.includes('csv') || blob.type.includes('octet-stream') || blob.type === ''
+    ? blob
+    : new Blob([blob], { type: 'text/csv;charset=utf-8' })
+  const objectUrl = URL.createObjectURL(csvBlob)
   const link = document.createElement('a')
   link.href = objectUrl
   link.download = options?.filename || filename || 'registrations.csv'
+  link.rel = 'noopener'
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(objectUrl)
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
 }
 
 export function createPublicEventRegistration(

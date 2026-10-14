@@ -83,16 +83,6 @@ export const dashboardRouteChildren: RouteObject[] = [
     lazy: lazyRoute(() => import('../pages/dashboard/DashboardClubDetailsPage'), 'DashboardClubDetailsPage'),
   },
   {
-    path: 'events/:eventID',
-    hydrateFallbackElement: <div />,
-    lazy: lazyRoute(() => import('../pages/dashboard/DashboardEventDetailsPage'), 'DashboardEventDetailsPage'),
-  },
-  {
-    path: 'event/:eventID',
-    hydrateFallbackElement: <div />,
-    lazy: lazyRoute(() => import('../pages/dashboard/DashboardEventDetailsPage'), 'DashboardEventDetailsPage'),
-  },
-  {
     path: 'event/:eventID/edit',
     hydrateFallbackElement: <div />,
     lazy: lazyRoute(() => import('../pages/dashboard/DashboardEventEditPage'), 'DashboardEventEditPage'),
@@ -101,6 +91,16 @@ export const dashboardRouteChildren: RouteObject[] = [
     path: 'event/:eventID/admin',
     hydrateFallbackElement: <div />,
     lazy: lazyRoute(() => import('../pages/dashboard/DashboardEventAdminPage'), 'DashboardEventAdminPage'),
+  },
+  {
+    path: 'events/:eventID',
+    hydrateFallbackElement: <div />,
+    lazy: lazyRoute(() => import('../pages/dashboard/DashboardEventDetailsPage'), 'DashboardEventDetailsPage'),
+  },
+  {
+    path: 'event/:eventID',
+    hydrateFallbackElement: <div />,
+    lazy: lazyRoute(() => import('../pages/dashboard/DashboardEventDetailsPage'), 'DashboardEventDetailsPage'),
   },
   {
     path: 'positions/:positionID/edit',

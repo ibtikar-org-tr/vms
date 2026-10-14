@@ -84,7 +84,7 @@ function parseEventRegistrationsPagination(c: { req: { query: (key: string) => s
 
   let limit: number | undefined
   if (limitParam === '0') {
-    limit = undefined
+    limit = MAX_EVENT_REGISTRATIONS_EXPORT_ROWS
   } else if (limitParam !== undefined) {
     const parsedLimit = Number.parseInt(limitParam, 10)
     limit = Number.isFinite(parsedLimit)
@@ -295,14 +295,10 @@ vmsEventRegistrationsRoute.get(
       )
 
       const filename = asciiDownloadFilename(`registrations-${eventId.slice(0, 8)}`, 'csv')
-      return new Response(csv, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${filename}"`,
-          'Cache-Control': 'no-store',
-        },
-      })
+      c.header('Content-Type', 'text/csv; charset=utf-8')
+      c.header('Content-Disposition', `attachment; filename="${filename}"`)
+      c.header('Cache-Control', 'no-store')
+      return c.body(csv, 200)
     } catch (error) {
       console.error('Failed to export event registrations', error)
       return c.json({ error: 'Could not export event registrations.' }, 500)

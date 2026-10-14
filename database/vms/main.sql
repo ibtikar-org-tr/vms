@@ -168,6 +168,15 @@ CREATE INDEX IF NOT EXISTS idx_event_registrations_event_member
     ON event_registrations (event_id, membership_number)
     WHERE membership_number IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS event_admins (
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    membership_number TEXT NOT NULL,
+    granted_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (event_id, membership_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_admins_membership_number ON event_admins (membership_number);
 
 CREATE TABLE IF NOT EXISTS skills (
     id TEXT PRIMARY KEY,

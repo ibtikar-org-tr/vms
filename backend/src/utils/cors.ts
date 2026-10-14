@@ -63,5 +63,6 @@ export function membershipAppCors() {
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Client'],
+    exposeHeaders: ['Content-Disposition', 'Content-Type'],
   })
 }

@@ -36,5 +36,14 @@ export const eventParamsSchema = z.object({
   id: requiredTrimmedString,
 })
 
+export const eventAdminBodySchema = z.object({
+  membershipNumber: requiredTrimmedString,
+})
+
+export const eventAdminParamsSchema = z.object({
+  id: requiredTrimmedString,
+  membershipNumber: requiredTrimmedString,
+})
+
 export type CreateEventInput = z.infer<typeof createEventSchema>
 export type UpdateEventInput = z.infer<typeof updateEventSchema>
