@@ -21,12 +21,8 @@ type TitleCandidate = MemberDisplayTitle & {
   rank: number
 }
 
-function isBoardProject(parentProjectId: string | null, projectName: string) {
-  if (!parentProjectId) {
-    return true
-  }
-
-  return /مجلس|board/i.test(projectName)
+function isBoardProject(projectName: string) {
+  return /مجلس\s*الإدارة|board of directors/i.test(projectName)
 }
 
 function chairBoost(title: string) {
@@ -45,10 +41,14 @@ function chairBoost(title: string) {
   return 0
 }
 
+function isGenericBoardMemberTitle(title: string) {
+  const normalized = title.trim()
+  return /^(عضو\s*مجلس(\s*ال)?إدارة|board\s*member)$/i.test(normalized)
+}
+
 function projectRoleTitle(role: string, isBoard: boolean) {
   if (isBoard) {
-    if (role === 'owner') return 'مالك مجلس الإدارة'
-    if (role === 'manager') return 'مدير مجلس الإدارة'
+    if (role === 'owner' || role === 'manager') return 'رئيس مجلس الإدارة'
     if (role === 'observer') return 'مراقب مجلس الإدارة'
     return 'عضو مجلس الإدارة'
   }
@@ -60,11 +60,19 @@ function projectRoleTitle(role: string, isBoard: boolean) {
 }
 
 function projectRoleRank(role: string, isBoard: boolean) {
+  if (isBoard && (role === 'owner' || role === 'manager')) {
+    return role === 'owner' ? 120 : 115
+  }
+
   const roleScore = role === 'owner' ? 4 : role === 'manager' ? 3 : role === 'member' ? 2 : 1
   return (isBoard ? 50 : 20) + roleScore
 }
 
 function positionRank(positionName: string, isBoard: boolean) {
+  if (isGenericBoardMemberTitle(positionName)) {
+    return isBoard ? 52 : 30
+  }
+
   const boost = chairBoost(positionName)
   if (isBoard) {
     return 90 + boost * 5
@@ -91,7 +99,7 @@ export function resolveMemberDisplayTitle(
   ]
 
   for (const affiliation of affiliations) {
-    const isBoard = isBoardProject(affiliation.parentProjectId, affiliation.projectName)
+    const isBoard = isBoardProject(affiliation.projectName)
     candidates.push({
       title: projectRoleTitle(affiliation.role, isBoard),
       source: 'project_role',
@@ -105,7 +113,7 @@ export function resolveMemberDisplayTitle(
       continue
     }
 
-    const isBoard = isBoardProject(position.parentProjectId, position.projectName)
+    const isBoard = isBoardProject(position.projectName)
     candidates.push({
       title: name,
       source: 'position',
