@@ -6,6 +6,7 @@ interface UserAuthRow {
   email: string
   password_hash: string
   role: string
+  email_verified: number
 }
 
 export async function getLatestMembershipNumber(
@@ -50,8 +51,10 @@ export async function getLatestMembershipNumber(
 
 export async function createUser(db: D1DatabaseLike, params: CreateUserParams): Promise<void> {
   await db
-    .prepare('INSERT INTO users (membership_number, email, password_hash, role) VALUES (?, ?, ?, ?)')
-    .bind(params.membershipNumber, params.email, params.passwordHash, params.role)
+    .prepare(
+      'INSERT INTO users (membership_number, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, ?)',
+    )
+    .bind(params.membershipNumber, params.email, params.passwordHash, params.role, params.emailVerified ? 1 : 0)
     .run()
 }
 
@@ -59,7 +62,7 @@ export async function getUserByEmail(db: D1DatabaseLike, email: string): Promise
   const normalizedEmail = email.trim().toLowerCase()
 
   return db
-    .prepare('SELECT membership_number, email, password_hash, role FROM users WHERE email = ? LIMIT 1')
+    .prepare('SELECT membership_number, email, password_hash, role, email_verified FROM users WHERE email = ? LIMIT 1')
     .bind(normalizedEmail)
     .first<UserAuthRow>()
 }
@@ -71,9 +74,22 @@ export async function getUserByMembershipNumber(
   const normalizedMembershipNumber = membershipNumber.trim()
 
   return db
-    .prepare('SELECT membership_number, email, password_hash, role FROM users WHERE membership_number = ? LIMIT 1')
+    .prepare(
+      'SELECT membership_number, email, password_hash, role, email_verified FROM users WHERE membership_number = ? LIMIT 1',
+    )
     .bind(normalizedMembershipNumber)
     .first<UserAuthRow>()
+}
+
+export async function setUserEmailVerified(
+  db: D1DatabaseLike,
+  membershipNumber: string,
+  verified: boolean,
+): Promise<void> {
+  await db
+    .prepare('UPDATE users SET email_verified = ? WHERE membership_number = ?')
+    .bind(verified ? 1 : 0, membershipNumber.trim())
+    .run()
 }
 
 export async function deleteUserByMembershipNumber(db: D1DatabaseLike, membershipNumber: string): Promise<void> {

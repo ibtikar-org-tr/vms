@@ -13,9 +13,10 @@ type EmailFieldProps = {
   onChange: (value: string) => void
   required?: boolean
   readOnly?: boolean
+  title?: string
 }
 
-export function EmailField({ id, label, value, onChange, required = false, readOnly = false }: EmailFieldProps) {
+export function EmailField({ id, label, value, onChange, required = false, readOnly = false, title }: EmailFieldProps) {
   const domainInputRef = useRef<HTMLInputElement | null>(null)
   const [hasBlurred, setHasBlurred] = useState(false)
   const { localPart: initialLocalPart, domainPart: initialDomainPart } = useMemo(
@@ -138,12 +139,13 @@ export function EmailField({ id, label, value, onChange, required = false, readO
           onChange={(event) => handleLocalPartChange(event.target.value)}
           onKeyDown={handleLocalPartKeyDown}
           readOnly={readOnly}
+          title={title}
           className={`h-11 w-full min-w-0 border-0 bg-transparent px-3 text-left text-sm outline-none placeholder:text-slate-400 ${
             readOnly ? 'text-slate-500 cursor-not-allowed' : 'text-slate-900'
           }`}
           dir="ltr"
         />
-        <div className="flex h-11 w-12 items-center justify-center border-x border-slate-300 bg-slate-50 text-base font-bold text-slate-700" aria-hidden="true">
+        <div className="flex h-11 w-12 items-center justify-center border-x border-slate-300 bg-slate-50 text-base font-bold text-slate-700" aria-hidden="true" title={title}>
           @
         </div>
         <input
@@ -159,6 +161,7 @@ export function EmailField({ id, label, value, onChange, required = false, readO
           value={domainPart}
           onChange={(event) => handleDomainPartChange(event.target.value)}
           readOnly={readOnly}
+          title={title}
           className={`h-11 w-full min-w-0 border-0 bg-transparent px-3 text-left text-sm outline-none placeholder:text-slate-400 ${
             readOnly ? 'text-slate-500 cursor-not-allowed' : 'text-slate-900'
           }`}

@@ -10,9 +10,15 @@ type PersonalInfoSectionProps = {
   data: RegistrationFormData
   onFieldChange: (field: keyof RegistrationFormData, value: string) => void
   readOnlyFields?: Set<string>
+  emailReadOnlyHint?: string
 }
 
-export function PersonalInfoSection({ data, onFieldChange, readOnlyFields }: PersonalInfoSectionProps) {
+export function PersonalInfoSection({
+  data,
+  onFieldChange,
+  readOnlyFields,
+  emailReadOnlyHint,
+}: PersonalInfoSectionProps) {
 
   return (
     <SectionCard
@@ -21,7 +27,7 @@ export function PersonalInfoSection({ data, onFieldChange, readOnlyFields }: Per
       className="z-130"
     >
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="min-w-0 space-y-2 md:col-span-2">
+        <div className="min-w-0 space-y-2 md:col-span-2" title={emailReadOnlyHint}>
           <EmailField
             id="email"
             label="البريد الإلكتروني"
@@ -29,10 +35,12 @@ export function PersonalInfoSection({ data, onFieldChange, readOnlyFields }: Per
             onChange={(value) => onFieldChange('email', value)}
             required
             readOnly={readOnlyFields?.has('email')}
+            title={emailReadOnlyHint}
           />
           {readOnlyFields?.has('email') ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-900 wrap-break-word">
-              هذا الحقل غير قابل للتعديل. إذا كنت بحاجة لتغيير البريد الإلكتروني، يرجى التواصل مع الإدارة.
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-900 wrap-break-word" title={emailReadOnlyHint}>
+              {emailReadOnlyHint
+                ?? 'هذا الحقل غير قابل للتعديل. إذا كنت بحاجة لتغيير البريد الإلكتروني، يرجى التواصل مع الإدارة.'}
             </p>
           ) : (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-900 wrap-break-word">

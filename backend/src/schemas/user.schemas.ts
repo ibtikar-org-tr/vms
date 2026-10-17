@@ -36,4 +36,5 @@ export interface CreateUserParams {
   email: string
   passwordHash: string
   role: string
+  emailVerified: boolean
 }

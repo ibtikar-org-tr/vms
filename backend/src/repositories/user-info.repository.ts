@@ -21,6 +21,7 @@ interface UserProfileRow {
   bloodType: string | null
   telegramId: string | null
   telegramUsername: string | null
+  emailVerified: boolean
   socialMediaLinks: string | null
   profilePictureUrl: string | null
   biography: string | null
@@ -247,7 +248,7 @@ export async function getUserProfileByMembershipNumber(
   db: D1DatabaseLike,
   membershipNumber: string,
 ): Promise<UserProfileRow | null> {
-  return db
+  const row = await db
     .prepare(
       `SELECT
         u.membership_number AS membershipNumber,
@@ -269,6 +270,7 @@ export async function getUserProfileByMembershipNumber(
         ui.blood_type AS bloodType,
         ui.telegram_id AS telegramId,
         ui.telegram_username AS telegramUsername,
+        u.email_verified AS emailVerified,
         ui.social_media_links AS socialMediaLinks,
         ui.profile_picture_url AS profilePictureUrl,
         ui.biography AS biography,
@@ -279,7 +281,33 @@ export async function getUserProfileByMembershipNumber(
       LIMIT 1`
     )
     .bind(membershipNumber)
-    .first<UserProfileRow>()
+    .first<Omit<UserProfileRow, 'emailVerified'> & { emailVerified: number | null }>()
+
+  if (!row) {
+    return null
+  }
+
+  return {
+    ...row,
+    emailVerified: row.emailVerified === 1,
+  }
+}
+
+export async function findMembershipNumberByTelegramId(
+  db: D1DatabaseLike,
+  telegramId: string,
+): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT membership_number
+       FROM user_info
+       WHERE telegram_id = ?
+       LIMIT 1`,
+    )
+    .bind(telegramId.trim())
+    .first<{ membership_number: string }>()
+
+  return row?.membership_number ?? null
 }
 
 // D1 allows at most 100 bound parameters per statement.

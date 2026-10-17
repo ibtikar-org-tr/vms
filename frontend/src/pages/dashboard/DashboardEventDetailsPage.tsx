@@ -957,7 +957,7 @@ export function DashboardEventDetailsPage() {
                   <div className="grid gap-2 sm:grid-cols-2">
                     <button
                       type="button"
-                      onClick={() => navigate(`/registration?redirect=${encodeURIComponent(loginRedirect)}`)}
+                      onClick={() => navigate(`/signup?redirect=${encodeURIComponent(loginRedirect)}`)}
                       className="rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800"
                     >
                       نعم، أريد الانتساب
@@ -1031,7 +1031,7 @@ export function DashboardEventDetailsPage() {
                 {guestApplyComplete && !user ? (
                   <p className="mt-2 text-center text-sm leading-7 text-emerald-800">
                     يمكنك{' '}
-                    <Link to="/registration" className="font-semibold underline">
+                    <Link to="/signup" className="font-semibold underline">
                       إنشاء حساب
                     </Link>{' '}
                     بنفس البريد لربط هذا التسجيل بعضويتك.

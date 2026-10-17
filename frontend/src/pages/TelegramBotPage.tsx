@@ -40,7 +40,8 @@ const ACTIVATION_STEPS = [
 
 const BOT_COMMANDS = [
   { command: '/start', description: 'رسالة الترحيب ومعلومات البوت' },
-  { command: '/verify', description: 'ربط حساب تيليغرام برقم العضوية' },
+  { command: '/signup', description: 'إنشاء رابط انتساب جديد مرتبط بحسابك' },
+  { command: '/verify', description: 'ربط حساب تيليغرام برقم عضوية موجودة' },
   { command: '/myinfo', description: 'عرض معلومات عضويتك المسجلة' },
   { command: '/help', description: 'قائمة الأوامر والمساعدة' },
 ] as const
@@ -191,7 +192,7 @@ export function TelegramBotPage() {
               <Link to="/login" className="font-semibold text-slate-800 underline-offset-4 hover:underline">
                 تسجيل الدخول
               </Link>
-              <Link to="/registration" className="font-semibold text-slate-800 underline-offset-4 hover:underline">
+              <Link to="/signup" className="font-semibold text-slate-800 underline-offset-4 hover:underline">
                 تسجيل عضو جديد
               </Link>
               <Link to="/" className="font-semibold text-slate-800 underline-offset-4 hover:underline">

@@ -159,6 +159,75 @@ export async function sendBackendTelegramNotification(
   }
 }
 
+export async function sendTelegramDirectMessage(
+  bindings: AppBindings,
+  telegramId: string,
+  message: string,
+): Promise<TelegramNotificationResult> {
+  const telegramMsService = bindings.TELEGRAM_MS_SERVICE
+  const telegramMsBaseUrl = bindings.TELEGRAM_MS?.trim()
+  const endpointPath = '/ms/telegram/api/notify-telegram-id'
+  const internalSecret = bindings.INTERNAL_SECRET?.trim()
+
+  if (!telegramMsService && !telegramMsBaseUrl) {
+    return {
+      success: false,
+      status: 500,
+      error: 'Neither TELEGRAM_MS_SERVICE binding nor TELEGRAM_MS URL is configured',
+    }
+  }
+
+  if (!internalSecret) {
+    return {
+      success: false,
+      status: 500,
+      error: 'INTERNAL_SECRET environment variable is not configured',
+    }
+  }
+
+  const baseUrl = telegramMsBaseUrl ? telegramMsBaseUrl.replace(/\/+$/, '') : undefined
+  const requestUrl = baseUrl ? `${baseUrl}/api/notify-telegram-id` : undefined
+  const bindingRequestUrl = `https://telegram-ms.internal${endpointPath}`
+
+  try {
+    const response = telegramMsService
+      ? await telegramMsService.fetch(bindingRequestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': internalSecret,
+        },
+        body: JSON.stringify({ telegram_id: telegramId, message }),
+      })
+      : await fetch(requestUrl!, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': internalSecret,
+        },
+        body: JSON.stringify({ telegram_id: telegramId, message }),
+      })
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      return {
+        success: false,
+        status: response.status,
+        error: 'Failed to deliver Telegram message',
+        detail: body.slice(0, 500),
+      }
+    }
+
+    return { success: true, status: response.status }
+  } catch (error) {
+    return {
+      success: false,
+      status: 500,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
 export async function sendBackendTelegramGroupInvite(
   bindings: AppBindings,
   payload: TelegramGroupInvitePayload,

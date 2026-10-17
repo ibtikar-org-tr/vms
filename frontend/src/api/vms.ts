@@ -194,6 +194,13 @@ export function updateProfile(
   )
 }
 
+export function resendEmailVerification(membershipNumber: string) {
+  return apiPostJson<{ message: string }, Record<string, never>>(
+    `/profile/${encodeURIComponent(membershipNumber)}/resend-email-verification`,
+    {},
+  )
+}
+
 export function fetchProjects(membershipNumber?: string) {
   const query = membershipNumber ? `` : ''
   // Includes completed/archived; used by sub-projects pages that need inactive children.

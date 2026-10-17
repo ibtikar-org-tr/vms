@@ -1,6 +1,7 @@
 export interface MemberProfile {
   membershipNumber: string
   email: string
+  emailVerified: boolean
   role: string
   enName: string | null
   arName: string | null

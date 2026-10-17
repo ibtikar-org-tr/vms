@@ -2,6 +2,8 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getUserProfileByMembershipNumber, updateUserInfo } from '../repositories/user-info.repository'
+import { sendEmailVerificationEmail } from '../services/signup-email.service'
+import { createEmailVerificationLink } from '../services/signup-link.service'
 import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber } from '../utils/actor'
@@ -64,6 +66,34 @@ profileRoute.get('/profile/:membershipNumber', zValidator('param', profileParams
   } catch (error) {
     console.error('Failed to fetch profile', error)
     return c.json({ error: 'Could not fetch profile.' }, 500)
+  }
+})
+
+profileRoute.post('/profile/:membershipNumber/resend-email-verification', zValidator('param', profileParamsSchema), async (c) => {
+  try {
+    const { membershipNumber } = c.req.valid('param')
+    const actorMembershipNumber = getActorMembershipNumber(c)
+
+    if (membershipNumber !== actorMembershipNumber) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    const profile = await getUserProfileByMembershipNumber(c.env.MEMBERS_DB, membershipNumber)
+    if (!profile) {
+      return c.json({ error: 'Profile not found.' }, 404)
+    }
+
+    if (profile.emailVerified) {
+      return c.json({ error: 'البريد الإلكتروني مؤكد مسبقاً.' }, 400)
+    }
+
+    const verificationUrl = await createEmailVerificationLink(c.env, membershipNumber, profile.email)
+    await sendEmailVerificationEmail(c.env, profile.email, verificationUrl)
+
+    return c.json({ message: 'أرسلنا رابط تأكيد جديد إلى بريدك.' })
+  } catch (error) {
+    console.error('Failed to resend email verification', error)
+    return c.json({ error: 'تعذّر إرسال رابط التأكيد. حاول مرة أخرى.' }, 500)
   }
 })
 

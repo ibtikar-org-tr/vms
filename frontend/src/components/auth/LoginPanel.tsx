@@ -15,8 +15,8 @@ export function LoginPanel({ onSuccess }: LoginPanelProps) {
   const [searchParams] = useSearchParams()
   const registrationRedirect = searchParams.get('redirect')
   const registrationPath = registrationRedirect
-    ? `/registration?redirect=${encodeURIComponent(registrationRedirect)}`
-    : '/registration'
+    ? `/signup?redirect=${encodeURIComponent(registrationRedirect)}`
+    : '/signup'
   const [error, setError] = useState<string | null>(null)
   const [telegramActivationRequired, setTelegramActivationRequired] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)

@@ -3,12 +3,14 @@ import { Hono } from 'hono'
 import type { ZodIssue } from 'zod'
 import { EmailAlreadyExistsError, MembershipNumberAllocationError, PhoneNumberAlreadyExistsError, RegistrationEmailError } from '../errors/registration.errors'
 import { registrationSchema } from '../schemas/registration'
-import { registerUser } from '../services/registration.service'
+import { registerUser, TelegramIdAlreadyUsedError } from '../services/registration.service'
+import { SignupTokenError, verifySignupToken } from '../services/signup-link.service'
 import type { AppBindings } from '../types/bindings'
 
 export const registrationRoute = new Hono<{ Bindings: AppBindings }>()
 
 const REGISTRATION_FIELD_LABELS: Record<string, string> = {
+  signupToken: 'رابط الانتساب',
   email: 'البريد الإلكتروني',
   enName: 'الاسم بالإنكليزية أو التركية',
   arName: 'الاسم بالعربية',
@@ -84,17 +86,31 @@ registrationRoute.post(
   async (c) => {
     try {
       const payload = c.req.valid('json')
-      const result = await registerUser(c.env, payload)
+      const intent = await verifySignupToken(c.env, payload.signupToken)
+      const result = await registerUser(c.env, payload, intent)
+      const message = result.channel === 'email'
+        ? 'تمّ إكمال التسجيل. احتفظ برقم العضوية وكلمة المرور، ثم فعّل بوت تيليغرام قبل تسجيل الدخول. أرسلنا نفس البيانات إلى بريدك.'
+        : 'تمّ إكمال التسجيل. يمكنك تسجيل الدخول الآن. أرسلنا رقم العضوية وكلمة المرور على تيليغرام، وبريدك يبقى غير مؤكد حتى تضغط رابط التأكيد.'
 
       return c.json(
         {
-          message: 'تمّ إكمال التسجيل بنجاح. يرجى تفقّد بريدك الإلكتروني.',
+          message,
           membershipNumber: result.membershipNumber,
+          temporaryPassword: result.temporaryPassword,
+          channel: result.channel,
         },
         201,
       )
     } catch (error) {
+      if (error instanceof SignupTokenError) {
+        return c.json({ error: error.message }, 400)
+      }
+
       if (error instanceof EmailAlreadyExistsError) {
+        return c.json({ error: error.message, code: 'EMAIL_ALREADY_REGISTERED' }, 409)
+      }
+
+      if (error instanceof TelegramIdAlreadyUsedError) {
         return c.json({ error: error.message }, 409)
       }
 

@@ -3,12 +3,22 @@ import {
   MembershipNumberAllocationError,
   PhoneNumberAlreadyExistsError,
 } from '../errors/registration.errors'
-import { createUserInfo, deleteUserInfoByMembershipNumber, phoneNumberExists } from '../repositories/user-info.repository'
+import {
+  createUserInfo,
+  deleteUserInfoByMembershipNumber,
+  findMembershipNumberByTelegramId,
+  phoneNumberExists,
+} from '../repositories/user-info.repository'
 import {
   createUserRegistrationInfo,
   deleteUserRegistrationInfoByMembershipNumber,
 } from '../repositories/user-registration-info.repository'
-import { createUser, deleteUserByMembershipNumber, getLatestMembershipNumber } from '../repositories/users.repository'
+import {
+  createUser,
+  deleteUserByMembershipNumber,
+  getLatestMembershipNumber,
+  getUserByEmail,
+} from '../repositories/users.repository'
 import {
   deleteAllUserSkillsByMembershipNumber,
   upsertUserSkill,
@@ -17,13 +27,30 @@ import { claimGuestEventRegistrations } from '../repositories/vms-event-registra
 import { createSkill, getSkillByName } from '../repositories/vms-skills.repository'
 import type { RegistrationInput } from '../schemas/registration'
 import { sendRegistrationCredentialsEmail } from './registration-email.service'
+import { sendDuplicateSignupAlertEmail, sendEmailVerificationEmail } from './signup-email.service'
+import {
+  claimSignupIntent,
+  createEmailVerificationLink,
+  releaseClaimedSignupIntent,
+  type VerifiedSignupIntent,
+} from './signup-link.service'
+import { sendTelegramDirectMessage } from './telegram-notification.service'
 import type { AppBindings } from '../types/bindings'
 import { generateNextMembershipNumber } from '../utils/membership-number'
 import { generateTemporaryPassword, hashPassword } from '../utils/password'
 import { generateId } from '../utils/id'
 
+export class TelegramIdAlreadyUsedError extends Error {
+  constructor() {
+    super('حساب تيليغرام هذا مرتبط بعضوية موجودة.')
+    this.name = 'TelegramIdAlreadyUsedError'
+  }
+}
+
 export interface RegistrationResult {
   membershipNumber: string
+  temporaryPassword: string
+  channel: VerifiedSignupIntent['channel']
 }
 
 function toJsonOrNull(value?: Record<string, string>): string | null {
@@ -69,10 +96,11 @@ function isEmailConflict(error: unknown) {
 async function createUserWithMembershipRetry(
   membersDb: AppBindings['MEMBERS_DB'],
   prefix: string,
-  params: {
+    params: {
     email: string
     passwordHash: string
     role: string
+    emailVerified: boolean
   },
 ) {
   for (let attempt = 0; attempt < MEMBERSHIP_NUMBER_ALLOCATION_ATTEMPTS; attempt += 1) {
@@ -85,6 +113,7 @@ async function createUserWithMembershipRetry(
         email: params.email,
         passwordHash: params.passwordHash,
         role: params.role,
+        emailVerified: params.emailVerified,
       })
       return membershipNumber
     } catch (error) {
@@ -144,12 +173,52 @@ async function saveRegistrationSkills(
   }
 }
 
-export async function registerUser(bindings: AppBindings, input: RegistrationInput): Promise<RegistrationResult> {
+async function notifyTelegramEmailConflict(bindings: AppBindings, telegramId: string, email: string): Promise<void> {
+  const telegramResult = await sendTelegramDirectMessage(
+    bindings,
+    telegramId,
+    'تعذّر إنشاء العضوية لأن هذا البريد الإلكتروني مسجّل مسبقاً لعضو آخر. إذا كان الحساب لك، استخدم صفحة استرجاع العضوية.',
+  )
+  if (!telegramResult.success) {
+    console.error('Failed to notify Telegram applicant about an existing email', telegramResult.error)
+  }
+
+  try {
+    await sendDuplicateSignupAlertEmail(bindings, email)
+  } catch (error) {
+    console.error('Failed to send duplicate-signup alert email', error)
+  }
+}
+
+export async function registerUser(
+  bindings: AppBindings,
+  input: RegistrationInput,
+  intent: VerifiedSignupIntent,
+): Promise<RegistrationResult> {
   const membersDb = bindings.MEMBERS_DB
   const vmsDb = bindings.VMS_DB
   const membershipPrefix = bindings.MEMBERSHIP_NUMBER_PREFIX
+  const email = intent.channel === 'email' ? (intent.email ?? input.email) : input.email
+  const emailVerified = intent.channel === 'email'
   const temporaryPassword = generateTemporaryPassword()
   const passwordHash = await hashPassword(temporaryPassword)
+
+  if (intent.channel === 'telegram') {
+    const existingUser = await getUserByEmail(membersDb, email)
+    if (existingUser) {
+      if (intent.telegramId) {
+        await notifyTelegramEmailConflict(bindings, intent.telegramId, email)
+      }
+      throw new EmailAlreadyExistsError()
+    }
+
+    if (intent.telegramId) {
+      const linkedMembership = await findMembershipNumberByTelegramId(membersDb, intent.telegramId)
+      if (linkedMembership) {
+        throw new TelegramIdAlreadyUsedError()
+      }
+    }
+  }
 
   if (input.phoneNumber) {
     const phoneExists = await phoneNumberExists(membersDb, input.phoneNumber)
@@ -158,13 +227,17 @@ export async function registerUser(bindings: AppBindings, input: RegistrationInp
     }
   }
 
-  const membershipNumber = await createUserWithMembershipRetry(membersDb, membershipPrefix, {
-    email: input.email,
-    passwordHash,
-    role: 'member',
-  })
+  await claimSignupIntent(bindings, intent.jti)
 
+  let membershipNumber: string | null = null
   try {
+    membershipNumber = await createUserWithMembershipRetry(membersDb, membershipPrefix, {
+      email,
+      passwordHash,
+      role: 'member',
+      emailVerified,
+    })
+
     await createUserInfo(membersDb, {
       membershipNumber,
       enName: input.enName,
@@ -181,8 +254,8 @@ export async function registerUser(bindings: AppBindings, input: RegistrationInp
       fieldOfStudy: input.fieldOfStudy ?? null,
       graduationYear: input.graduationYear ?? null,
       bloodType: input.bloodType ?? null,
-      telegramId: null,
-      telegramUsername: null,
+      telegramId: intent.channel === 'telegram' ? intent.telegramId : null,
+      telegramUsername: intent.channel === 'telegram' ? intent.telegramUsername : null,
       socialMediaLinks: toJsonOrNull(input.socialMediaLinks),
       profilePictureUrl: null,
       biography: input.biography ?? null,
@@ -201,25 +274,61 @@ export async function registerUser(bindings: AppBindings, input: RegistrationInp
     })
 
     try {
-      await claimGuestEventRegistrations(vmsDb, membershipNumber, input.email)
+      await claimGuestEventRegistrations(vmsDb, membershipNumber, email)
     } catch (error) {
       console.error('Failed to claim guest event registrations', error)
     }
 
-    await sendRegistrationCredentialsEmail(bindings, {
-      recipientEmail: input.email,
-      membershipNumber,
-      temporaryPassword,
-    })
+    if (intent.channel === 'email') {
+      await sendRegistrationCredentialsEmail(bindings, {
+        recipientEmail: email,
+        membershipNumber,
+        temporaryPassword,
+      })
+    }
   } catch (error) {
     await Promise.allSettled([
-      deleteAllUserSkillsByMembershipNumber(membersDb, membershipNumber),
-      deleteUserRegistrationInfoByMembershipNumber(membersDb, membershipNumber),
-      deleteUserInfoByMembershipNumber(membersDb, membershipNumber),
-      deleteUserByMembershipNumber(membersDb, membershipNumber),
+      ...(membershipNumber
+        ? [
+          deleteAllUserSkillsByMembershipNumber(membersDb, membershipNumber),
+          deleteUserRegistrationInfoByMembershipNumber(membersDb, membershipNumber),
+          deleteUserInfoByMembershipNumber(membersDb, membershipNumber),
+          deleteUserByMembershipNumber(membersDb, membershipNumber),
+        ]
+        : []),
+      releaseClaimedSignupIntent(bindings, intent.jti),
     ])
     throw error
   }
 
-  return { membershipNumber }
+  if (!membershipNumber) {
+    throw new MembershipNumberAllocationError()
+  }
+
+  if (intent.channel === 'telegram' && intent.telegramId) {
+    try {
+      const verificationUrl = await createEmailVerificationLink(bindings, membershipNumber, email)
+      await sendEmailVerificationEmail(bindings, email, verificationUrl)
+    } catch (error) {
+      console.error('Failed to send email verification link after Telegram signup', error)
+    }
+
+    const telegramResult = await sendTelegramDirectMessage(
+      bindings,
+      intent.telegramId,
+      `تم إنشاء عضويتك في تجمّع إبتكار.\n`
+      + `رقم العضوية: ${membershipNumber}\n`
+      + `كلمة المرور المؤقتة: ${temporaryPassword}\n\n`
+      + 'بريدك لم يُؤكَّد بعد. افتح الرسالة التي أرسلناها إلى بريدك واضغط رابط التأكيد. يمكنك استخدام العضوية الآن.',
+    )
+    if (!telegramResult.success) {
+      console.error('Failed to send Telegram signup credentials', telegramResult.error)
+    }
+  }
+
+  return {
+    membershipNumber,
+    temporaryPassword,
+    channel: intent.channel,
+  }
 }

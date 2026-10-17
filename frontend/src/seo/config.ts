@@ -10,7 +10,8 @@ export const DEFAULT_KEYWORDS =
 
 export const PUBLIC_INDEXABLE_ROUTES = [
   { path: '', changefreq: 'weekly', priority: '1.0' },
-  { path: 'registration', changefreq: 'monthly', priority: '0.9' },
+  { path: 'signup', changefreq: 'monthly', priority: '0.9' },
+  { path: 'registration', changefreq: 'monthly', priority: '0.5' },
   { path: 'telegram-bot', changefreq: 'monthly', priority: '0.8' },
 ] as const
 

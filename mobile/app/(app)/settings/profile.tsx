@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { fetchProfile, updateProfile } from '@/src/api/profile'
+import { fetchProfile, resendEmailVerification, updateProfile } from '@/src/api/profile'
 import { useAuth } from '@/src/auth/AuthContext'
 import { ErrorBanner, ProgressBar, SectionTitle } from '@/src/components/ui'
 import { colors } from '@/src/theme/colors'
@@ -89,6 +89,8 @@ export default function ProfileScreen() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null)
+  const [isResendingVerification, setIsResendingVerification] = useState(false)
 
   const load = useCallback(async () => {
     if (!user?.membershipNumber) {
@@ -120,7 +122,10 @@ export default function ProfileScreen() {
   const readOnlyRows = useMemo(() => {
     if (!profile) return []
     return [
-      { label: 'البريد الإلكتروني', value: profile.email },
+      {
+        label: 'البريد الإلكتروني',
+        value: profile.emailVerified ? profile.email : `${profile.email} — غير مؤكد`,
+      },
       { label: 'رقم العضوية', value: profile.membershipNumber },
       { label: 'تيليغرام', value: profile.telegramUsername || profile.telegramId || '-' },
       { label: 'الدور', value: profile.role },
@@ -224,6 +229,30 @@ export default function ProfileScreen() {
                 <Text style={styles.value}>{row.value}</Text>
               </View>
             ))}
+            {profile.emailVerified ? null : (
+              <View style={styles.field}>
+                <Pressable
+                  disabled={isResendingVerification}
+                  onPress={() => {
+                    setVerificationMessage(null)
+                    setIsResendingVerification(true)
+                    void resendEmailVerification(profile.membershipNumber)
+                      .then((response) => setVerificationMessage(response.message))
+                      .catch((requestError: unknown) => {
+                        setVerificationMessage(
+                          requestError instanceof Error ? requestError.message : 'تعذر إرسال رابط التأكيد.',
+                        )
+                      })
+                      .finally(() => setIsResendingVerification(false))
+                  }}
+                >
+                  <Text style={styles.link}>
+                    {isResendingVerification ? 'جارٍ الإرسال...' : 'إعادة إرسال رابط التأكيد'}
+                  </Text>
+                </Pressable>
+                {verificationMessage ? <Text style={styles.value}>{verificationMessage}</Text> : null}
+              </View>
+            )}
           </View>
 
           <View style={styles.card}>
@@ -314,6 +343,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'right',
     lineHeight: 22,
+  },
+  link: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   input: {
     borderWidth: 1,

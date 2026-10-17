@@ -29,7 +29,7 @@ export function PublicEventShell({ children }: PublicEventShellProps) {
                 تسجيل الدخول
               </Link>
               <Link
-                to="/registration"
+                to="/signup"
                 className="rounded-lg bg-slate-900 px-3 py-1.5 font-semibold text-white hover:bg-slate-700"
               >
                 الانتساب

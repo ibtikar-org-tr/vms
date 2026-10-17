@@ -418,4 +418,23 @@ api.post('/announcement', async (c) => {
   }
 });
 
+api.post('/notify-telegram-id', async (c) => {
+  try {
+    const body = await c.req.json() as { telegram_id?: string; message?: string };
+    const telegramId = body.telegram_id?.trim();
+    const message = body.message?.trim();
+
+    if (!telegramId || !message) {
+      return c.json({ error: 'telegram_id and message are required' }, 400);
+    }
+
+    const telegramService = new TelegramService(c.env);
+    await telegramService.sendMessage(telegramId, message);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error('Failed to notify telegram id', error);
+    return c.json({ error: 'Failed to send Telegram message' }, 500);
+  }
+});
+
 export default api;

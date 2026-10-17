@@ -17,9 +17,15 @@ const REGISTRATION_ENDPOINT = MEMBER_MS_BASE_URL
 const ALLOWED_SEX_VALUES = new Set(['male', 'female'])
 const ALLOWED_BLOOD_TYPES = new Set(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])
 
-type SubmissionStatus = {
+export type RegistrationSuccessDetails = {
   message: string
+  membershipNumber: string
+  temporaryPassword?: string
+  channel?: 'email' | 'telegram'
+  signupToken?: string
 }
+
+type SubmissionStatus = RegistrationSuccessDetails
 
 function normalizeDraftField(value: unknown): string {
   if (typeof value === 'string') {
@@ -48,7 +54,7 @@ function normalizeRegistrationDraft(rawDraft: unknown): RegistrationFormData {
   return normalizedDraft
 }
 
-function readSubmissionStatus(): SubmissionStatus | null {
+function readSubmissionStatus(signupToken: string): SubmissionStatus | null {
   if (typeof window === 'undefined') {
     return null
   }
@@ -60,8 +66,7 @@ function readSubmissionStatus(): SubmissionStatus | null {
 
   try {
     const parsed = JSON.parse(rawStatus) as SubmissionStatus
-    if (!parsed || typeof parsed.message !== 'string' || !parsed.message.trim()) {
-      window.localStorage.removeItem(SUBMISSION_STATUS_STORAGE_KEY)
+    if (!parsed || typeof parsed.message !== 'string' || !parsed.message.trim() || parsed.signupToken !== signupToken) {
       return null
     }
 
@@ -113,6 +118,9 @@ function toOptionalStringArray(value: string) {
 type RegistrationApiErrorBody = {
   message?: string
   error?: string
+  membershipNumber?: string
+  temporaryPassword?: string
+  channel?: 'email' | 'telegram'
   issues?: string[]
   details?: Array<{
     path?: Array<string | number>
@@ -184,7 +192,7 @@ function toOptionalSocialMediaLinks(value: string) {
   }
 }
 
-function toRegistrationPayload(formData: RegistrationFormData) {
+function toRegistrationPayload(formData: RegistrationFormData, signupToken: string) {
   const graduationYear = Number.parseInt(formData.graduationYear.trim(), 10)
   const normalizedSex = formData.sex.trim()
   const normalizedBloodType = formData.bloodType.trim().toUpperCase()
@@ -192,6 +200,7 @@ function toRegistrationPayload(formData: RegistrationFormData) {
   const { localPart, domainPart } = splitEmailParts(formData.email)
 
   return {
+    signupToken,
     email: composeEmail(localPart, domainPart).trim().toLowerCase(),
     enName: formData.enName.trim(),
     arName: formData.arName.trim(),
@@ -220,12 +229,13 @@ function toRegistrationPayload(formData: RegistrationFormData) {
   }
 }
 
-export function useRegistrationForm() {
-  const initialSubmissionStatus = readSubmissionStatus()
+export function useRegistrationForm(signupToken: string, lockedEmail?: string | null) {
+  const initialSubmissionStatus = readSubmissionStatus(signupToken)
   const [formData, setFormData] = useState<RegistrationFormData>(initialRegistrationFormData)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(initialSubmissionStatus?.message ?? null)
+  const [registrationSuccess, setRegistrationSuccess] = useState<RegistrationSuccessDetails | null>(initialSubmissionStatus)
   const [hasSubmittedForm, setHasSubmittedForm] = useState<boolean>(Boolean(initialSubmissionStatus))
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState<boolean>(() => {
     if (typeof window === 'undefined') {
@@ -253,11 +263,23 @@ export function useRegistrationForm() {
 
     try {
       const parsedDraft = JSON.parse(savedDraft) as unknown
-      setFormData(normalizeRegistrationDraft(parsedDraft))
+      const draft = normalizeRegistrationDraft(parsedDraft)
+      if (lockedEmail) {
+        draft.email = lockedEmail
+      }
+      setFormData(draft)
     } catch {
       window.localStorage.removeItem(DRAFT_STORAGE_KEY)
     }
-  }, [isAutosaveEnabled])
+  }, [isAutosaveEnabled, lockedEmail])
+
+  useEffect(() => {
+    if (!lockedEmail) {
+      return
+    }
+
+    setFormData((current) => (current.email === lockedEmail ? current : { ...current, email: lockedEmail }))
+  }, [lockedEmail])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -275,6 +297,10 @@ export function useRegistrationForm() {
   }, [formData, isAutosaveEnabled])
 
   const updateField = (field: FormFieldName, value: string) => {
+    if (field === 'email' && lockedEmail) {
+      return
+    }
+
     setFormData((current) => ({ ...current, [field]: value }))
   }
 
@@ -293,7 +319,10 @@ export function useRegistrationForm() {
     setIsSubmitting(true)
 
     try {
-      const payload = toRegistrationPayload(formData)
+      const payload = toRegistrationPayload(
+        lockedEmail ? { ...formData, email: lockedEmail } : formData,
+        signupToken,
+      )
       const response = await fetch(REGISTRATION_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -310,8 +339,15 @@ export function useRegistrationForm() {
       }
 
       const successMessage = responseBody?.message ?? 'تم إرسال طلب التسجيل بنجاح.'
+      const successDetails: RegistrationSuccessDetails = {
+        message: successMessage,
+        membershipNumber: responseBody?.membershipNumber ?? '',
+        temporaryPassword: responseBody?.temporaryPassword,
+        channel: responseBody?.channel,
+      }
 
       setSubmitSuccessMessage(successMessage)
+      setRegistrationSuccess(successDetails)
       setHasSubmittedForm(true)
       setFormData(initialRegistrationFormData)
 
@@ -320,7 +356,10 @@ export function useRegistrationForm() {
         window.localStorage.setItem(
           SUBMISSION_STATUS_STORAGE_KEY,
           JSON.stringify({
-            message: successMessage,
+            message: successDetails.message,
+            membershipNumber: successDetails.membershipNumber,
+            channel: successDetails.channel,
+            signupToken,
           }),
         )
       }
@@ -338,6 +377,7 @@ export function useRegistrationForm() {
   const resetSubmissionStatus = () => {
     setHasSubmittedForm(false)
     setSubmitSuccessMessage(null)
+    setRegistrationSuccess(null)
 
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(SUBMISSION_STATUS_STORAGE_KEY)
@@ -349,6 +389,7 @@ export function useRegistrationForm() {
     isSubmitting,
     submitError,
     submitSuccessMessage,
+    registrationSuccess,
     hasSubmittedForm,
     isAutosaveEnabled,
     updateField,
