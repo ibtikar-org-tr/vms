@@ -44,20 +44,7 @@ export async function startTelegramSignup(
 
 function resolveMembershipMs(env: Environment): string | null {
   const configured = env.MEMBERSHIP_MS?.trim().replace(/\/+$/, '');
-  if (configured) {
-    return configured;
-  }
-
-  const telegramMs = env.TELEGRAM_MS?.trim();
-  if (!telegramMs) {
-    return null;
-  }
-
-  try {
-    return `${new URL(telegramMs).origin}/ms/membership-app`;
-  } catch {
-    return null;
-  }
+  return configured || null;
 }
 
 export async function sendSignupLink(
@@ -96,7 +83,12 @@ export async function sendSignupLink(
   }
 
   if (!response.ok) {
-    console.error('Signup intent request failed', response.status, await response.text().catch(() => ''));
+    console.error(
+      'Signup intent request failed',
+      response.status,
+      `${membershipMs}/api/internal/signup-intents`,
+      await response.text().catch(() => ''),
+    );
     await telegramService.sendMessage(
       telegramId,
       'تعذّر إنشاء رابط الانتساب. حاول إرسال /signup مرة أخرى بعد قليل.',
