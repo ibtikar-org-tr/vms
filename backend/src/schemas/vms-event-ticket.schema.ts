@@ -1,15 +1,36 @@
 import { z } from 'zod'
 
 const requiredTrimmedString = z.string().trim().min(1)
-const optionalTrimmedString = z.string().trim().min(1).optional()
+const optionalTicketText = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value == null) {
+      return value === null ? null : undefined
+    }
+
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  })
+const integerString = z
+  .string()
+  .trim()
+  .regex(/^-?\d+$/, 'Must be an integer')
+  .transform((value) => Number(value))
+
+const coercedInt = z.union([z.number().int(), integerString.pipe(z.number().int())])
+const coercedNonNegativeInt = z.union([
+  z.number().int().min(0),
+  integerString.pipe(z.number().int().min(0)),
+])
 
 export const createEventTicketSchema = z.object({
   eventId: requiredTrimmedString,
   name: requiredTrimmedString.max(160),
-  description: optionalTrimmedString,
-  pointPrice: z.number().int(),
-  currencyPrice: optionalTrimmedString,
-  quantity: z.number().int().min(0),
+  description: optionalTicketText,
+  pointPrice: coercedInt,
+  currencyPrice: optionalTicketText,
+  quantity: coercedNonNegativeInt,
 })
 
 export const updateEventTicketSchema = createEventTicketSchema

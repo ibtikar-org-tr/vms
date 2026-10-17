@@ -8,19 +8,25 @@ import {
   claimGuestEventRegistrations,
   countActiveEventRegistrationsByTicket,
   countEventRegistrations,
+  countEventRegistrationsGroupedByTicket,
   listEventRegistrations,
   updateEventRegistrationById,
 } from '../repositories/vms-event-registrations.repository'
-import { getMemberContactInfoByMembershipNumber } from '../repositories/user-info.repository'
-import { getEventTicketById } from '../repositories/vms-event-tickets.repository'
+import {
+  getMemberContactInfoByMembershipNumber,
+  getMemberExportContactsByMembershipNumbers,
+  getUserDisplayNamesByMembershipNumbers,
+  searchMembershipNumbers,
+} from '../repositories/user-info.repository'
+import { getEventTicketById, listEventTickets } from '../repositories/vms-event-tickets.repository'
 import { getEventById, getEventCancellationSettingsById } from '../repositories/vms-events.repository'
-import { getUserDisplayNamesByMembershipNumbers } from '../repositories/user-info.repository'
 import {
   createEventRegistrationSchema,
   changeEventRegistrationTicketSchema,
   eventRegistrationParamsSchema,
   eventRegistrationCountsParamsSchema,
   eventRegistrantContactParamsSchema,
+  eventRegistrationStatusSchema,
   updateEventRegistrationSchema,
 } from '../schemas/vms-event-registration.schema'
 import {
@@ -36,11 +42,39 @@ import {
   canSelfModifyRegistration,
 } from '../utils/event-registration-cancellation'
 import { uniqueTicketIds, validateRequestedTicketIds } from '../utils/event-ticket-ids'
+import { asciiDownloadFilename, toCsv } from '../utils/csv'
 
 export const vmsEventRegistrationsRoute = new Hono<AppEnv>()
 
 const DEFAULT_EVENT_REGISTRATIONS_PAGE_SIZE = 50
 const MAX_EVENT_REGISTRATIONS_PAGE_SIZE = 200
+const MAX_EVENT_REGISTRATIONS_EXPORT_ROWS = 10_000
+
+function parseRegistrationListFilters(c: { req: { query: (key: string) => string | undefined } }) {
+  const ticketId = c.req.query('ticketId')?.trim() || undefined
+  const statusRaw = c.req.query('status')?.trim()
+  const statusParsed = statusRaw ? eventRegistrationStatusSchema.safeParse(statusRaw) : null
+  const status = statusParsed?.success ? statusParsed.data : undefined
+  const search = c.req.query('q')?.trim().slice(0, 80) || undefined
+
+  return { ticketId, status, search }
+}
+
+function registrationStatusExportLabel(status: string) {
+  if (status === 'registered') return 'مسجل'
+  if (status === 'attended') return 'حضر'
+  if (status === 'cancelled') return 'ملغي'
+  if (status === 'no_show') return 'لم يحضر'
+  return status
+}
+
+async function resolveMatchingMembershipNumbers(membersDb: AppBindings['MEMBERS_DB'], search?: string) {
+  if (!search) {
+    return undefined
+  }
+
+  return searchMembershipNumbers(membersDb, search)
+}
 
 function parseEventRegistrationsPagination(c: { req: { query: (key: string) => string | undefined } }) {
   const limitParam = c.req.query('limit')
@@ -50,7 +84,7 @@ function parseEventRegistrationsPagination(c: { req: { query: (key: string) => s
 
   let limit: number | undefined
   if (limitParam === '0') {
-    limit = undefined
+    limit = MAX_EVENT_REGISTRATIONS_EXPORT_ROWS
   } else if (limitParam !== undefined) {
     const parsedLimit = Number.parseInt(limitParam, 10)
     limit = Number.isFinite(parsedLimit)
@@ -182,11 +216,102 @@ vmsEventRegistrationsRoute.get(
   },
 )
 
+vmsEventRegistrationsRoute.get(
+  '/events/:eventId/registrations/export',
+  zValidator('param', eventRegistrationCountsParamsSchema),
+  async (c) => {
+    try {
+      const { eventId } = c.req.valid('param')
+      const actorMembershipNumber = getActorMembershipNumber(c)
+      const event = await getEventById(c.env.VMS_DB, eventId)
+
+      if (!event) {
+        return c.json({ error: 'Event not found.' }, 404)
+      }
+
+      const canManage = await canManageEvent(c.env.VMS_DB, event, actorMembershipNumber)
+      if (!canManage) {
+        return c.json({ error: 'Only the project owner or managers can export event registrations.' }, 403)
+      }
+
+      const filters = parseRegistrationListFilters(c)
+      const matchingMembershipNumbers = await resolveMatchingMembershipNumbers(c.env.MEMBERS_DB, filters.search)
+      const listOptions = {
+        eventId,
+        ...filters,
+        matchingMembershipNumbers,
+        limit: MAX_EVENT_REGISTRATIONS_EXPORT_ROWS,
+      }
+
+      const [eventRegistrations, tickets] = await Promise.all([
+        listEventRegistrations(c.env.VMS_DB, listOptions),
+        listEventTickets(c.env.VMS_DB, eventId),
+      ])
+
+      const ticketNameById = new Map(tickets.map((ticket) => [ticket.id, ticket.name]))
+      const memberContacts = await getMemberExportContactsByMembershipNumbers(
+        c.env.MEMBERS_DB,
+        eventRegistrations
+          .map((registration) => registration.membershipNumber)
+          .filter((membershipNumber): membershipNumber is string => Boolean(membershipNumber)),
+      )
+
+      const csv = toCsv(
+        [
+          'الاسم',
+          'رقم العضوية',
+          'البريد',
+          'الهاتف',
+          'التذكرة',
+          'الحالة',
+          'النوع',
+          'اعتماد الدفع',
+          'اعتماد الحضور',
+          'تاريخ التسجيل',
+        ],
+        eventRegistrations.map((registration) => {
+          const member = registration.membershipNumber
+            ? memberContacts.get(registration.membershipNumber)
+            : undefined
+
+          return [
+            member?.displayName ||
+              registration.guestName?.trim() ||
+              registration.membershipNumber ||
+              registration.guestEmail ||
+              'زائر',
+            registration.membershipNumber,
+            member?.email || registration.guestEmail,
+            member?.phoneNumber || registration.guestPhone,
+            ticketNameById.get(registration.ticketId) || registration.ticketId,
+            registrationStatusExportLabel(registration.status),
+            registration.membershipNumber ? 'عضو' : 'زائر',
+            registration.paymentApprovedBy ? 'نعم' : 'لا',
+            registration.attendanceApprovedBy ? 'نعم' : 'لا',
+            registration.createdAt,
+          ]
+        }),
+      )
+
+      const filename = asciiDownloadFilename(`registrations-${eventId.slice(0, 8)}`, 'csv')
+      c.header('Content-Type', 'text/csv; charset=utf-8')
+      c.header('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`)
+      c.header('Cache-Control', 'no-store')
+      c.header('X-Content-Type-Options', 'nosniff')
+      return c.body(csv, 200)
+    } catch (error) {
+      console.error('Failed to export event registrations', error)
+      return c.json({ error: 'Could not export event registrations.' }, 500)
+    }
+  },
+)
+
 vmsEventRegistrationsRoute.get('/event-registrations', async (c) => {
   try {
     const eventId = c.req.query('eventId')
     const membershipNumberFilter = c.req.query('membershipNumber')
     const { limit, offset } = parseEventRegistrationsPagination(c)
+    const filters = parseRegistrationListFilters(c)
     const actorMembershipNumber = getActorMembershipNumber(c)
 
     let restrictedMembershipNumber = membershipNumberFilter
@@ -203,9 +328,17 @@ vmsEventRegistrationsRoute.get('/event-registrations', async (c) => {
       }
     }
 
+    const matchingMembershipNumbers = canViewGuestContact
+      ? await resolveMatchingMembershipNumbers(c.env.MEMBERS_DB, filters.search)
+      : undefined
+
     const listOptions = {
       eventId,
       membershipNumber: restrictedMembershipNumber,
+      ticketId: filters.ticketId,
+      status: canViewGuestContact ? filters.status : undefined,
+      search: canViewGuestContact ? filters.search : undefined,
+      matchingMembershipNumbers,
       limit,
       offset: limit !== undefined ? offset : undefined,
     }
@@ -221,15 +354,25 @@ vmsEventRegistrationsRoute.get('/event-registrations', async (c) => {
     )
 
     if (eventId && limit !== undefined) {
-      const total = await countEventRegistrations(c.env.VMS_DB, {
-        eventId,
-        membershipNumber: restrictedMembershipNumber,
-      })
+      const [total, ticketCounts] = await Promise.all([
+        countEventRegistrations(c.env.VMS_DB, {
+          eventId,
+          membershipNumber: restrictedMembershipNumber,
+          ticketId: listOptions.ticketId,
+          status: listOptions.status,
+          search: listOptions.search,
+          matchingMembershipNumbers,
+        }),
+        canViewGuestContact
+          ? countEventRegistrationsGroupedByTicket(c.env.VMS_DB, eventId)
+          : Promise.resolve(new Map<string, number>()),
+      ])
 
       return c.json({
         eventRegistrations: visibleRegistrations,
         total,
         hasMore: offset + visibleRegistrations.length < total,
+        ticketCounts: Object.fromEntries(ticketCounts),
       })
     }
 

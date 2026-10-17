@@ -6,7 +6,7 @@ import { Seo } from '../components/Seo'
 import type { AuthUser } from '../types/auth'
 import { clearStoredAuth, getStoredUser } from '../utils/auth'
 import { isPublicEventDetailPath } from '../utils/public-event-routes'
-import { logout } from '../api/vms'
+import { fetchMemberDisplayTitle, logout } from '../api/vms'
 import { HomePage } from './HomePage'
 import { paths } from '../routes/paths'
 import {
@@ -49,6 +49,9 @@ export function DashboardPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser())
+  const [memberTitle, setMemberTitle] = useState(() =>
+    user?.role?.trim().toLowerCase() === 'admin' ? 'مدير المنصة' : 'عضو',
+  )
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const isGuestPublicEventView = !user && isPublicEventDetailPath(location.pathname)
@@ -56,6 +59,26 @@ export function DashboardPage() {
   useEffect(() => {
     setUser(getStoredUser())
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!user?.membershipNumber) {
+      return
+    }
+
+    let cancelled = false
+    void fetchMemberDisplayTitle()
+      .then((payload) => {
+        const title = payload.title?.trim()
+        if (!cancelled && title) {
+          setMemberTitle(title)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.membershipNumber])
 
   useEffect(() => {
     if (!isMobileSidebarOpen) {
@@ -240,7 +263,7 @@ export function DashboardPage() {
                   </div>
                   {!isSidebarCollapsed && (
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-900">{user.role === 'admin' ? 'مدير' : 'عضو'}</p>
+                      <p className="truncate text-sm font-semibold text-slate-900">{memberTitle}</p>
                       <p className="truncate text-xs text-slate-600">{user.email}</p>
                       <p className="mt-1 text-[11px] font-medium text-slate-500">رقم العضوية: {user.membershipNumber}</p>
                     </div>

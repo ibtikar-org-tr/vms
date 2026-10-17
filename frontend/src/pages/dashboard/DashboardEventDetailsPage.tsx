@@ -22,7 +22,6 @@ import {
   fetchEventById,
   fetchEventRegistrations,
   fetchEventTickets,
-  fetchProjectMembers,
   fetchPublicEventById,
   fetchPublicEventTickets,
   requestTelegramGroupInvite,
@@ -33,7 +32,6 @@ import type {
   VmsEvent,
   VmsEventRegistration,
   VmsEventTicket,
-  VmsProjectMember,
 } from '../../types/vms'
 import { getStoredUser } from '../../utils/auth'
 import { isStandalonePublicEventPath } from '../../utils/public-event-routes'
@@ -47,6 +45,7 @@ import { PhoneNumberField } from '../../components/registration/sections/persona
 import { TextField } from '../../components/registration/TextField'
 import { EventRichText } from '../../components/events/EventRichText'
 import { getEmailValidationMessage } from '../../utils/email'
+import { canManageVmsEvent } from '../../utils/event-access'
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
 
 function eventStatusLabel(status: string) {
@@ -100,7 +99,6 @@ export function DashboardEventDetailsPage() {
   const [isApplying, setIsApplying] = useState(false)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [applySuccess, setApplySuccess] = useState<string | null>(null)
-  const [projectMembers, setProjectMembers] = useState<VmsProjectMember[]>([])
   const [isSendingTelegramInvite, setIsSendingTelegramInvite] = useState(false)
   const [telegramInviteError, setTelegramInviteError] = useState<string | null>(null)
   const [telegramInviteSuccess, setTelegramInviteSuccess] = useState<string | null>(null)
@@ -203,53 +201,7 @@ export function DashboardEventDetailsPage() {
     }
   }, [eventID, user])
 
-  useEffect(() => {
-    if (!user || !eventItem || !eventItem.projectId) {
-      setProjectMembers([])
-      return
-    }
-
-    const currentProjectId = eventItem.projectId
-    const controller = new AbortController()
-
-    async function loadEventProjectInfo() {
-      try {
-        const projectMembersPayload = await fetchProjectMembers(currentProjectId)
-
-        if (controller.signal.aborted) {
-          return
-        }
-
-        setProjectMembers(projectMembersPayload.projectMembers)
-      } catch {
-        if (!controller.signal.aborted) {
-          setProjectMembers([])
-        }
-      }
-    }
-
-    loadEventProjectInfo()
-
-    return () => {
-      controller.abort()
-    }
-  }, [eventItem, user])
-
-  const canEditEvent = useMemo(() => {
-    if (!user || !eventItem) {
-      return false
-    }
-
-    if (eventItem.projectId && eventItem.projectOwner) {
-      const managerMembershipNumbers = new Set(
-        projectMembers.filter((member) => member.role === 'manager').map((member) => member.membershipNumber),
-      )
-
-      return eventItem.projectOwner === user.membershipNumber || managerMembershipNumbers.has(user.membershipNumber)
-    }
-
-    return eventItem.createdBy === user.membershipNumber
-  }, [eventItem, projectMembers, user])
+  const canEditEvent = Boolean(user) && canManageVmsEvent(eventItem)
 
   const totalTicketCapacity = useMemo(() => tickets.reduce((sum, ticket) => sum + ticket.quantity, 0), [tickets])
   const activeMyRegistrations = useMemo(

@@ -3,6 +3,7 @@ import type {
   VmsClubDashboard,
   VmsClubMember,
   VmsEvent,
+  VmsEventAdmin,
   VmsEventRegistration,
   VmsEventTicket,
   VmsLeaderboardEntry,
@@ -27,26 +28,56 @@ import type {
 } from '../types/auth'
 import type { MemberProfile } from '../types/profile'
 
-import { API_BASE, apiDelete, apiFetch, apiGetJson, apiPostJson, apiPutJson, fetchPublicJson, logoutRequest } from './client'
+import { API_BASE, apiDelete, apiDownload, apiFetch, apiGetJson, apiPostJson, apiPutJson, fetchPublicJson, logoutRequest } from './client'
 import { TelegramActivationRequiredError } from '../utils/login-errors'
 
 const GET_CACHE_TTL_MS = 1500
 const inFlightGetRequests = new Map<string, Promise<unknown>>()
 const recentGetResponses = new Map<string, { expiresAt: number; data: unknown }>()
 
-async function fetchJson<T>(path: string): Promise<T> {
+function invalidateGetCache(match?: (path: string) => boolean) {
+  if (!match) {
+    recentGetResponses.clear()
+    return
+  }
+
+  for (const key of [...recentGetResponses.keys()]) {
+    if (match(key)) {
+      recentGetResponses.delete(key)
+    }
+  }
+}
+
+function invalidateEventTicketCaches() {
+  invalidateGetCache(
+    (path) =>
+      path.startsWith('/events') ||
+      path.startsWith('/event-tickets') ||
+      path.includes('/event-registrations') ||
+      path.includes('/registration-counts'),
+  )
+}
+
+async function fetchJson<T>(path: string, options?: { cache?: boolean }): Promise<T> {
   const requestKey = path
+  const useCache = options?.cache !== false
   const now = Date.now()
-  const cached = recentGetResponses.get(requestKey)
-  if (cached && cached.expiresAt > now) return cached.data as T
-  const inFlight = inFlightGetRequests.get(requestKey)
-  if (inFlight) return inFlight as Promise<T>
+  if (useCache) {
+    const cached = recentGetResponses.get(requestKey)
+    if (cached && cached.expiresAt > now) return cached.data as T
+    const inFlight = inFlightGetRequests.get(requestKey)
+    if (inFlight) return inFlight as Promise<T>
+  }
   const requestPromise = (async () => {
     const payload = await apiGetJson<T>(path)
-    recentGetResponses.set(requestKey, { data: payload, expiresAt: Date.now() + GET_CACHE_TTL_MS })
+    if (useCache) {
+      recentGetResponses.set(requestKey, { data: payload, expiresAt: Date.now() + GET_CACHE_TTL_MS })
+    }
     return payload
   })()
-  inFlightGetRequests.set(requestKey, requestPromise)
+  if (useCache) {
+    inFlightGetRequests.set(requestKey, requestPromise)
+  }
   try { return await requestPromise } finally { inFlightGetRequests.delete(requestKey) }
 }
 
@@ -119,6 +150,13 @@ export function changePassword(payload: { currentPassword: string; newPassword: 
   return postJson<ChangePasswordResponse, { currentPassword: string; newPassword: string }>(
     '/change-password',
     payload,
+  )
+}
+
+export function fetchMemberDisplayTitle() {
+  return fetchJson<{ title: string; source: 'position' | 'project_role' | 'platform_role' }>(
+    '/me/display-title',
+    { cache: false },
   )
 }
 
@@ -388,7 +426,39 @@ export function createEvent(payload: {
 }
 
 export function fetchEventById(eventId: string) {
-  return fetchJson<{ event: VmsEvent }>(`/events/${encodeURIComponent(eventId)}`)
+  return fetchJson<{ event: VmsEvent }>(`/events/${encodeURIComponent(eventId)}`, { cache: false })
+}
+
+export function fetchEventAdmins(eventId: string) {
+  return fetchJson<{ admins: VmsEventAdmin[] }>(`/events/${encodeURIComponent(eventId)}/admins`, { cache: false })
+}
+
+export function searchEventAdminCandidates(eventId: string, query: string) {
+  const params = new URLSearchParams()
+  if (query.trim()) {
+    params.set('q', query.trim())
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : ''
+  return fetchJson<{ candidates: Array<{ membershipNumber: string; displayName: string }> }>(
+    `/events/${encodeURIComponent(eventId)}/admin-candidates${suffix}`,
+    { cache: false },
+  )
+}
+
+export async function addEventAdmin(eventId: string, membershipNumber: string) {
+  const result = await postJson<{ admin: VmsEventAdmin }, { membershipNumber: string }>(
+    `/events/${encodeURIComponent(eventId)}/admins`,
+    { membershipNumber },
+  )
+  invalidateEventTicketCaches()
+  return result
+}
+
+export async function removeEventAdmin(eventId: string, membershipNumber: string) {
+  await deleteJson(
+    `/events/${encodeURIComponent(eventId)}/admins/${encodeURIComponent(membershipNumber)}`,
+  )
+  invalidateEventTicketCaches()
 }
 
 export function fetchPublicEventById(eventId: string) {
@@ -429,7 +499,7 @@ export function fetchEventTickets(eventId?: string) {
   return fetchJson<{ eventTickets: VmsEventTicket[] }>(`/event-tickets${query}`)
 }
 
-export function createEventTicket(payload: {
+export async function createEventTicket(payload: {
   eventId: string
   name: string
   description?: string
@@ -437,25 +507,33 @@ export function createEventTicket(payload: {
   currencyPrice?: string
   quantity: number
 }) {
-  return postJson<{ eventTicket: VmsEventTicket }, typeof payload>('/event-tickets', payload)
+  const result = await postJson<{ eventTicket: VmsEventTicket }, typeof payload>('/event-tickets', payload)
+  invalidateEventTicketCaches()
+  return result
 }
 
-export function updateEventTicket(
+export async function updateEventTicket(
   ticketId: string,
   payload: Partial<{
     eventId: string
     name: string
-    description: string
+    description: string | null
     pointPrice: number
-    currencyPrice: string
+    currencyPrice: string | null
     quantity: number
   }>,
 ) {
-  return putJson<{ eventTicket: VmsEventTicket }, typeof payload>(`/event-tickets/${encodeURIComponent(ticketId)}`, payload)
+  const result = await putJson<{ eventTicket: VmsEventTicket }, typeof payload>(
+    `/event-tickets/${encodeURIComponent(ticketId)}`,
+    payload,
+  )
+  invalidateEventTicketCaches()
+  return result
 }
 
-export function deleteEventTicket(ticketId: string) {
-  return deleteJson(`/event-tickets/${encodeURIComponent(ticketId)}`)
+export async function deleteEventTicket(ticketId: string) {
+  await deleteJson(`/event-tickets/${encodeURIComponent(ticketId)}`)
+  invalidateEventTicketCaches()
 }
 
 export function fetchEventRegistrationCounts(eventId: string) {
@@ -470,6 +548,9 @@ export function fetchEventRegistrations(
     limit?: number
     offset?: number
     membershipNumber?: string
+    ticketId?: string
+    status?: string
+    q?: string
   },
 ) {
   const params = new URLSearchParams()
@@ -485,12 +566,61 @@ export function fetchEventRegistrations(
   if (options?.membershipNumber) {
     params.set('membershipNumber', options.membershipNumber)
   }
+  if (options?.ticketId) {
+    params.set('ticketId', options.ticketId)
+  }
+  if (options?.status) {
+    params.set('status', options.status)
+  }
+  if (options?.q) {
+    params.set('q', options.q)
+  }
   const query = params.toString() ? `?${params.toString()}` : ''
   return fetchJson<{
     eventRegistrations: VmsEventRegistration[]
     total?: number
     hasMore?: boolean
-  }>(`/event-registrations${query}`)
+    ticketCounts?: Record<string, number>
+  }>(`/event-registrations${query}`, { cache: false })
+}
+
+export async function downloadEventRegistrationsCsv(
+  eventId: string,
+  options?: {
+    ticketId?: string
+    status?: string
+    q?: string
+    filename?: string
+  },
+) {
+  const params = new URLSearchParams()
+  if (options?.ticketId) {
+    params.set('ticketId', options.ticketId)
+  }
+  if (options?.status) {
+    params.set('status', options.status)
+  }
+  if (options?.q) {
+    params.set('q', options.q)
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : ''
+  const { blob, filename } = await apiDownload(
+    `/events/${encodeURIComponent(eventId)}/registrations/export${query}`,
+  )
+
+  const csvBlob = new Blob([await blob.arrayBuffer()], { type: 'text/csv;charset=utf-8' })
+  const requestedName = options?.filename || filename || 'event-registrations.csv'
+  const downloadName = `${requestedName.replace(/\.(csv|xlsx|xls)$/i, '') || 'event-registrations'}.csv`
+  const objectUrl = URL.createObjectURL(csvBlob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = downloadName
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
 }
 
 export function createPublicEventRegistration(
