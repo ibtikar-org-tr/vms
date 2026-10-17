@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { HeartHandshake } from 'lucide-react'
-import { createPositionApplication, fetchOpenPositions } from '../../api/vms'
+import { createPositionApplication, fetchOpenPositions, selfCancelPositionApplication } from '../../api/vms'
 import { VolunteeringCatalog } from '../../components/dashboard/volunteering/VolunteeringCatalog'
 import type { VmsPosition } from '../../types/vms'
 import { getStoredUser } from '../../utils/auth'
@@ -29,6 +29,7 @@ export function DashboardVolunteeringPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const [applyingPositionId, setApplyingPositionId] = useState<string | null>(null)
+  const [cancellingPositionId, setCancellingPositionId] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
 
   const loadPositions = useCallback(async () => {
@@ -114,6 +115,38 @@ export function DashboardVolunteeringPage() {
     }
   }
 
+  const handleCancel = async (positionId: string, applicationId: string) => {
+    if (!user) {
+      setApplyError('يجب تسجيل الدخول أولاً.')
+      return
+    }
+
+    setApplyError(null)
+    setCancellingPositionId(positionId)
+
+    try {
+      await selfCancelPositionApplication(applicationId)
+      setPositions((previous) =>
+        previous.map((position) =>
+          position.id === positionId
+            ? {
+                ...position,
+                applications: position.applications.filter((application) => application.id !== applicationId),
+              }
+            : position,
+        ),
+      )
+    } catch (requestError) {
+      if (requestError instanceof Error) {
+        setApplyError(requestError.message)
+      } else {
+        setApplyError('تعذر إلغاء طلب التطوع.')
+      }
+    } finally {
+      setCancellingPositionId(null)
+    }
+  }
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -167,7 +200,9 @@ export function DashboardVolunteeringPage() {
           positions={positions}
           membershipNumber={user?.membershipNumber}
           applyingPositionId={applyingPositionId}
+          cancellingPositionId={cancellingPositionId}
           onApply={(positionId) => void handleApply(positionId)}
+          onCancel={(positionId, applicationId) => void handleCancel(positionId, applicationId)}
           emptyMessage="لا توجد فرص تطوعية مفتوحة حالياً."
         />
       ) : null}

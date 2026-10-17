@@ -6,6 +6,7 @@ import {
   createPosition,
   createPositionApplication,
   deletePosition,
+  deletePositionApplicationById,
   getPositionApplicationById,
   getPositionById,
   getPositionByIdWithApplications,
@@ -302,6 +303,44 @@ vmsPositionsRoute.post(
     } catch (error) {
       console.error('Failed to create position application', error)
       return c.json({ error: 'Could not create application.' }, 500)
+    }
+  },
+)
+
+vmsPositionsRoute.post(
+  '/position-applications/:id/self-cancel',
+  zValidator('param', positionApplicationParamsSchema),
+  async (c) => {
+    try {
+      const { id } = c.req.valid('param')
+      const actorMembershipNumber = getActorMembershipNumber(c)
+
+      if (!actorMembershipNumber) {
+        return c.json({ error: 'Membership number is required.' }, 400)
+      }
+
+      const application = await getPositionApplicationById(c.env.VMS_DB, id)
+      if (!application) {
+        return c.json({ error: 'الطلب غير موجود.' }, 404)
+      }
+
+      if (application.membershipNumber !== actorMembershipNumber) {
+        return c.json({ error: 'يمكنك إلغاء طلبك فقط.' }, 403)
+      }
+
+      if (application.status !== 'pending') {
+        return c.json({ error: 'يمكن إلغاء الطلبات قيد المراجعة فقط.' }, 400)
+      }
+
+      const deleted = await deletePositionApplicationById(c.env.VMS_DB, id)
+      if (!deleted) {
+        return c.json({ error: 'الطلب غير موجود.' }, 404)
+      }
+
+      return c.json({ message: 'تم إلغاء طلب التطوع بنجاح.' })
+    } catch (error) {
+      console.error('Failed to self-cancel position application', error)
+      return c.json({ error: 'تعذر إلغاء طلب التطوع.' }, 500)
     }
   },
 )

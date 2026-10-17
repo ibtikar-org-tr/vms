@@ -25,12 +25,16 @@ export function VolunteeringPositionCard({
   position,
   userApplication,
   isApplying,
+  isCancelling,
   onApply,
+  onCancel,
 }: {
   position: VmsPosition
   userApplication: VmsPositionApplication | null
   isApplying: boolean
+  isCancelling: boolean
   onApply: () => void
+  onCancel: () => void
 }) {
   const seatsFilledPercent =
     position.seats > 0 ? Math.min(100, Math.round((position.acceptedApplicationsCount / position.seats) * 100)) : 0
@@ -98,9 +102,19 @@ export function VolunteeringPositionCard({
                 {applicationStatusLabel(userApplication.status)}
               </span>
               {userApplication.status === 'pending' ? (
-                <p className="text-center text-[11px] leading-relaxed text-slate-500">
-                  تم استلام طلبك. سيتم إعلامك عند مراجعته.
-                </p>
+                <>
+                  <p className="text-center text-[11px] leading-relaxed text-slate-500">
+                    تم استلام طلبك. سيتم إعلامك عند مراجعته.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={isCancelling}
+                    className="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isCancelling ? 'جارٍ الإلغاء...' : 'إلغاء الطلب'}
+                  </button>
+                </>
               ) : null}
             </div>
           ) : (

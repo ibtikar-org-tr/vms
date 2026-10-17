@@ -16,13 +16,17 @@ export function VolunteeringCatalog({
   positions,
   membershipNumber,
   applyingPositionId,
+  cancellingPositionId,
   onApply,
+  onCancel,
   emptyMessage,
 }: {
   positions: VmsPosition[]
   membershipNumber?: string
   applyingPositionId: string | null
+  cancellingPositionId: string | null
   onApply: (positionId: string) => void
+  onCancel: (positionId: string, applicationId: string) => void
   emptyMessage: string
 }) {
   const [query, setQuery] = useState('')
@@ -62,15 +66,25 @@ export function VolunteeringCatalog({
 
   const renderPositionGrid = (items: VmsPosition[]) => (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {items.map((position) => (
-        <VolunteeringPositionCard
-          key={position.id}
-          position={position}
-          userApplication={getUserApplication(position, membershipNumber)}
-          isApplying={applyingPositionId === position.id}
-          onApply={() => onApply(position.id)}
-        />
-      ))}
+      {items.map((position) => {
+        const userApplication = getUserApplication(position, membershipNumber)
+
+        return (
+          <VolunteeringPositionCard
+            key={position.id}
+            position={position}
+            userApplication={userApplication}
+            isApplying={applyingPositionId === position.id}
+            isCancelling={cancellingPositionId === position.id}
+            onApply={() => onApply(position.id)}
+            onCancel={() => {
+              if (userApplication) {
+                onCancel(position.id, userApplication.id)
+              }
+            }}
+          />
+        )
+      })}
     </div>
   )
 

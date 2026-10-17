@@ -14,6 +14,7 @@ import {
   createPositionApplication,
   fetchLeaderboard,
   fetchOpenPositions,
+  selfCancelPositionApplication,
 } from '@/src/api/community'
 import { useAuth } from '@/src/auth/AuthContext'
 import { EmptyState, ErrorBanner, SearchField, SectionTitle, StatusPill } from '@/src/components/ui'
@@ -51,6 +52,7 @@ export default function CommunityScreen() {
   const [error, setError] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [applyingId, setApplyingId] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   const load = useCallback(async (refreshing = false) => {
     if (refreshing) setIsRefreshing(true)
@@ -141,6 +143,29 @@ export default function CommunityScreen() {
     }
   }
 
+  const handleCancel = async (positionId: string, applicationId: string) => {
+    setApplyError(null)
+    setCancellingId(positionId)
+
+    try {
+      await selfCancelPositionApplication(applicationId)
+      setPositions((previous) =>
+        previous.map((position) =>
+          position.id === positionId
+            ? {
+                ...position,
+                applications: position.applications.filter((application) => application.id !== applicationId),
+              }
+            : position,
+        ),
+      )
+    } catch (requestError) {
+      setApplyError(requestError instanceof Error ? requestError.message : 'تعذر إلغاء طلب التطوع.')
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
   const renderPosition = (position: VmsPosition, showApply: boolean) => {
     const myApplication = user?.membershipNumber
       ? position.applications.find(
@@ -168,6 +193,18 @@ export default function CommunityScreen() {
             label={applicationStatusLabel(myApplication.status)}
             tone={applicationTone(myApplication.status)}
           />
+        ) : null}
+
+        {myApplication?.status === 'pending' ? (
+          <Pressable
+            style={[styles.cancelButton, cancellingId === position.id && styles.applyDisabled]}
+            disabled={cancellingId === position.id}
+            onPress={() => void handleCancel(position.id, myApplication.id)}
+          >
+            <Text style={styles.cancelText}>
+              {cancellingId === position.id ? 'جارٍ الإلغاء...' : 'إلغاء الطلب'}
+            </Text>
+          </Pressable>
         ) : null}
 
         {showApply ? (
@@ -404,9 +441,23 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
   },
+  cancelButton: {
+    marginTop: 4,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
   applyDisabled: { opacity: 0.7 },
   applyText: {
     color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  cancelText: {
+    color: colors.danger,
     fontWeight: '700',
     fontSize: 14,
   },

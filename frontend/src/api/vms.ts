@@ -660,6 +660,13 @@ export function createPositionApplication(
   )
 }
 
+export function selfCancelPositionApplication(applicationId: string) {
+  return postJson<{ message: string }, Record<string, never>>(
+    `/position-applications/${encodeURIComponent(applicationId)}/self-cancel`,
+    {},
+  )
+}
+
 export function reviewPositionApplication(
   applicationId: string,
   payload: {
