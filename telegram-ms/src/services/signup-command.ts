@@ -43,17 +43,21 @@ export async function startTelegramSignup(
 }
 
 function resolveMembershipMs(env: Environment): string | null {
-  const telegramMs = env.TELEGRAM_MS?.trim();
-  if (telegramMs) {
-    try {
-      return `${new URL(telegramMs).origin}/ms/membership-app`;
-    } catch {
-      // TELEGRAM_MS is not an absolute URL; fall through to the explicit setting.
-    }
+  const configured = env.MEMBERSHIP_MS?.trim().replace(/\/+$/, '');
+  if (configured) {
+    return configured;
   }
 
-  const configured = env.MEMBERSHIP_MS?.trim().replace(/\/+$/, '');
-  return configured || null;
+  const telegramMs = env.TELEGRAM_MS?.trim();
+  if (!telegramMs) {
+    return null;
+  }
+
+  try {
+    return `${new URL(telegramMs).origin}/ms/membership-app`;
+  } catch {
+    return null;
+  }
 }
 
 export async function sendSignupLink(
