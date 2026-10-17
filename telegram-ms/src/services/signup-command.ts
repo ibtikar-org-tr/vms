@@ -42,13 +42,27 @@ export async function startTelegramSignup(
   await sendSignupLink(env, telegramId, username);
 }
 
+function resolveMembershipMs(env: Environment): string | null {
+  const telegramMs = env.TELEGRAM_MS?.trim();
+  if (telegramMs) {
+    try {
+      return `${new URL(telegramMs).origin}/ms/membership-app`;
+    } catch {
+      // TELEGRAM_MS is not an absolute URL; fall through to the explicit setting.
+    }
+  }
+
+  const configured = env.MEMBERSHIP_MS?.trim().replace(/\/+$/, '');
+  return configured || null;
+}
+
 export async function sendSignupLink(
   env: Environment,
   telegramId: number,
   username?: string,
 ): Promise<void> {
   const telegramService = new TelegramService(env);
-  const membershipMs = env.MEMBERSHIP_MS?.trim().replace(/\/+$/, '');
+  const membershipMs = resolveMembershipMs(env);
   if (!membershipMs) {
     await telegramService.sendMessage(
       telegramId,
