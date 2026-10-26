@@ -12,6 +12,7 @@ import { AI_CONFIG } from '../utils/ai-config';
 import { GroupServices } from '../services/group-services';
 import { GroupMemberTrackingService } from '../services/group-member-tracking';
 import { handleChatJoinRequest } from '../services/membership-manager/chat-join-request-handler';
+import { sendSignupLink, startTelegramSignup } from '../services/signup-command';
 
 const telegram = new Hono<{ Bindings: Environment }>();
 
@@ -33,6 +34,39 @@ telegram.post('/webhook', async (c) => {
 
       const telegramService = new TelegramService(c.env);
       const userStateService = new TelegramUserStateService(c.env);
+
+      if (callbackData === 'check_subscription_signup') {
+        const isSubscribed = await telegramService.checkChannelMembership(telegramId, c.env.MAIN_CHANNEL);
+        if (isSubscribed) {
+          if (messageId) {
+            await telegramService.editMessage(
+              telegramId,
+              messageId,
+              '✅ تم التحقق من اشتراكك بنجاح!\n\nجارٍ إنشاء رابط الانتساب...'
+            );
+          }
+          await sendSignupLink(c.env, telegramId, callbackQuery.from.username);
+          await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              callback_query_id: callbackQuery.id,
+              text: '✅ تم التحقق من اشتراكك'
+            })
+          });
+        } else {
+          await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              callback_query_id: callbackQuery.id,
+              text: '❌ لم يتم العثور على اشتراك. يرجى الاشتراك في القناة أولاً',
+              show_alert: true
+            })
+          });
+        }
+        return c.json({ ok: true });
+      }
 
       // Handle "check_subscription" callback
       if (callbackData === 'check_subscription') {
@@ -233,8 +267,16 @@ telegram.post('/webhook', async (c) => {
       return `${maskedLocal}@${domain}`;
     };
 
+    const commandToken = text.trim().split(/\s+/)[0]?.split('@')[0]?.toLowerCase();
+    const commandArg = text.trim().split(/\s+/).slice(1).join(' ').toLowerCase();
+
+    if (commandToken === '/signup' || (commandToken === '/start' && commandArg === 'signup')) {
+      await startTelegramSignup(c.env, telegramId, username);
+      return c.json({ ok: true });
+    }
+
     // Handle /start command
-    if (text === '/start') {
+    if (text === '/start' || commandToken === '/start') {
       await telegramService.sendWelcomeMessage(telegramId);
       return c.json({ ok: true });
     }

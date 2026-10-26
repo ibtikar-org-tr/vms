@@ -5,6 +5,8 @@ import { authRoute, securedAuthRoute } from './routes/auth.route'
 import { meRoute } from './routes/me.route'
 import { profileRoute } from './routes/profile.route'
 import { registrationRoute } from './routes/registration.route'
+import { signupRoute } from './routes/signup.route'
+import { createTelegramSignupLink, TelegramAlreadyLinkedError } from './services/signup-link.service'
 import { statsRoute } from './routes/stats.route'
 import { telegramNotificationRoute } from './routes/telegram-notification.route'
 import { vmsEventRegistrationsRoute } from './routes/vms-event-registrations.route'
@@ -89,6 +91,36 @@ app.post('/ms/membership-app/api/internal/reindex-project-notes', async (c) => {
   }
 })
 
+app.post('/ms/membership-app/api/internal/signup-intents', async (c) => {
+  const apiKey = c.req.header('X-API-Key')?.trim()
+  const expected = c.env.INTERNAL_SECRET?.trim()
+
+  if (!expected || apiKey !== expected) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      telegramId?: string
+      telegramUsername?: string | null
+    }
+    const telegramId = body.telegramId?.trim()
+    if (!telegramId) {
+      return c.json({ error: 'telegramId is required' }, 400)
+    }
+
+    const { url } = await createTelegramSignupLink(c.env, telegramId, body.telegramUsername ?? null)
+    return c.json({ url })
+  } catch (error) {
+    if (error instanceof TelegramAlreadyLinkedError) {
+      return c.json({ error: error.message, code: 'TELEGRAM_ALREADY_LINKED' }, 409)
+    }
+
+    console.error('Failed to create telegram signup intent', error)
+    return c.json({ error: 'Could not create signup link.' }, 500)
+  }
+})
+
 app.post('/ms/membership-app/api/internal/reindex-project-tasks', async (c) => {
   const apiKey = c.req.header('X-API-Key')?.trim()
   const expected = c.env.INTERNAL_SECRET?.trim()
@@ -124,6 +156,7 @@ publicApi.get('/projects/:projectId/notes/ws', async (c) => {
   return handleProjectNoteWebSocket(c.req.raw, c.env, c.req.param('projectId'))
 })
 publicApi.route('/', registrationRoute)
+publicApi.route('/', signupRoute)
 publicApi.route('/', statsRoute)
 publicApi.route('/', authRoute)
 publicApi.route('/', vmsPublicEventsRoute)

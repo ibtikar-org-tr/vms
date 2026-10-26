@@ -44,6 +44,7 @@ jobs:
           | .vars.SMTP_PORT = $smtpPort
           | .vars.SMTP_USER = $smtpUser
           | .vars.TELEGRAM_MS = $telegramMs
+          | .vars.MEMBERSHIP_MS =$membershipMs
           | .account_id = $accountId
           | del(.vars.SMTP_PASS, .vars.TELEGRAM_BOT_TOKEN, .vars.INTERNAL_SECRET, .vars.DEEPSEEK_API_KEY)'
 
@@ -59,6 +60,7 @@ jobs:
             --arg smtpPort "${{ vars.SMTP_PORT }}" \
             --arg smtpUser "${{ vars.SMTP_USER }}" \
             --arg telegramMs "${{ vars.TELEGRAM_MS }}" \
+            --arg membershipMs "${{ vars.VITE_MEMBER_MS }}" \
             --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
             "$jq_filter" \
             wrangler.jsonc > wrangler.local.jsonc

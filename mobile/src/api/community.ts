@@ -20,6 +20,13 @@ export function createPositionApplication(
   )
 }
 
+export function selfCancelPositionApplication(applicationId: string) {
+  return apiPostJson<{ message: string }, Record<string, never>>(
+    `/position-applications/${encodeURIComponent(applicationId)}/self-cancel`,
+    {},
+  )
+}
+
 export function fetchLeaderboard() {
   return apiGetJson<{ entries: VmsLeaderboardEntry[]; viewer: VmsLeaderboardViewer | null }>(
     '/leaderboard',

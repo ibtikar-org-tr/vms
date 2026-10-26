@@ -9,6 +9,7 @@ const optionalStringArray = z.array(z.string().trim().min(1)).min(1).optional()
 const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/
 
 export const registrationSchema = z.object({
+  signupToken: z.string().trim().min(1),
   email: z.string().trim().toLowerCase().email(),
 
   enName: z.string().trim().min(2).max(120),

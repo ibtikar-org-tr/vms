@@ -1,9 +1,10 @@
-import { Suspense, lazy, useMemo } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { FiBookOpen, FiFileText } from 'react-icons/fi'
 import { Seo } from '../components/Seo'
 import { buildWebPageJsonLd } from '../seo/json-ld'
 import { useRegistrationForm } from '../hooks/useRegistrationForm'
+import { fetchPublicJson } from '../api/client'
 import { MissingRegistrationFieldsNotice } from '../components/registration/MissingRegistrationFieldsNotice'
 import { getMissingRequiredRegistrationFields } from '../utils/registrationValidation'
 import type { RegistrationFormData } from '../types/registration'
@@ -57,21 +58,34 @@ function RegistrationTechnicalSupportNotice({ className = 'mt-6' }: { className?
   )
 }
 
+const EMAIL_LOCK_HINT = 'لتعديل البريد ارجع إلى صفحة الانتساب واطلب رابطاً جديداً.'
+
+type SignupIntent = {
+  channel: 'email' | 'telegram'
+  email: string | null
+}
+
 export function RegistrationPage() {
   const [searchParams] = useSearchParams()
+  const signupToken = searchParams.get('token')?.trim() ?? ''
   const returnPath = useMemo(() => getSafeRedirectPath(searchParams.get('redirect')), [searchParams])
+  const signupPath = returnPath ? `/signup?redirect=${encodeURIComponent(returnPath)}` : '/signup'
+  const [intent, setIntent] = useState<SignupIntent | null>(null)
+  const [intentError, setIntentError] = useState<string | null>(null)
+  const [isIntentLoading, setIsIntentLoading] = useState(Boolean(signupToken))
+  const lockedEmail = intent?.channel === 'email' ? intent.email : null
   const {
     formData,
     isSubmitting,
     submitError,
     submitSuccessMessage,
+    registrationSuccess,
     hasSubmittedForm,
     isAutosaveEnabled,
     updateField,
     handleSubmit,
     toggleAutosave,
-    resetSubmissionStatus,
-  } = useRegistrationForm()
+  } = useRegistrationForm(signupToken, lockedEmail)
   const canShowBylawsAcknowledgementSection = hasCompletedNonOptionalFields(formData)
   const missingRequiredFields = useMemo(() => {
     const allMissing = getMissingRequiredRegistrationFields(formData)
@@ -91,6 +105,42 @@ export function RegistrationPage() {
     () => buildWebPageJsonLd(registrationTitle, registrationDescription, 'registration'),
     [registrationDescription, registrationTitle],
   )
+
+  useEffect(() => {
+    if (!signupToken) {
+      return
+    }
+
+    let cancelled = false
+    setIsIntentLoading(true)
+    setIntentError(null)
+
+    fetchPublicJson<SignupIntent>(`/signup/intent?token=${encodeURIComponent(signupToken)}`)
+      .then((nextIntent) => {
+        if (!cancelled) {
+          setIntent(nextIntent)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setIntent(null)
+          setIntentError(error instanceof Error ? error.message : 'رابط الانتساب غير صالح.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsIntentLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [signupToken])
+
+  if (!signupToken) {
+    return <Navigate to={signupPath} replace />
+  }
 
   return (
     <>
@@ -148,29 +198,78 @@ export function RegistrationPage() {
 
         {hasSubmittedForm ? (
           <section className="rounded-2xl bg-white p-6 shadow-md md:p-8">
-            <h2 className="text-2xl font-black text-emerald-700 md:text-3xl">تم استلام طلبك بنجاح</h2>
+            <h2 className="text-2xl font-black text-emerald-700 md:text-3xl">تم إنشاء العضوية</h2>
             <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 md:text-base">
               {submitSuccessMessage ?? 'تم إرسال طلب التسجيل بنجاح.'}
             </p>
+            {registrationSuccess?.membershipNumber ? (
+              <dl className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                <div>
+                  <dt className="font-semibold text-slate-500">رقم العضوية</dt>
+                  <dd className="mt-1 font-mono text-lg font-bold text-slate-900" dir="ltr">{registrationSuccess.membershipNumber}</dd>
+                </div>
+                {registrationSuccess.temporaryPassword ? (
+                  <div>
+                    <dt className="font-semibold text-slate-500">كلمة المرور المؤقتة</dt>
+                    <dd className="mt-1 font-mono text-lg font-bold text-slate-900" dir="ltr">{registrationSuccess.temporaryPassword}</dd>
+                  </div>
+                ) : (
+                  <p className="text-slate-600">
+                    {registrationSuccess.channel === 'telegram'
+                      ? 'أُرسلت كلمة المرور أيضاً في محادثة البوت.'
+                      : 'أُرسلت كلمة المرور أيضاً إلى بريدك.'}
+                  </p>
+                )}
+              </dl>
+            ) : null}
             <p className="mt-4 text-sm leading-relaxed text-slate-600 md:text-base">
-              يبدو أنك أتممت تعبئة نموذج الانتساب سابقاً. إذا رغبت بتعبئته من جديد، يمكنك استخدام الزر أدناه.
+              {registrationSuccess?.channel === 'telegram'
+                ? 'يمكنك تسجيل الدخول الآن برقم العضوية أو البريد. سيبقى البريد غير مؤكد في ملفك حتى تضغط رابط التأكيد الذي أرسلناه إليه.'
+                : 'قبل تسجيل الدخول افتح بوت تيليغرام وأرسل /verify ثم أدخل رقم العضوية. لن يُفتح الحساب قبل ربط تيليغرام.'}
             </p>
-            <button
-              type="button"
-              onClick={resetSubmissionStatus}
-              className="mt-6 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-700"
-            >
-              تعبئة النموذج مرة أخرى
-            </button>
+            {registrationSuccess?.channel !== 'telegram' ? (
+              <a
+                href="https://t.me/ibtikar_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-700"
+              >
+                فتح بوت تيليغرام
+              </a>
+            ) : (
+              <Link
+                to="/login"
+                className="mt-6 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-700"
+              >
+                تسجيل الدخول
+              </Link>
+            )}
             {returnPath ? (
               <Link
                 to={returnPath}
-                className="mt-3 inline-flex rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
+                className="mt-3 mr-3 inline-flex rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
               >
                 العودة إلى الفعالية
               </Link>
             ) : null}
             <RegistrationTechnicalSupportNotice />
+          </section>
+        ) : isIntentLoading ? (
+          <section className="rounded-2xl bg-white p-6 shadow-md">
+            <p className="text-sm text-slate-600">جارٍ التحقق من رابط الانتساب...</p>
+          </section>
+        ) : intentError ? (
+          <section className="rounded-2xl bg-white p-6 shadow-md md:p-8">
+            <h2 className="text-2xl font-black text-slate-900">تعذّر فتح النموذج</h2>
+            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {intentError}
+            </p>
+            <Link
+              to={signupPath}
+              className="mt-6 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-700"
+            >
+              العودة إلى صفحة الانتساب
+            </Link>
           </section>
         ) : (
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -178,7 +277,12 @@ export function RegistrationPage() {
               الحقول المعلّمة بعلامة <span className="font-bold text-red-600">*</span> مطلوبة.
             </p>
             <Suspense fallback={<SectionLoadingCard />}>
-              <PersonalInfoSection data={formData} onFieldChange={updateField} />
+              <PersonalInfoSection
+                data={formData}
+                onFieldChange={updateField}
+                readOnlyFields={lockedEmail ? new Set(['email']) : undefined}
+                emailReadOnlyHint={lockedEmail ? EMAIL_LOCK_HINT : undefined}
+              />
             </Suspense>
             <Suspense fallback={<SectionLoadingCard />}>
               <EducationSection data={formData} onFieldChange={updateField} />

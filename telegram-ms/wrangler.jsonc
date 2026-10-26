@@ -37,6 +37,7 @@
     "SMTP_USER": "",
     "SMTP_PASS": "delete-on-deployment",
     "TELEGRAM_MS": "https://ibtikar.tr/ms/telegram",
+    "MEMBERSHIP_MS": "https://ibtikar.tr/ms/membership-app",
     "TELEGRAM_BOT_TOKEN": "delete-on-deployment",
     "INTERNAL_SECRET":"delete-on-deployment",
     "DEEPSEEK_API_KEY":"delete-on-deployment"

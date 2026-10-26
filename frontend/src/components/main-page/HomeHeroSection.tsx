@@ -31,7 +31,7 @@ export function HomeHeroSection() {
           منصّة أعضاء تجمّع إبتكار
         </h1>
         <Link
-          to="/registration"
+          to="/signup"
           className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-700 sm:w-auto sm:px-6 sm:py-3 sm:text-base"
         >
           نموذج الانتساب لتجمّع إبتكار

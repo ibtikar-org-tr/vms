@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import { fetchProfile, updateProfile } from '../../api/vms'
+import { fetchProfile, resendEmailVerification, updateProfile } from '../../api/vms'
 import { ChangePasswordCard } from '../../components/dashboard/ChangePasswordCard'
 import type { MemberProfile } from '../../types/profile'
 import type { RegistrationFormData } from '../../types/registration'
@@ -73,6 +73,8 @@ export function DashboardProfilePage() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [verificationMessage, setVerificationMessage] = useState('')
+  const [isResendingVerification, setIsResendingVerification] = useState(false)
   const [formData, setFormData] = useState<RegistrationFormData | null>(null)
 
   useEffect(() => {
@@ -190,7 +192,14 @@ export function DashboardProfilePage() {
         items: [
           { label: 'الاسم بالإنكليزية', value: profile?.enName ?? fallback, field: 'enName', icon: User },
           { label: 'الاسم بالعربية', value: profile?.arName ?? fallback, field: 'arName', icon: User },
-          { label: 'البريد الإلكتروني', value: profile?.email ?? fallback, field: 'email', icon: Mail },
+          {
+            label: 'البريد الإلكتروني',
+            value: profile?.email
+              ? `${profile.email}${profile.emailVerified ? '' : ' — غير مؤكد'}`
+              : fallback,
+            field: 'email',
+            icon: Mail,
+          },
           { label: 'رقم العضوية', value: profile?.membershipNumber ?? fallback, field: 'membershipNumber', icon: Hash },
           { label: 'رقم الهاتف', value: profile?.phoneNumber ?? fallback, field: 'phoneNumber', icon: Phone },
           { label: 'الجنس', value: sexLabel, field: 'sex', icon: Shield },
@@ -387,7 +396,36 @@ export function DashboardProfilePage() {
               </p>
               <p className="text-sm text-slate-500">
                 {profile?.email}
+                {profile && !profile.emailVerified ? (
+                  <span className="mr-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+                    غير مؤكد
+                  </span>
+                ) : null}
               </p>
+              {profile && !profile.emailVerified ? (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    disabled={isResendingVerification}
+                    onClick={() => {
+                      setVerificationMessage('')
+                      setIsResendingVerification(true)
+                      void resendEmailVerification(profile.membershipNumber)
+                        .then((response) => setVerificationMessage(response.message))
+                        .catch((error: unknown) => {
+                          setVerificationMessage(error instanceof Error ? error.message : 'تعذّر إرسال رابط التأكيد.')
+                        })
+                        .finally(() => setIsResendingVerification(false))
+                    }}
+                    className="text-xs font-bold text-cyan-800 underline disabled:opacity-60"
+                  >
+                    {isResendingVerification ? 'جارٍ الإرسال...' : 'إعادة إرسال رابط التأكيد'}
+                  </button>
+                  {verificationMessage ? (
+                    <p className="mt-1 text-xs text-slate-600">{verificationMessage}</p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 

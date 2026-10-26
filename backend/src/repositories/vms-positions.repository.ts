@@ -269,6 +269,17 @@ export async function updatePositionApplication(
   return getPositionApplicationById(db, id)
 }
 
+export async function deletePositionApplicationById(db: D1DatabaseLike, id: string) {
+  const existing = await getPositionApplicationById(db, id)
+
+  if (!existing) {
+    return false
+  }
+
+  await db.prepare('DELETE FROM position_applications WHERE id = ?').bind(id).run()
+  return true
+}
+
 export async function getPositionByIdWithApplications(db: D1DatabaseLike, id: string) {
   const position = await getPositionById(db, id)
 

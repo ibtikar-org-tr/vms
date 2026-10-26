@@ -6,6 +6,18 @@ import { dashboardRouteChildren } from './dashboard-routes'
 
 const router = createBrowserRouter([
   {
+    path: '/signup',
+    errorElement: <RouteErrorBoundary />,
+    hydrateFallbackElement: <div />,
+    lazy: lazyRoute(() => import('../pages/SignupPage'), 'SignupPage'),
+  },
+  {
+    path: '/verify-email',
+    errorElement: <RouteErrorBoundary />,
+    hydrateFallbackElement: <div />,
+    lazy: lazyRoute(() => import('../pages/VerifyEmailPage'), 'VerifyEmailPage'),
+  },
+  {
     path: '/registration',
     errorElement: <RouteErrorBoundary />,
     hydrateFallbackElement: <div />,
