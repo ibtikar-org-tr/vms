@@ -9,6 +9,7 @@ import { signupRoute } from './routes/signup.route'
 import { createTelegramSignupLink, TelegramAlreadyLinkedError } from './services/signup-link.service'
 import { statsRoute } from './routes/stats.route'
 import { telegramNotificationRoute } from './routes/telegram-notification.route'
+import { vmsEventFormsRoute } from './routes/vms-event-forms.route'
 import { vmsEventRegistrationsRoute } from './routes/vms-event-registrations.route'
 import { vmsEventTicketsRoute } from './routes/vms-event-tickets.route'
 import { vmsPublicEventsRoute } from './routes/vms-public-events.route'
@@ -173,6 +174,7 @@ securedApi.route('/', vmsTasksRoute)
 securedApi.route('/', vmsAgendaRoute)
 securedApi.route('/', vmsProjectMembersRoute)
 securedApi.route('/', vmsEventsRoute)
+securedApi.route('/', vmsEventFormsRoute)
 securedApi.route('/', vmsClubsRoute)
 securedApi.route('/', vmsEventTicketsRoute)
 securedApi.route('/', vmsEventRegistrationsRoute)

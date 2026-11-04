@@ -7,7 +7,11 @@ import {
 import { listEventTickets } from '../repositories/vms-event-tickets.repository'
 import { getEventById } from '../repositories/vms-events.repository'
 import { createGuestEventRegistrationSchema } from '../schemas/vms-event-registration.schema'
+import { createEventFormSubmissionSchema } from '../schemas/vms-event-form.schema'
 import { eventParamsSchema } from '../schemas/vms-event.schema'
+import { listEventFormFields } from '../repositories/vms-event-forms.repository'
+import { submitEventForm } from '../services/event-form-submission.service'
+import { jsonValidationHook } from '../utils/zod-json-error'
 import {
   isEventRegistrationUniqueConflict,
   registerSelectedEventTickets,
@@ -55,6 +59,56 @@ vmsPublicEventsRoute.get('/public/events/:id/tickets', zValidator('param', event
     return c.json({ error: 'Could not fetch event tickets.' }, 500)
   }
 })
+
+vmsPublicEventsRoute.get(
+  '/public/events/:id/form-fields',
+  zValidator('param', eventParamsSchema),
+  async (c) => {
+    try {
+      const { id } = c.req.valid('param')
+      const event = await getEventById(c.env.VMS_DB, id)
+      if (!event || event.status !== 'public') {
+        return c.json({ error: 'Event not found.' }, 404)
+      }
+
+      const fields = await listEventFormFields(c.env.VMS_DB, id)
+      return c.json({ fields })
+    } catch (error) {
+      console.error('Failed to fetch public event form fields', error)
+      return c.json({ error: 'Could not fetch event form fields.' }, 500)
+    }
+  },
+)
+
+vmsPublicEventsRoute.post(
+  '/public/events/:id/form-submissions',
+  zValidator('param', eventParamsSchema),
+  zValidator('json', createEventFormSubmissionSchema, jsonValidationHook),
+  async (c) => {
+    try {
+      const { id } = c.req.valid('param')
+      const event = await getEventById(c.env.VMS_DB, id)
+      if (!event || event.status !== 'public') {
+        return c.json({ error: 'Event not found.' }, 404)
+      }
+
+      const result = await submitEventForm(c.env.VMS_DB, {
+        eventId: id,
+        membershipNumber: null,
+        payload: c.req.valid('json'),
+      })
+
+      if (!result.ok) {
+        return c.json({ error: result.error }, result.status)
+      }
+
+      return c.json({ submission: result.submission }, 201)
+    } catch (error) {
+      console.error('Failed to submit public event form', error)
+      return c.json({ error: 'Could not submit event form.' }, 500)
+    }
+  },
+)
 
 vmsPublicEventsRoute.post(
   '/public/events/:id/registrations',

@@ -20,9 +20,11 @@ import {
   createEventRegistration,
   createPublicEventRegistration,
   fetchEventById,
+  fetchEventFormFields,
   fetchEventRegistrations,
   fetchEventTickets,
   fetchPublicEventById,
+  fetchPublicEventFormFields,
   fetchPublicEventTickets,
   requestTelegramGroupInvite,
   selfCancelEventRegistration,
@@ -30,6 +32,7 @@ import {
 } from '../../api/vms'
 import type {
   VmsEvent,
+  VmsEventFormField,
   VmsEventRegistration,
   VmsEventTicket,
 } from '../../types/vms'
@@ -47,6 +50,7 @@ import { EventRichText } from '../../components/events/EventRichText'
 import { getEmailValidationMessage } from '../../utils/email'
 import { canManageVmsEvent } from '../../utils/event-access'
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
+import { EventApplicationForm } from '../../components/events/EventApplicationForm'
 
 function eventStatusLabel(status: string) {
   if (status === 'draft') return 'مسودة'
@@ -90,6 +94,7 @@ export function DashboardEventDetailsPage() {
   const isStandaloneView = isStandalonePublicEventPath(location.pathname)
   const loginRedirect = `${location.pathname}${location.search}`
   const ticketBuyingSectionRef = useRef<HTMLDivElement | null>(null)
+  const applicationSectionRef = useRef<HTMLDivElement | null>(null)
   const [eventItem, setEventItem] = useState<VmsEvent | null>(null)
   const [tickets, setTickets] = useState<VmsEventTicket[]>([])
   const [myRegistrations, setMyRegistrations] = useState<VmsEventRegistration[]>([])
@@ -117,6 +122,7 @@ export function DashboardEventDetailsPage() {
   const [guestApplyComplete, setGuestApplyComplete] = useState(false)
   const [guestOwnedTicketIds, setGuestOwnedTicketIds] = useState<string[]>([])
   const [guestApplyPrompt, setGuestApplyPrompt] = useState<GuestApplyPrompt>('member')
+  const [applicationFields, setApplicationFields] = useState<VmsEventFormField[]>([])
 
   function adjustTicketActiveCount(ticketId: string, delta: number) {
     setTickets((previous) =>
@@ -132,6 +138,10 @@ export function DashboardEventDetailsPage() {
   }
 
   function scrollToTicketBuyingSection() {
+    if (applicationFields.length > 0 && applicationSectionRef.current) {
+      applicationSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
     ticketBuyingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -156,10 +166,11 @@ export function DashboardEventDetailsPage() {
     async function loadEventDetails() {
       try {
         if (user) {
-          const [eventPayload, ticketsPayload, myRegistrationPayload] = await Promise.all([
+          const [eventPayload, ticketsPayload, myRegistrationPayload, formFieldsPayload] = await Promise.all([
             fetchEventById(currentEventId),
             fetchEventTickets(currentEventId),
             fetchEventRegistrations(currentEventId, { membershipNumber: user.membershipNumber }),
+            fetchEventFormFields(currentEventId).catch(() => ({ fields: [] as VmsEventFormField[] })),
           ])
 
           if (controller.signal.aborted) {
@@ -169,12 +180,14 @@ export function DashboardEventDetailsPage() {
           setEventItem(eventPayload.event)
           setTickets(ticketsPayload.eventTickets)
           setMyRegistrations(myRegistrationPayload.eventRegistrations)
+          setApplicationFields(formFieldsPayload.fields)
           return
         }
 
-        const [eventPayload, ticketsPayload] = await Promise.all([
+        const [eventPayload, ticketsPayload, formFieldsPayload] = await Promise.all([
           fetchPublicEventById(currentEventId),
           fetchPublicEventTickets(currentEventId),
+          fetchPublicEventFormFields(currentEventId).catch(() => ({ fields: [] as VmsEventFormField[] })),
         ])
 
         if (controller.signal.aborted) {
@@ -183,6 +196,7 @@ export function DashboardEventDetailsPage() {
 
         setEventItem(eventPayload.event)
         setTickets(ticketsPayload.eventTickets)
+        setApplicationFields(formFieldsPayload.fields)
       } catch {
         if (!controller.signal.aborted) {
           setNotFound(true)
@@ -597,19 +611,25 @@ export function DashboardEventDetailsPage() {
             <button
               type="button"
               onClick={() => {
-                if (!hasUserRegistered || hasRemainingTickets) {
+                if (applicationFields.length > 0 || !hasUserRegistered || hasRemainingTickets) {
                   scrollToTicketBuyingSection()
                 }
               }}
-              disabled={hasUserRegistered && !hasRemainingTickets}
+              disabled={applicationFields.length === 0 && hasUserRegistered && !hasRemainingTickets}
               className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-medium shadow-sm transition ${
-                hasUserRegistered && !hasRemainingTickets
+                applicationFields.length === 0 && hasUserRegistered && !hasRemainingTickets
                   ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500'
                   : 'border-cyan-200 bg-transparent text-cyan-700 hover:bg-cyan-50 hover:text-cyan-800'
               }`}
             >
-              {hasUserRegistered && !hasRemainingTickets ? 'مسجّل بالفعل' : hasUserRegistered ? 'أضف تذاكر' : 'سجّل الآن'}
-              {hasUserRegistered && !hasRemainingTickets ? (
+              {applicationFields.length > 0
+                ? 'قدّم الآن'
+                : hasUserRegistered && !hasRemainingTickets
+                  ? 'مسجّل بالفعل'
+                  : hasUserRegistered
+                    ? 'أضف تذاكر'
+                    : 'سجّل الآن'}
+              {applicationFields.length === 0 && hasUserRegistered && !hasRemainingTickets ? (
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-7.25 7.25a1 1 0 01-1.414 0l-3.25-3.25a1 1 0 111.414-1.415l2.543 2.543 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
@@ -811,6 +831,17 @@ export function DashboardEventDetailsPage() {
           {telegramInviteError ? <p className="mt-3 text-sm text-red-600">{telegramInviteError}</p> : null}
           {telegramInviteSuccess ? <p className="mt-3 text-sm font-medium text-emerald-700">{telegramInviteSuccess}</p> : null}
         </article>
+      ) : null}
+
+      {applicationFields.length > 0 ? (
+        <div ref={applicationSectionRef} className="scroll-mt-24">
+          <EventApplicationForm
+            eventId={eventItem.id}
+            fields={applicationFields}
+            successMessage={eventItem.registrationSuccessMessage}
+            loginRedirect={loginRedirect}
+          />
+        </div>
       ) : null}
 
       <article className="overflow-visible rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5">
