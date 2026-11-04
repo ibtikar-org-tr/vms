@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import type { FormEvent } from 'react'
-import { ArrowRight, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Ticket, Trash2, Users, X } from 'lucide-react'
+import { ArrowRight, ClipboardList, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Ticket, Trash2, Users, X } from 'lucide-react'
 import {
   addEventAdmin,
   createEventTicket,
   deleteEventTicket,
   fetchEventAdmins,
   fetchEventById,
+  fetchEventFormFields,
   fetchEventTickets,
   removeEventAdmin,
+  saveEventFormFields,
   searchEventAdminCandidates,
   updateEvent,
   updateEventTicket,
@@ -24,6 +26,11 @@ import { EventRichTextEditor } from '../../components/events/EventRichTextEditor
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
 import { parseIntegerInput } from '../../utils/parse-int'
 import { canManageVmsEvent } from '../../utils/event-access'
+import {
+  createDraftFormField,
+  EventFormFieldsEditor,
+  eventFieldsToDraft,
+} from '../../components/events/EventFormFieldsEditor'
 import { initialRegistrationFormData } from '../../types/registration'
 import type { RegistrationFormData } from '../../types/registration'
 
@@ -88,6 +95,10 @@ export function DashboardEventEditPage() {
   const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null)
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null)
   const [telegramGroupId, setTelegramGroupId] = useState('')
+  const [formFieldDrafts, setFormFieldDrafts] = useState<ReturnType<typeof createDraftFormField>[]>([])
+  const [isSavingFormFields, setIsSavingFormFields] = useState(false)
+  const [formFieldsError, setFormFieldsError] = useState<string | null>(null)
+  const [formFieldsSuccess, setFormFieldsSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     if (!eventID) return
@@ -100,9 +111,10 @@ export function DashboardEventEditPage() {
         if (controller.signal.aborted) return
         setEventItem(eventPayload.event)
 
-        const [ticketsPayload, adminsPayload] = await Promise.allSettled([
+        const [ticketsPayload, adminsPayload, formFieldsPayload] = await Promise.allSettled([
           fetchEventTickets(currentEventId),
           fetchEventAdmins(currentEventId),
+          fetchEventFormFields(currentEventId),
         ])
         if (controller.signal.aborted) return
         if (ticketsPayload.status === 'fulfilled') {
@@ -110,6 +122,9 @@ export function DashboardEventEditPage() {
         }
         if (adminsPayload.status === 'fulfilled') {
           setEventAdmins(adminsPayload.value.admins)
+        }
+        if (formFieldsPayload.status === 'fulfilled') {
+          setFormFieldDrafts(eventFieldsToDraft(formFieldsPayload.value.fields))
         }
       } catch {
         if (!controller.signal.aborted) setNotFound(true)
@@ -344,6 +359,35 @@ export function DashboardEventEditPage() {
       }
     } finally {
       setIsCreatingTicket(false)
+    }
+  }
+
+  const handleSaveFormFields = async () => {
+    if (!eventID) return
+    if (formFieldDrafts.some((field) => !field.label.trim())) {
+      setFormFieldsError('يرجى كتابة نص لكل سؤال أو حذف الأسئلة الفارغة قبل الحفظ.')
+      setFormFieldsSuccess(null)
+      return
+    }
+
+    const fields = formFieldDrafts.map((field) => ({
+      label: field.label.trim(),
+      description: field.description.trim() || undefined,
+      type: field.type,
+      required: field.required,
+    }))
+
+    setFormFieldsError(null)
+    setFormFieldsSuccess(null)
+    setIsSavingFormFields(true)
+    try {
+      const payload = await saveEventFormFields(eventID, fields)
+      setFormFieldDrafts(eventFieldsToDraft(payload.fields))
+      setFormFieldsSuccess(fields.length > 0 ? 'تم حفظ أسئلة نموذج التقديم.' : 'تم إفراغ نموذج التقديم.')
+    } catch (requestError) {
+      setFormFieldsError(requestError instanceof Error ? requestError.message : 'تعذر حفظ أسئلة النموذج.')
+    } finally {
+      setIsSavingFormFields(false)
     }
   }
 
@@ -884,6 +928,37 @@ export function DashboardEventEditPage() {
           ) : null}
         </div>
         {adminError ? <p className="mt-3 text-sm text-red-600">{adminError}</p> : null}
+      </article>
+
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+          <ClipboardList className="h-5 w-5 text-slate-700" />
+          <h2 className="text-base font-semibold text-slate-900">نموذج التقديم</h2>
+          <span className="mr-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+            {formFieldDrafts.length} سؤال
+          </span>
+        </div>
+        <p className="mb-4 text-sm leading-6 text-slate-600">
+          أضف أي عدد من الأسئلة. يظهر النموذج في صفحة الفعالية للأعضاء والزوار، ويُجمع الاسم والبريد ورقم الهاتف تلقائياً مع الإجابات.
+        </p>
+        <EventFormFieldsEditor
+          fields={formFieldDrafts}
+          onChange={setFormFieldDrafts}
+          disabled={isSavingFormFields}
+        />
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleSaveFormFields()}
+            disabled={isSavingFormFields}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Save className="h-4 w-4" />
+            {isSavingFormFields ? 'جار الحفظ...' : 'حفظ أسئلة النموذج'}
+          </button>
+          {formFieldsSuccess ? <p className="text-sm font-medium text-emerald-700">{formFieldsSuccess}</p> : null}
+        </div>
+        {formFieldsError ? <p className="mt-3 text-sm text-red-600">{formFieldsError}</p> : null}
       </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">

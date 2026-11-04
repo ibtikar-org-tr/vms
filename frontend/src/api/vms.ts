@@ -4,6 +4,8 @@ import type {
   VmsClubMember,
   VmsEvent,
   VmsEventAdmin,
+  VmsEventFormField,
+  VmsEventFormSubmission,
   VmsEventRegistration,
   VmsEventTicket,
   VmsLeaderboardEntry,
@@ -476,6 +478,80 @@ export function fetchPublicEventTickets(eventId: string) {
   return fetchPublicJson<{ eventTickets: VmsEventTicket[] }>(
     `/public/events/${encodeURIComponent(eventId)}/tickets`,
   )
+}
+
+export function fetchPublicEventFormFields(eventId: string) {
+  return fetchPublicJson<{ fields: VmsEventFormField[] }>(
+    `/public/events/${encodeURIComponent(eventId)}/form-fields`,
+  )
+}
+
+export function fetchEventFormFields(eventId: string) {
+  return fetchJson<{ fields: VmsEventFormField[] }>(`/events/${encodeURIComponent(eventId)}/form-fields`, {
+    cache: false,
+  })
+}
+
+export function saveEventFormFields(
+  eventId: string,
+  fields: Array<{
+    label: string
+    description?: string
+    type: VmsEventFormField['type']
+    required: boolean
+  }>,
+) {
+  return putJson<{ fields: VmsEventFormField[] }, { fields: typeof fields }>(
+    `/events/${encodeURIComponent(eventId)}/form-fields`,
+    { fields },
+  )
+}
+
+export function fetchMyEventFormSubmission(eventId: string) {
+  return fetchJson<{ submission: VmsEventFormSubmission | null }>(
+    `/events/${encodeURIComponent(eventId)}/form-submissions/me`,
+    { cache: false },
+  )
+}
+
+export function fetchEventFormSubmissions(eventId: string) {
+  return fetchJson<{ submissions: VmsEventFormSubmission[]; total: number }>(
+    `/events/${encodeURIComponent(eventId)}/form-submissions`,
+    { cache: false },
+  )
+}
+
+export function createEventFormSubmission(
+  eventId: string,
+  payload: {
+    applicantName: string
+    applicantEmail: string
+    applicantPhone: string
+    answers: Record<string, string>
+  },
+  options?: { auth?: boolean },
+) {
+  const path = options?.auth === false
+    ? `/public/events/${encodeURIComponent(eventId)}/form-submissions`
+    : `/events/${encodeURIComponent(eventId)}/form-submissions`
+  return postJson<{ submission: VmsEventFormSubmission }, typeof payload>(path, payload, options)
+}
+
+export async function downloadEventFormSubmissionsCsv(eventId: string) {
+  const { blob, filename } = await apiDownload(
+    `/events/${encodeURIComponent(eventId)}/form-submissions/export`,
+  )
+  const csvBlob = new Blob([await blob.arrayBuffer()], { type: 'text/csv;charset=utf-8' })
+  const downloadName = `${(filename || 'applications.csv').replace(/\.(csv|xlsx|xls)$/i, '') || 'applications'}.csv`
+  const objectUrl = URL.createObjectURL(csvBlob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = downloadName
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
 }
 
 export function updateEvent(

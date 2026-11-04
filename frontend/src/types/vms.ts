@@ -73,6 +73,37 @@ export interface VmsEvent {
   canManage?: boolean
 }
 
+export type VmsEventFormFieldType = 'text' | 'textarea' | 'email' | 'phone' | 'url' | 'number'
+
+export interface VmsEventFormField {
+  id: string
+  createdAt?: string
+  updatedAt?: string
+  eventId?: string
+  label: string
+  description: string | null
+  type: VmsEventFormFieldType
+  required: boolean
+  sortOrder: number
+}
+
+export interface VmsEventFormAnswer {
+  fieldId: string
+  label: string
+  value: string
+}
+
+export interface VmsEventFormSubmission {
+  id: string
+  createdAt: string
+  eventId: string
+  membershipNumber: string | null
+  applicantName: string
+  applicantEmail: string
+  applicantPhone: string
+  answers: VmsEventFormAnswer[]
+}
+
 export interface VmsEventAdmin {
   membershipNumber: string
   displayName: string
