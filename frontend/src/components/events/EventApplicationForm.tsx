@@ -21,6 +21,7 @@ type EventApplicationFormProps = {
   fields: VmsEventFormField[]
   successMessage?: string | null
   loginRedirect: string
+  onSubmitted?: () => void
 }
 
 export function EventApplicationForm({
@@ -28,6 +29,7 @@ export function EventApplicationForm({
   fields,
   successMessage,
   loginRedirect,
+  onSubmitted,
 }: EventApplicationFormProps) {
   const user = useMemo(() => getStoredUser(), [])
   const [applicantName, setApplicantName] = useState('')
@@ -57,6 +59,7 @@ export function EventApplicationForm({
         if (cancelled) return
         if (minePayload.submission) {
           setSubmission(minePayload.submission)
+          onSubmitted?.()
           return
         }
         const profile = profilePayload.profile
@@ -102,6 +105,7 @@ export function EventApplicationForm({
         { auth: user ? undefined : false },
       )
       setSubmission(payload.submission)
+      onSubmitted?.()
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'تعذر إرسال الطلب.')
     } finally {
@@ -136,6 +140,9 @@ export function EventApplicationForm({
         <ClipboardList className="h-5 w-5 text-slate-700" />
         <h2 className="text-base font-semibold text-slate-900">نموذج التقديم</h2>
       </div>
+      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-7 text-amber-950">
+        إرسال هذا النموذج منفصل عن اختيار التذكرة. اضغط «إرسال الطلب» هنا لحفظ الإجابات في طلبات النموذج.
+      </p>
       {!user ? (
         <p className="mb-4 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm leading-7 text-cyan-950">
           يمكنك التقديم دون حساب. إذا كان لديك عضوية،{' '}

@@ -7,6 +7,7 @@ import {
   downloadEventFormSubmissionsCsv,
   downloadEventRegistrationsCsv,
   fetchEventById,
+  fetchEventFormFields,
   fetchEventFormSubmissions,
   fetchEventRegistrations,
   fetchEventTickets,
@@ -56,6 +57,7 @@ export function DashboardEventAdminPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [isExporting, setIsExporting] = useState(false)
   const [formSubmissions, setFormSubmissions] = useState<VmsEventFormSubmission[]>([])
+  const [formFieldsCount, setFormFieldsCount] = useState(0)
   const [isLoadingFormSubmissions, setIsLoadingFormSubmissions] = useState(false)
   const [isExportingFormSubmissions, setIsExportingFormSubmissions] = useState(false)
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null)
@@ -106,11 +108,18 @@ export function DashboardEventAdminPage() {
     async function loadFormSubmissions() {
       setIsLoadingFormSubmissions(true)
       try {
-        const payload = await fetchEventFormSubmissions(eventID as string)
+        const [payload, fieldsPayload] = await Promise.all([
+          fetchEventFormSubmissions(eventID as string),
+          fetchEventFormFields(eventID as string).catch(() => ({ fields: [] })),
+        ])
         if (controller.signal.aborted) return
         setFormSubmissions(payload.submissions)
-      } catch {
-        if (!controller.signal.aborted) setFormSubmissions([])
+        setFormFieldsCount(fieldsPayload.fields.length)
+      } catch (requestError) {
+        if (!controller.signal.aborted) {
+          setFormSubmissions([])
+          setError(requestError instanceof Error ? requestError.message : 'تعذر تحميل طلبات النموذج.')
+        }
       } finally {
         if (!controller.signal.aborted) setIsLoadingFormSubmissions(false)
       }
@@ -331,7 +340,9 @@ export function DashboardEventAdminPage() {
             <p className="text-sm text-slate-500">جار تحميل الطلبات...</p>
           ) : formSubmissions.length === 0 ? (
             <p className="text-sm leading-6 text-slate-500">
-              لا توجد طلبات بعد. إذا أضفت أسئلة في صفحة التعديل، ستظهر هنا إجابات الأعضاء والزوار.
+              {formFieldsCount > 0
+                ? 'لا توجد طلبات نموذج بعد. تسجيل التذكرة لا يحفظ إجابات الأسئلة — تظهر هنا فقط بعد الضغط على «إرسال الطلب» في نموذج التقديم.'
+                : 'لم تُضف أسئلة بعد. أضفها من صفحة التعديل حتى تظهر هنا إجابات الأعضاء والزوار.'}
             </p>
           ) : (
             <ul className="space-y-2">
