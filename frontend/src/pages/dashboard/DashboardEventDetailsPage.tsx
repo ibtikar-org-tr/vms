@@ -152,7 +152,13 @@ export function DashboardEventDetailsPage() {
   }
 
   function selectTicketForApply(ticketId: string) {
-    setSelectedTicketIds((current) => (current.includes(ticketId) ? [] : [ticketId]))
+    const allowMultiple = eventItem?.allowMultipleTickets === true
+    setSelectedTicketIds((current) => {
+      if (current.includes(ticketId)) {
+        return current.filter((id) => id !== ticketId)
+      }
+      return allowMultiple ? [...current, ticketId] : [ticketId]
+    })
     if (!user && !guestApplyComplete) {
       setGuestApplyPrompt('member')
     }
@@ -286,9 +292,10 @@ export function DashboardEventDetailsPage() {
     : !hasUserRegistered
       ? 'أرسل دعوة مجموعة التلغرام متاح فقط للمسجلين في هذه الفعالية.'
       : null
+  const allowMultipleTickets = eventItem?.allowMultipleTickets === true
   const canShowTicketPicker =
     remainingTickets.length > 0 &&
-    !hasUserRegistered &&
+    (allowMultipleTickets || !hasUserRegistered) &&
     Boolean(user || eventItem?.allowGuestRegistration === true)
   const combineApplicationWithTickets =
     applicationFields.length > 0 && canShowTicketPicker && !hasSubmittedApplication
@@ -296,7 +303,15 @@ export function DashboardEventDetailsPage() {
     ? 'جار الإرسال...'
     : combineApplicationWithTickets
       ? 'إرسال الطلب'
-      : 'تقديم الطلب'
+      : allowMultipleTickets
+        ? hasUserRegistered
+          ? newSelectedTicketIds.length > 1
+            ? `إضافة التذاكر المختارة (${newSelectedTicketIds.length})`
+            : 'إضافة التذكرة المختارة'
+          : newSelectedTicketIds.length > 1
+            ? `تقديم الطلب (${newSelectedTicketIds.length} تذاكر)`
+            : 'تقديم الطلب'
+        : 'تقديم الطلب'
 
   async function submitApplicationIfNeeded() {
     if (applicationFields.length === 0 || hasSubmittedApplication) {
@@ -647,13 +662,23 @@ export function DashboardEventDetailsPage() {
             <button
               type="button"
               onClick={() => {
-                if (applicationFields.length > 0 || !hasUserRegistered) {
+                if (
+                  applicationFields.length > 0 ||
+                  !hasUserRegistered ||
+                  (allowMultipleTickets && remainingTickets.length > 0)
+                ) {
                   scrollToTicketBuyingSection()
                 }
               }}
-              disabled={applicationFields.length === 0 && hasUserRegistered}
+              disabled={
+                applicationFields.length === 0 &&
+                hasUserRegistered &&
+                !(allowMultipleTickets && remainingTickets.length > 0)
+              }
               className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-medium shadow-sm transition ${
-                applicationFields.length === 0 && hasUserRegistered
+                applicationFields.length === 0 &&
+                hasUserRegistered &&
+                !(allowMultipleTickets && remainingTickets.length > 0)
                   ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500'
                   : 'border-cyan-200 bg-transparent text-cyan-700 hover:bg-cyan-50 hover:text-cyan-800'
               }`}
@@ -661,9 +686,13 @@ export function DashboardEventDetailsPage() {
               {applicationFields.length > 0
                 ? 'قدّم الآن'
                 : hasUserRegistered
-                  ? 'مسجّل بالفعل'
+                  ? allowMultipleTickets && remainingTickets.length > 0
+                    ? 'أضف تذكرة'
+                    : 'مسجّل بالفعل'
                   : 'سجّل الآن'}
-              {applicationFields.length === 0 && hasUserRegistered ? (
+              {applicationFields.length === 0 &&
+              hasUserRegistered &&
+              !(allowMultipleTickets && remainingTickets.length > 0) ? (
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-7.25 7.25a1 1 0 01-1.414 0l-3.25-3.25a1 1 0 111.414-1.415l2.543 2.543 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
@@ -918,7 +947,9 @@ export function DashboardEventDetailsPage() {
             ) : null}
             {!user && eventItem.allowGuestRegistration === true && remainingTickets.length > 0 && !hasUserRegistered ? (
               <div className="mt-5 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-sm text-cyan-950">
-                <p className="font-semibold">اختر تذكرة واحدة للمتابعة</p>
+                <p className="font-semibold">
+                  {allowMultipleTickets ? 'اختر تذكرة أو أكثر للمتابعة' : 'اختر تذكرة واحدة للمتابعة'}
+                </p>
                 <p className="mt-2 leading-7">
                   نفضّل الانتساب إلى تجمّع إبتكار لإدارة تسجيلك والاستفادة من عضويتك. يمكنك التقديم كزائر إذا لم ترغب بذلك.
                 </p>
@@ -927,7 +958,11 @@ export function DashboardEventDetailsPage() {
             {canShowTicketPicker ? (
               <div className="mt-5">
               <p className="mb-3 text-sm font-medium text-slate-700">
-                اختر تذكرة واحدة للتقديم:
+                {hasUserRegistered
+                  ? 'اختر تذاكر إضافية:'
+                  : allowMultipleTickets
+                    ? 'اختر تذكرة واحدة أو أكثر للتقديم:'
+                    : 'اختر تذكرة واحدة للتقديم:'}
               </p>
               {combineApplicationWithTickets ? (
                 <p className="mb-3 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm leading-7 text-cyan-950">

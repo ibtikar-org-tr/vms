@@ -1,4 +1,4 @@
-const MAX_TICKETS_PER_REQUEST = 1
+const MAX_TICKETS_PER_REQUEST = 20
 
 export function uniqueTicketIds(input: { ticketId?: string; ticketIds?: string[] }) {
   const ids = [
@@ -11,13 +11,19 @@ export function uniqueTicketIds(input: { ticketId?: string; ticketIds?: string[]
   return [...new Set(ids)]
 }
 
-export function validateRequestedTicketIds(ticketIds: string[]) {
+export function validateRequestedTicketIds(
+  ticketIds: string[],
+  options?: { allowMultipleTickets?: boolean },
+) {
   if (ticketIds.length === 0) {
     return 'يرجى اختيار تذكرة واحدة على الأقل.'
   }
 
-  if (ticketIds.length > MAX_TICKETS_PER_REQUEST) {
-    return 'يرجى اختيار تذكرة واحدة فقط.'
+  const max = options?.allowMultipleTickets ? MAX_TICKETS_PER_REQUEST : 1
+  if (ticketIds.length > max) {
+    return options?.allowMultipleTickets
+      ? 'لا يمكن اختيار أكثر من 20 تذكرة في طلب واحد.'
+      : 'يرجى اختيار تذكرة واحدة فقط.'
   }
 
   return null

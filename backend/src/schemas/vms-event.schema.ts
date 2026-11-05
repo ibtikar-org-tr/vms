@@ -25,6 +25,7 @@ export const createEventSchema = z.object({
   displayAttendeeNumbers: z.boolean().optional(),
   cancellationDeadlineHours: z.number().int().min(0).max(24 * 365).optional(),
   allowGuestRegistration: z.boolean().optional(),
+  allowMultipleTickets: z.boolean().optional(),
   registrationSuccessMessage: optionalRichText,
 })
 

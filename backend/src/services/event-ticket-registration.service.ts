@@ -20,6 +20,7 @@ export async function registerSelectedEventTickets(
     guestEmail?: string | null
     guestName?: string | null
     guestPhone?: string | null
+    allowMultipleTickets?: boolean
   },
 ): Promise<
   | { ok: true; created: EventRegistrationRecord[] }
@@ -27,8 +28,9 @@ export async function registerSelectedEventTickets(
 > {
   const owned = new Set(input.ownedTicketIds)
   const requestedTicketIds = [...new Set(input.ticketIds)].filter((ticketId) => !owned.has(ticketId))
+  const allowMultipleTickets = input.allowMultipleTickets === true
 
-  if (owned.size > 0) {
+  if (!allowMultipleTickets && owned.size > 0) {
     return { ok: false, status: 409, error: 'يمكنك اختيار تذكرة واحدة فقط لهذه الفعالية.' }
   }
 
@@ -36,7 +38,7 @@ export async function registerSelectedEventTickets(
     return { ok: false, status: 409, error: 'أنت مسجّل بالفعل على التذاكر المختارة.' }
   }
 
-  if (requestedTicketIds.length > 1) {
+  if (!allowMultipleTickets && requestedTicketIds.length > 1) {
     return { ok: false, status: 400, error: 'يرجى اختيار تذكرة واحدة فقط.' }
   }
 

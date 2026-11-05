@@ -26,6 +26,7 @@ interface EventRow {
   display_attendee_numbers: number | null
   cancellation_deadline_hours: number | null
   allow_guest_registration: number | null
+  allow_multiple_tickets: number | null
   registration_success_message: string | null
 }
 
@@ -34,6 +35,10 @@ function mapDisplayAttendeeNumbers(value: number | null | undefined) {
 }
 
 function mapAllowGuestRegistration(value: number | null | undefined) {
+  return value === 1
+}
+
+function mapAllowMultipleTickets(value: number | null | undefined) {
   return value === 1
 }
 
@@ -80,6 +85,7 @@ function mapEventRow(row: EventRow) {
     displayAttendeeNumbers: mapDisplayAttendeeNumbers(row.display_attendee_numbers),
     cancellationDeadlineHours: mapCancellationDeadlineHours(row.cancellation_deadline_hours),
     allowGuestRegistration: mapAllowGuestRegistration(row.allow_guest_registration),
+    allowMultipleTickets: mapAllowMultipleTickets(row.allow_multiple_tickets),
     registrationSuccessMessage: row.registration_success_message ?? null,
   }
 }
@@ -158,33 +164,53 @@ export async function getEventCancellationSettingsById(db: D1DatabaseLike, id: s
 }
 
 export async function createEvent(db: D1DatabaseLike, id: string, input: CreateEventInput) {
-  await db
-    .prepare(
-      'INSERT INTO events (id, name, description, start_time, end_time, image_url, associated_urls, created_by, project_id, status, telegram_group_id, country, region, city, address, display_attendee_numbers, cancellation_deadline_hours, allow_guest_registration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    )
-    .bind(
-      id,
-      input.name,
-      input.description ?? null,
-      input.startTime ?? null,
-      input.endTime ?? null,
-      input.imageUrl ?? null,
-      input.associatedUrls && Object.keys(input.associatedUrls).length > 0
-        ? JSON.stringify(input.associatedUrls)
-        : null,
-      input.createdBy,
-      input.projectId ?? null,
-      input.status,
-      input.telegramGroupId ?? null,
-      input.country ?? null,
-      input.region ?? null,
-      input.city ?? null,
-      input.address ?? null,
-      input.displayAttendeeNumbers === false ? 0 : 1,
-      input.cancellationDeadlineHours !== undefined ? mapCancellationDeadlineHours(input.cancellationDeadlineHours) : 48,
-      input.allowGuestRegistration === true ? 1 : 0,
-    )
-    .run()
+  const associatedUrlsJson =
+    input.associatedUrls && Object.keys(input.associatedUrls).length > 0
+      ? JSON.stringify(input.associatedUrls)
+      : null
+  const createValues = [
+    id,
+    input.name,
+    input.description ?? null,
+    input.startTime ?? null,
+    input.endTime ?? null,
+    input.imageUrl ?? null,
+    associatedUrlsJson,
+    input.createdBy,
+    input.projectId ?? null,
+    input.status,
+    input.telegramGroupId ?? null,
+    input.country ?? null,
+    input.region ?? null,
+    input.city ?? null,
+    input.address ?? null,
+    input.displayAttendeeNumbers === false ? 0 : 1,
+    input.cancellationDeadlineHours !== undefined ? mapCancellationDeadlineHours(input.cancellationDeadlineHours) : 48,
+    input.allowGuestRegistration === true ? 1 : 0,
+    input.allowMultipleTickets === true ? 1 : 0,
+  ]
+
+  try {
+    await db
+      .prepare(
+        'INSERT INTO events (id, name, description, start_time, end_time, image_url, associated_urls, created_by, project_id, status, telegram_group_id, country, region, city, address, display_attendee_numbers, cancellation_deadline_hours, allow_guest_registration, allow_multiple_tickets) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .bind(...createValues)
+      .run()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!/no such column: allow_multiple_tickets/i.test(message)) {
+      throw error
+    }
+
+    console.error('Failed to create event with allow_multiple_tickets, retrying without the column', error)
+    await db
+      .prepare(
+        'INSERT INTO events (id, name, description, start_time, end_time, image_url, associated_urls, created_by, project_id, status, telegram_group_id, country, region, city, address, display_attendee_numbers, cancellation_deadline_hours, allow_guest_registration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .bind(...createValues.slice(0, -1))
+      .run()
+  }
 
   await replaceAssociatedSkills(db, 'event', id, input.skills ?? null)
 
@@ -288,6 +314,7 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
     values.push(input.allowGuestRegistration ? 1 : 0)
   }
 
+  const allowMultipleTickets = input.allowMultipleTickets
   const registrationSuccessMessage = input.registrationSuccessMessage
 
   if (updates.length > 0) {
@@ -310,7 +337,18 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
     }
   }
 
-  if (updates.length === 0 && registrationSuccessMessage === undefined) {
+  if (allowMultipleTickets !== undefined) {
+    try {
+      await db
+        .prepare(`UPDATE events SET allow_multiple_tickets = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(allowMultipleTickets ? 1 : 0, id)
+        .run()
+    } catch (error) {
+      console.error('Failed to save event allow multiple tickets setting', error)
+    }
+  }
+
+  if (updates.length === 0 && registrationSuccessMessage === undefined && allowMultipleTickets === undefined) {
     return getEventById(db, id)
   }
 
