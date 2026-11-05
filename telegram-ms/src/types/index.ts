@@ -12,6 +12,7 @@ export interface Environment {
   SMTP_PASS: string;
   TELEGRAM_MS: string;
   MEMBERSHIP_MS: string;
+  MEMBERSHIP_MS_SERVICE?: Fetcher;
   DEEPSEEK_API_KEY: string;
   AI: any; // Cloudflare AI binding
   MAIN_CHANNEL: string; // Main Telegram channel username (without @)

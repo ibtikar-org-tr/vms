@@ -30,6 +30,13 @@
     "binding": "AI",
     "remote": true
   },
+  "services": [
+    {
+      "binding": "MEMBERSHIP_MS_SERVICE",
+      "service": "membership-app-backend",
+      "remote": true
+    }
+  ],
   "vars": {
     "MAIN_CHANNEL": "ibtikar_org",
     "SMTP_HOST": "",
