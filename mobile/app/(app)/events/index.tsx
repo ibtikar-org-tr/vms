@@ -148,23 +148,23 @@ export default function EventsListScreen() {
                     ) : (
                       <View style={styles.bannerFallback} />
                     )}
-                    <View style={styles.bannerOverlay}>
+                    <View style={styles.bannerBadge}>
                       <StatusPill label={upcoming ? 'قادمة' : 'منتهية'} tone={upcoming ? 'success' : 'neutral'} />
-                      <Text style={styles.bannerDate}>{formatEventDateShort(event.startTime)}</Text>
-                      <Text style={styles.bannerTitle} numberOfLines={2}>
-                        {event.name}
-                      </Text>
-                      <Text style={styles.bannerMeta} numberOfLines={1}>
-                        {formatEventLocation(event)}
-                      </Text>
                     </View>
                   </View>
-                  {eventDescriptionPlainText(event.description) ? (
-                    <Text style={styles.description} numberOfLines={2}>
-                      {eventDescriptionPlainText(event.description)}
+                  <View style={styles.body}>
+                    <Text style={styles.date}>{formatEventDateShort(event.startTime)}</Text>
+                    <Text style={styles.title}>{event.name}</Text>
+                    <Text style={styles.meta} numberOfLines={1}>
+                      {formatEventLocation(event)}
                     </Text>
-                  ) : null}
-                  {event.projectName ? <Text style={styles.project}>{event.projectName}</Text> : null}
+                    {eventDescriptionPlainText(event.description) ? (
+                      <Text style={styles.description} numberOfLines={2}>
+                        {eventDescriptionPlainText(event.description)}
+                      </Text>
+                    ) : null}
+                    {event.projectName ? <Text style={styles.project}>{event.projectName}</Text> : null}
+                  </View>
                 </Pressable>
               </Link>
             )
@@ -218,45 +218,41 @@ const styles = StyleSheet.create({
     left: 0,
     backgroundColor: '#cffafe',
   },
-  bannerOverlay: {
+  bannerBadge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    padding: 14,
-    justifyContent: 'flex-end',
-    gap: 4,
+    top: 10,
+    right: 10,
   },
-  bannerDate: {
-    color: '#e2e8f0',
+  body: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 6,
+  },
+  date: {
+    color: colors.textMuted,
     fontSize: 12,
     textAlign: 'right',
   },
-  bannerTitle: {
-    color: '#fff',
-    fontSize: 17,
+  title: {
+    color: colors.text,
+    fontSize: 22,
     fontWeight: '800',
+    lineHeight: 30,
     textAlign: 'right',
   },
-  bannerMeta: {
-    color: '#cbd5e1',
-    fontSize: 12,
+  meta: {
+    color: colors.textMuted,
+    fontSize: 13,
     textAlign: 'right',
   },
   description: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 4,
     color: colors.textMuted,
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'right',
   },
   project: {
-    paddingHorizontal: 14,
-    paddingBottom: 12,
     color: colors.primary,
     fontSize: 12,
     fontWeight: '700',
