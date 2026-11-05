@@ -51,7 +51,10 @@ import { EventRichText } from '../../components/events/EventRichText'
 import { getEmailValidationMessage } from '../../utils/email'
 import { canManageVmsEvent } from '../../utils/event-access'
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
-import { EventApplicationForm } from '../../components/events/EventApplicationForm'
+import {
+  EventApplicationForm,
+  type EventApplicationFormHandle,
+} from '../../components/events/EventApplicationForm'
 
 function eventStatusLabel(status: string) {
   if (status === 'draft') return 'مسودة'
@@ -96,6 +99,7 @@ export function DashboardEventDetailsPage() {
   const loginRedirect = `${location.pathname}${location.search}`
   const ticketBuyingSectionRef = useRef<HTMLDivElement | null>(null)
   const applicationSectionRef = useRef<HTMLDivElement | null>(null)
+  const applicationFormRef = useRef<EventApplicationFormHandle | null>(null)
   const [eventItem, setEventItem] = useState<VmsEvent | null>(null)
   const [tickets, setTickets] = useState<VmsEventTicket[]>([])
   const [myRegistrations, setMyRegistrations] = useState<VmsEventRegistration[]>([])
@@ -288,36 +292,37 @@ export function DashboardEventDetailsPage() {
   const canShowTicketPicker =
     remainingTickets.length > 0 &&
     Boolean(user || eventItem?.allowGuestRegistration === true)
+  const combineApplicationWithTickets =
+    applicationFields.length > 0 && canShowTicketPicker && !hasSubmittedApplication
   const applyButtonLabel = isApplying
     ? 'جار الإرسال...'
-    : hasUserRegistered
-      ? newSelectedTicketIds.length > 1
-        ? `إضافة التذاكر المختارة (${newSelectedTicketIds.length})`
-        : 'إضافة التذكرة المختارة'
-      : applicationFields.length > 0
+    : combineApplicationWithTickets
+      ? 'إرسال الطلب'
+      : hasUserRegistered
         ? newSelectedTicketIds.length > 1
-          ? `تسجيل التذاكر (${newSelectedTicketIds.length})`
-          : 'تسجيل التذكرة'
+          ? `إضافة التذاكر المختارة (${newSelectedTicketIds.length})`
+          : 'إضافة التذكرة المختارة'
         : newSelectedTicketIds.length > 1
           ? `تقديم الطلب (${newSelectedTicketIds.length} تذاكر)`
           : 'تقديم الطلب'
 
-  function ensureApplicationSubmitted() {
+  async function submitApplicationIfNeeded() {
     if (applicationFields.length === 0 || hasSubmittedApplication) {
       return true
     }
 
-    setApplyError('يرجى إرسال نموذج التقديم أولاً من القسم أعلاه، ثم اختيار التذكرة. تسجيل التذكرة لا يحفظ إجابات النموذج.')
-    applicationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return false
+    const submitted = await applicationFormRef.current?.submit()
+    if (!submitted) {
+      applicationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return false
+    }
+
+    return true
   }
 
   const handleApplyToEvent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setApplyError(null)
-    if (!ensureApplicationSubmitted()) {
-      return
-    }
     setApplySuccess(null)
 
     if (!eventID) {
@@ -338,6 +343,10 @@ export function DashboardEventDetailsPage() {
     setIsApplying(true)
 
     try {
+      if (!(await submitApplicationIfNeeded())) {
+        return
+      }
+
       const payload = await createEventRegistration({
         eventId: eventID,
         membershipNumber: user.membershipNumber,
@@ -351,7 +360,11 @@ export function DashboardEventDetailsPage() {
         adjustTicketActiveCount(registration.ticketId, 1)
       }
       setApplySuccess(
-        created.length > 1 ? 'تم تسجيل التذاكر المختارة بنجاح.' : 'تم إرسال طلب التسجيل بنجاح.',
+        combineApplicationWithTickets
+          ? 'تم إرسال النموذج وتسجيل التذكرة بنجاح.'
+          : created.length > 1
+            ? 'تم تسجيل التذاكر المختارة بنجاح.'
+            : 'تم إرسال طلب التسجيل بنجاح.',
       )
       setSelectedTicketIds([])
       applyForm.reset()
@@ -370,9 +383,6 @@ export function DashboardEventDetailsPage() {
     event.preventDefault()
     setApplyError(null)
     setApplySuccess(null)
-    if (!ensureApplicationSubmitted()) {
-      return
-    }
 
     if (!eventID) {
       return
@@ -383,12 +393,16 @@ export function DashboardEventDetailsPage() {
       return
     }
 
-    const name = guestName.trim()
-    const email = guestEmail.trim()
-    const phone = guestPhone.trim()
+    const applicationContact = applicationFormRef.current?.getContact()
+    const name = (applicationContact?.name || guestName).trim()
+    const email = (applicationContact?.email || guestEmail).trim()
+    const phone = (applicationContact?.phone || guestPhone).trim()
 
     if (!name) {
-      setApplyError('يرجى إدخال الاسم.')
+      setApplyError(combineApplicationWithTickets ? 'يرجى تعبئة الاسم الكامل في نموذج التقديم.' : 'يرجى إدخال الاسم.')
+      if (combineApplicationWithTickets) {
+        applicationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
       return
     }
 
@@ -407,6 +421,10 @@ export function DashboardEventDetailsPage() {
     setIsApplying(true)
 
     try {
+      if (!(await submitApplicationIfNeeded())) {
+        return
+      }
+
       const payload = await createPublicEventRegistration(eventID, {
         ticketIds: newSelectedTicketIds,
         guestName: name,
@@ -422,9 +440,11 @@ export function DashboardEventDetailsPage() {
       setGuestApplyComplete(true)
       setGuestApplyPrompt('guest')
       setApplySuccess(
-        created.length > 1
-          ? 'تم تسجيل التذاكر المختارة بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.'
-          : 'تم إرسال طلب التسجيل بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.',
+        combineApplicationWithTickets
+          ? 'تم إرسال النموذج وتسجيل التذكرة بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.'
+          : created.length > 1
+            ? 'تم تسجيل التذاكر المختارة بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.'
+            : 'تم إرسال طلب التسجيل بنجاح. يمكنك إنشاء حساب لاحقاً بنفس البريد لربط التسجيل بعضويتك.',
       )
       setSelectedTicketIds([])
     } catch (requestError) {
@@ -860,10 +880,13 @@ export function DashboardEventDetailsPage() {
       {applicationFields.length > 0 ? (
         <div ref={applicationSectionRef} className="scroll-mt-24">
           <EventApplicationForm
+            ref={applicationFormRef}
             eventId={eventItem.id}
             fields={applicationFields}
             successMessage={eventItem.registrationSuccessMessage}
             loginRedirect={loginRedirect}
+            deferSubmit={combineApplicationWithTickets}
+            disabled={isApplying}
             onSubmitted={() => setHasSubmittedApplication(true)}
           />
         </div>
@@ -873,7 +896,9 @@ export function DashboardEventDetailsPage() {
         <div className="border-b border-slate-100 bg-linear-to-l from-slate-50 to-white px-5 py-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
             <Ticket className="h-5 w-5 text-slate-700" strokeWidth={1.5} />
-            <h2 className="text-base font-semibold text-slate-900">التذاكر والتسجيلات</h2>
+            <h2 className="text-base font-semibold text-slate-900">
+              {combineApplicationWithTickets ? '2. اختيار التذكرة' : 'التذاكر والتسجيلات'}
+            </h2>
           </div>
         </div>
         <div className="p-5 sm:p-6">
@@ -914,9 +939,9 @@ export function DashboardEventDetailsPage() {
               <p className="mb-3 text-sm font-medium text-slate-700">
                 {hasUserRegistered ? 'اختر تذاكر إضافية:' : 'اختر تذكرة واحدة أو أكثر للتقديم:'}
               </p>
-              {applicationFields.length > 0 && !hasSubmittedApplication ? (
-                <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-7 text-amber-950">
-                  أرسل نموذج التقديم أولاً حتى تظهر إجاباتك في طلبات النموذج. اختيار التذكرة وحده لا يكفي.
+              {combineApplicationWithTickets ? (
+                <p className="mb-3 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm leading-7 text-cyan-950">
+                  بعد اختيار التذكرة اضغط «إرسال الطلب» في الأسفل لحفظ النموذج والتذكرة معاً.
                 </p>
               ) : null}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1042,28 +1067,34 @@ export function DashboardEventDetailsPage() {
               ) : null}
               {hasSelectedTickets && !user && guestApplyPrompt === 'guest' ? (
                 <form onSubmit={handleGuestApplyToEvent} className="mt-4 space-y-4">
-                  <p className="text-sm font-medium text-slate-800">تقديم الطلب كزائر</p>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="min-w-0 md:col-span-2">
-                      <TextField
-                        id="guest-name"
-                        label="الاسم"
-                        value={guestName}
-                        onChange={setGuestName}
-                        required
-                      />
-                    </div>
-                    <div className="min-w-0 md:col-span-2">
-                      <EmailField
-                        id="guest-email"
-                        label="البريد الإلكتروني"
-                        value={guestEmail}
-                        onChange={setGuestEmail}
-                        required
-                      />
-                    </div>
-                    <PhoneNumberField value={guestPhone} onChange={setGuestPhone} required />
-                  </div>
+                  {combineApplicationWithTickets ? (
+                    <p className="text-sm font-medium text-slate-800">سيتم إرسال النموذج والتذكرة معاً ببياناتك من الأعلى.</p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-slate-800">تقديم الطلب كزائر</p>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="min-w-0 md:col-span-2">
+                          <TextField
+                            id="guest-name"
+                            label="الاسم"
+                            value={guestName}
+                            onChange={setGuestName}
+                            required
+                          />
+                        </div>
+                        <div className="min-w-0 md:col-span-2">
+                          <EmailField
+                            id="guest-email"
+                            label="البريد الإلكتروني"
+                            value={guestEmail}
+                            onChange={setGuestEmail}
+                            required
+                          />
+                        </div>
+                        <PhoneNumberField value={guestPhone} onChange={setGuestPhone} required />
+                      </div>
+                    </>
+                  )}
                   <button
                     type="submit"
                     disabled={isApplying || !hasSelectedTickets}
