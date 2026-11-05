@@ -430,6 +430,7 @@ export function createEvent(payload: {
   displayAttendeeNumbers?: boolean
   cancellationDeadlineHours?: number
   allowGuestRegistration?: boolean
+  allowMultipleTickets?: boolean
 }) {
   return postJson<{ event: VmsEvent }, typeof payload>('/events', payload)
 }
@@ -571,6 +572,7 @@ export function updateEvent(
     displayAttendeeNumbers: boolean
     cancellationDeadlineHours: number
     allowGuestRegistration: boolean
+    allowMultipleTickets: boolean
     registrationSuccessMessage: string | null
   }>,
 ) {

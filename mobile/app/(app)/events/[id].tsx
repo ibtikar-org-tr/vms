@@ -113,11 +113,17 @@ export default function EventDetailScreen() {
     remainingAvailableTickets.some((ticket) => ticket.id === ticketId),
   )
   const hasSelectedTickets = newSelectedTicketIds.length > 0
+  const allowMultipleTickets = event?.allowMultipleTickets === true
+  const canShowTicketPicker =
+    remainingTickets.length > 0 && (allowMultipleTickets || registrations.length === 0)
 
   const toggleTicketSelection = (ticketId: string) => {
-    setSelectedTicketIds((current) =>
-      current.includes(ticketId) ? current.filter((id) => id !== ticketId) : [...current, ticketId],
-    )
+    setSelectedTicketIds((current) => {
+      if (current.includes(ticketId)) {
+        return current.filter((id) => id !== ticketId)
+      }
+      return allowMultipleTickets ? [...current, ticketId] : [ticketId]
+    })
   }
 
   const handleRegister = async () => {
@@ -331,10 +337,14 @@ export default function EventDetailScreen() {
                   </View>
                 ) : null}
 
-                {remainingTickets.length > 0 ? (
+                {canShowTicketPicker ? (
                   <View style={styles.ticketList}>
                     <Text style={styles.label}>
-                      {registrations.length > 0 ? 'أضف تذاكر أخرى' : 'اختر تذكرة واحدة أو أكثر'}
+                      {allowMultipleTickets
+                        ? registrations.length > 0
+                          ? 'أضف تذاكر أخرى'
+                          : 'اختر تذكرة واحدة أو أكثر'
+                        : 'اختر تذكرة واحدة'}
                     </Text>
                     {remainingTickets.map((ticket) => {
                       const selected = selectedTicketIds.includes(ticket.id)
@@ -371,13 +381,15 @@ export default function EventDetailScreen() {
                       <Text style={styles.registerText}>
                         {isApplying
                           ? 'جارٍ التسجيل...'
-                          : registrations.length > 0
-                            ? hasSelectedTickets && newSelectedTicketIds.length > 1
-                              ? `إضافة التذاكر (${newSelectedTicketIds.length})`
-                              : 'إضافة التذكرة المختارة'
-                            : hasSelectedTickets && newSelectedTicketIds.length > 1
-                              ? `سجّل الآن (${newSelectedTicketIds.length})`
-                              : 'سجّل الآن'}
+                          : allowMultipleTickets
+                            ? registrations.length > 0
+                              ? hasSelectedTickets && newSelectedTicketIds.length > 1
+                                ? `إضافة التذاكر (${newSelectedTicketIds.length})`
+                                : 'إضافة التذكرة المختارة'
+                              : hasSelectedTickets && newSelectedTicketIds.length > 1
+                                ? `سجّل الآن (${newSelectedTicketIds.length})`
+                                : 'سجّل الآن'
+                            : 'سجّل الآن'}
                       </Text>
                     </Pressable>
                   </View>

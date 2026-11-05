@@ -433,7 +433,9 @@ vmsEventRegistrationsRoute.post('/event-registrations', zValidator('json', creat
     }
 
     const ticketIds = uniqueTicketIds(payload)
-    const ticketIdsError = validateRequestedTicketIds(ticketIds)
+    const ticketIdsError = validateRequestedTicketIds(ticketIds, {
+      allowMultipleTickets: event.allowMultipleTickets,
+    })
     if (ticketIdsError) {
       return c.json({ error: ticketIdsError }, 400)
     }
@@ -456,6 +458,7 @@ vmsEventRegistrationsRoute.post('/event-registrations', zValidator('json', creat
         .filter((registration) => registration.status === 'registered' || registration.status === 'attended')
         .map((registration) => registration.ticketId),
       membershipNumber: actorMembershipNumber,
+      allowMultipleTickets: event.allowMultipleTickets,
     })
 
     if (!result.ok) {
