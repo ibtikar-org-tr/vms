@@ -28,8 +28,16 @@ export async function registerSelectedEventTickets(
   const owned = new Set(input.ownedTicketIds)
   const requestedTicketIds = [...new Set(input.ticketIds)].filter((ticketId) => !owned.has(ticketId))
 
+  if (owned.size > 0) {
+    return { ok: false, status: 409, error: 'يمكنك اختيار تذكرة واحدة فقط لهذه الفعالية.' }
+  }
+
   if (requestedTicketIds.length === 0) {
     return { ok: false, status: 409, error: 'أنت مسجّل بالفعل على التذاكر المختارة.' }
+  }
+
+  if (requestedTicketIds.length > 1) {
+    return { ok: false, status: 400, error: 'يرجى اختيار تذكرة واحدة فقط.' }
   }
 
   for (const ticketId of requestedTicketIds) {

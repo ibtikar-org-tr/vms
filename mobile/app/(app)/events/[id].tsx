@@ -115,9 +115,7 @@ export default function EventDetailScreen() {
   const hasSelectedTickets = newSelectedTicketIds.length > 0
 
   const toggleTicketSelection = (ticketId: string) => {
-    setSelectedTicketIds((current) =>
-      current.includes(ticketId) ? current.filter((id) => id !== ticketId) : [...current, ticketId],
-    )
+    setSelectedTicketIds((current) => (current.includes(ticketId) ? [] : [ticketId]))
   }
 
   const handleRegister = async () => {
@@ -331,10 +329,10 @@ export default function EventDetailScreen() {
                   </View>
                 ) : null}
 
-                {remainingTickets.length > 0 ? (
+                {remainingTickets.length > 0 && registrations.length === 0 ? (
                   <View style={styles.ticketList}>
                     <Text style={styles.label}>
-                      {registrations.length > 0 ? 'أضف تذاكر أخرى' : 'اختر تذكرة واحدة أو أكثر'}
+                      اختر تذكرة واحدة
                     </Text>
                     {remainingTickets.map((ticket) => {
                       const selected = selectedTicketIds.includes(ticket.id)
@@ -368,17 +366,7 @@ export default function EventDetailScreen() {
                       disabled={isApplying || !hasSelectedTickets}
                       onPress={() => void handleRegister()}
                     >
-                      <Text style={styles.registerText}>
-                        {isApplying
-                          ? 'جارٍ التسجيل...'
-                          : registrations.length > 0
-                            ? hasSelectedTickets && newSelectedTicketIds.length > 1
-                              ? `إضافة التذاكر (${newSelectedTicketIds.length})`
-                              : 'إضافة التذكرة المختارة'
-                            : hasSelectedTickets && newSelectedTicketIds.length > 1
-                              ? `سجّل الآن (${newSelectedTicketIds.length})`
-                              : 'سجّل الآن'}
-                      </Text>
+                      <Text style={styles.registerText}>{isApplying ? 'جارٍ التسجيل...' : 'سجّل الآن'}</Text>
                     </Pressable>
                   </View>
                 ) : registrations.length === 0 ? (

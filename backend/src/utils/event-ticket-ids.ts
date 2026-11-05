@@ -1,4 +1,4 @@
-const MAX_TICKETS_PER_REQUEST = 20
+const MAX_TICKETS_PER_REQUEST = 1
 
 export function uniqueTicketIds(input: { ticketId?: string; ticketIds?: string[] }) {
   const ids = [
@@ -17,7 +17,7 @@ export function validateRequestedTicketIds(ticketIds: string[]) {
   }
 
   if (ticketIds.length > MAX_TICKETS_PER_REQUEST) {
-    return `يمكن اختيار حتى ${MAX_TICKETS_PER_REQUEST} تذكرة في الطلب الواحد.`
+    return 'يرجى اختيار تذكرة واحدة فقط.'
   }
 
   return null

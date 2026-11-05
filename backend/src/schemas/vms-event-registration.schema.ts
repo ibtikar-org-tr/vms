@@ -16,7 +16,7 @@ const eventRegistrationFieldsSchema = z.object({
 export const createEventRegistrationSchema = eventRegistrationFieldsSchema
   .extend({
     ticketId: requiredTrimmedString.optional(),
-    ticketIds: z.array(requiredTrimmedString).min(1).max(20).optional(),
+    ticketIds: z.array(requiredTrimmedString).min(1).max(1).optional(),
   })
   .refine((payload) => Boolean(payload.ticketId || (payload.ticketIds && payload.ticketIds.length > 0)), {
     message: 'ticketId or ticketIds is required',
@@ -47,7 +47,7 @@ export const changeEventRegistrationTicketSchema = z.object({
 export const createGuestEventRegistrationSchema = z
   .object({
     ticketId: requiredTrimmedString.optional(),
-    ticketIds: z.array(requiredTrimmedString).min(1).max(20).optional(),
+    ticketIds: z.array(requiredTrimmedString).min(1).max(1).optional(),
     guestName: requiredTrimmedString.max(160),
     guestEmail: z.string().trim().toLowerCase().email(),
     guestPhone: requiredTrimmedString.max(40),
