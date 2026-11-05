@@ -24,6 +24,7 @@ import {
   fetchEventRegistrations,
   fetchEventTickets,
   fetchPublicEventById,
+  fetchMyEventFormSubmission,
   fetchPublicEventFormFields,
   fetchPublicEventTickets,
   requestTelegramGroupInvite,
@@ -123,6 +124,7 @@ export function DashboardEventDetailsPage() {
   const [guestOwnedTicketIds, setGuestOwnedTicketIds] = useState<string[]>([])
   const [guestApplyPrompt, setGuestApplyPrompt] = useState<GuestApplyPrompt>('member')
   const [applicationFields, setApplicationFields] = useState<VmsEventFormField[]>([])
+  const [hasSubmittedApplication, setHasSubmittedApplication] = useState(false)
 
   function adjustTicketActiveCount(ticketId: string, delta: number) {
     setTickets((previous) =>
@@ -166,11 +168,12 @@ export function DashboardEventDetailsPage() {
     async function loadEventDetails() {
       try {
         if (user) {
-          const [eventPayload, ticketsPayload, myRegistrationPayload, formFieldsPayload] = await Promise.all([
+          const [eventPayload, ticketsPayload, myRegistrationPayload, formFieldsPayload, myFormPayload] = await Promise.all([
             fetchEventById(currentEventId),
             fetchEventTickets(currentEventId),
             fetchEventRegistrations(currentEventId, { membershipNumber: user.membershipNumber }),
             fetchEventFormFields(currentEventId).catch(() => ({ fields: [] as VmsEventFormField[] })),
+            fetchMyEventFormSubmission(currentEventId).catch(() => ({ submission: null })),
           ])
 
           if (controller.signal.aborted) {
@@ -181,6 +184,7 @@ export function DashboardEventDetailsPage() {
           setTickets(ticketsPayload.eventTickets)
           setMyRegistrations(myRegistrationPayload.eventRegistrations)
           setApplicationFields(formFieldsPayload.fields)
+          setHasSubmittedApplication(Boolean(myFormPayload.submission))
           return
         }
 
@@ -290,13 +294,30 @@ export function DashboardEventDetailsPage() {
       ? newSelectedTicketIds.length > 1
         ? `إضافة التذاكر المختارة (${newSelectedTicketIds.length})`
         : 'إضافة التذكرة المختارة'
-      : newSelectedTicketIds.length > 1
-        ? `تقديم الطلب (${newSelectedTicketIds.length} تذاكر)`
-        : 'تقديم الطلب'
+      : applicationFields.length > 0
+        ? newSelectedTicketIds.length > 1
+          ? `تسجيل التذاكر (${newSelectedTicketIds.length})`
+          : 'تسجيل التذكرة'
+        : newSelectedTicketIds.length > 1
+          ? `تقديم الطلب (${newSelectedTicketIds.length} تذاكر)`
+          : 'تقديم الطلب'
+
+  function ensureApplicationSubmitted() {
+    if (applicationFields.length === 0 || hasSubmittedApplication) {
+      return true
+    }
+
+    setApplyError('يرجى إرسال نموذج التقديم أولاً من القسم أعلاه، ثم اختيار التذكرة. تسجيل التذكرة لا يحفظ إجابات النموذج.')
+    applicationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return false
+  }
 
   const handleApplyToEvent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setApplyError(null)
+    if (!ensureApplicationSubmitted()) {
+      return
+    }
     setApplySuccess(null)
 
     if (!eventID) {
@@ -349,6 +370,9 @@ export function DashboardEventDetailsPage() {
     event.preventDefault()
     setApplyError(null)
     setApplySuccess(null)
+    if (!ensureApplicationSubmitted()) {
+      return
+    }
 
     if (!eventID) {
       return
@@ -840,6 +864,7 @@ export function DashboardEventDetailsPage() {
             fields={applicationFields}
             successMessage={eventItem.registrationSuccessMessage}
             loginRedirect={loginRedirect}
+            onSubmitted={() => setHasSubmittedApplication(true)}
           />
         </div>
       ) : null}
@@ -889,6 +914,11 @@ export function DashboardEventDetailsPage() {
               <p className="mb-3 text-sm font-medium text-slate-700">
                 {hasUserRegistered ? 'اختر تذاكر إضافية:' : 'اختر تذكرة واحدة أو أكثر للتقديم:'}
               </p>
+              {applicationFields.length > 0 && !hasSubmittedApplication ? (
+                <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-7 text-amber-950">
+                  أرسل نموذج التقديم أولاً حتى تظهر إجاباتك في طلبات النموذج. اختيار التذكرة وحده لا يكفي.
+                </p>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {remainingTickets.map((ticket) => {
                   const isSelected = selectedTicketIds.includes(ticket.id)
