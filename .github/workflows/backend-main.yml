@@ -47,13 +47,16 @@ jobs:
           | .vars.SMTP_USER = $smtpUser
           | .vars.FRONTEND_BASE_URL = $frontendBaseUrl
           | .vars.CORS_ALLOW_ORIGINS = $corsAllowOrigins
+          | .vars.AUTHDEEP_API_BASE = (if $authdeepApiBase == "" then .vars.AUTHDEEP_API_BASE else $authdeepApiBase end)
+          | .vars.AUTHDEEP_TENANT_ID = (if $authdeepTenantId == "" then .vars.AUTHDEEP_TENANT_ID else $authdeepTenantId end)
+          | .vars.AUTHDEEP_MAIL_FROM = (if $authdeepMailFrom == "" then .vars.AUTHDEEP_MAIL_FROM else $authdeepMailFrom end)
           | .services[0].service = $telegramMsName
           | .account_id = $accountId
           | .vectorize[0].index_name = (if $vectorizeIndex == "" then .vectorize[0].index_name else $vectorizeIndex end)
           | .queues.producers[0].queue = (if $queueName == "" then .queues.producers[0].queue else $queueName end)
           | .queues.consumers[0].queue = (if $queueName == "" then .queues.consumers[0].queue else $queueName end)
           | .queues.consumers[0].dead_letter_queue = (if $dlqName == "" then .queues.consumers[0].dead_letter_queue else $dlqName end)
-          | del(.vars.INTERNAL_SECRET, .vars.SMTP_PASS, .vars.JWT_SECRET)'
+          | del(.vars.INTERNAL_SECRET, .vars.SMTP_PASS, .vars.JWT_SECRET, .vars.AUTHDEEP_API_TOKEN)'
 
           jq \
             --arg dbid0 "${{ vars.MEMBERS_DB_ID }}" \
@@ -68,6 +71,9 @@ jobs:
             --arg smtpHost "${{ vars.SMTP_HOST }}" \
             --arg smtpPort "${{ vars.SMTP_PORT }}" \
             --arg smtpUser "${{ vars.SMTP_USER }}" \
+            --arg authdeepApiBase "${{ vars.AUTHDEEP_API_BASE }}" \
+            --arg authdeepTenantId "${{ vars.AUTHDEEP_TENANT_ID }}" \
+            --arg authdeepMailFrom "${{ vars.AUTHDEEP_MAIL_FROM }}" \
             --arg frontendBaseUrl "${{ vars.FRONTEND_BASE_URL }}" \
             --arg corsAllowOrigins "${{ vars.CORS_ALLOW_ORIGINS }}" \
             --arg telegramMsName "${{ vars.TELEGRAM_MS_NAME }}" \
@@ -107,6 +113,9 @@ jobs:
           echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
           echo "${{ secrets.SMTP_PASS }}" | wrangler secret put SMTP_PASS --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
           echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put INTERNAL_SECRET --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
+          if [ -n "${{ secrets.AUTHDEEP_API_TOKEN }}" ]; then
+            echo "${{ secrets.AUTHDEEP_API_TOKEN }}" | wrangler secret put AUTHDEEP_API_TOKEN --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
+          fi
 
       - name: Migrate D1 Databases
         env:

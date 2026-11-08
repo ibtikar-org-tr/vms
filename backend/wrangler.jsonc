@@ -99,6 +99,9 @@
     "SMTP_PORT": "587",
     "SMTP_USER": "",
     "SMTP_PASS": "delete-on-deployment",
+    "AUTHDEEP_API_BASE": "https://api.authdeep.com",
+    "AUTHDEEP_TENANT_ID": "0bc3ef3f-d5ed-4281-8e1c-fd6e8519f77a",
+    "AUTHDEEP_MAIL_FROM": "noreply@ibtikar.tr",
     "CRON_TIMEZONE": "Europe/Istanbul",
     "CRON_DRY_RUN": "false"
   },

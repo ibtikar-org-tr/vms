@@ -145,6 +145,10 @@ export interface AppBindings {
   SMTP_PORT: string | number
   SMTP_USER: string
   SMTP_PASS: string
+  AUTHDEEP_API_TOKEN?: string
+  AUTHDEEP_API_BASE?: string
+  AUTHDEEP_TENANT_ID?: string
+  AUTHDEEP_MAIL_FROM?: string
   TELEGRAM_MS: string
   FRONTEND_BASE_URL: string
   /** Comma-separated list of allowed browser origins for CORS. */
