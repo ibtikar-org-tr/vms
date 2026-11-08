@@ -1,6 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
 import { type Context, Hono } from 'hono'
-import { WorkerMailer } from 'worker-mailer'
 import { memberHasTelegramId } from '../repositories/user-info.repository'
 import { getUserByEmail, getUserByMembershipNumber, updateUserPasswordHash } from '../repositories/users.repository'
 import {
@@ -15,6 +14,7 @@ import {
   consumePasswordResetToken,
   isPasswordResetTokenUsed,
 } from '../repositories/password-reset-tokens.repository'
+import { isAppEmailConfigured, sendAppEmail } from '../services/app-email.service'
 import { sendBackendTelegramNotification } from '../services/telegram-notification.service'
 import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
@@ -252,9 +252,8 @@ async function sendRecoveryEmail(
   member: ForgotMemberRow,
   resetUrl: string,
 ): Promise<void> {
-  const smtpPort = Number.parseInt(String(bindings.SMTP_PORT ?? '587'), 10)
-  if (!bindings.SMTP_HOST || !bindings.SMTP_USER || !bindings.SMTP_PASS || !Number.isFinite(smtpPort) || smtpPort <= 0) {
-    throw new Error('SMTP configuration is incomplete.')
+  if (!isAppEmailConfigured(bindings)) {
+    throw new Error('Email configuration is incomplete.')
   }
 
   const memberName = member.ar_name?.trim() || member.en_name?.trim() || member.membership_number
@@ -299,33 +298,12 @@ async function sendRecoveryEmail(
     </div>
   `
 
-  let mailer: Awaited<ReturnType<typeof WorkerMailer.connect>> | null = null
-
-  try {
-    mailer = await WorkerMailer.connect({
-      host: bindings.SMTP_HOST,
-      port: smtpPort,
-      secure: false,
-      startTls: true,
-      credentials: {
-        username: bindings.SMTP_USER,
-        password: bindings.SMTP_PASS,
-      },
-      authType: 'plain',
-    })
-
-    await mailer.send({
-      from: bindings.SMTP_USER,
-      to: member.email,
-      subject: 'استعادة معلومات العضوية',
-      text,
-      html,
-    })
-  } finally {
-    if (mailer) {
-      await mailer.close()
-    }
-  }
+  await sendAppEmail(bindings, {
+    to: member.email,
+    subject: 'استعادة معلومات العضوية',
+    text,
+    html,
+  })
 }
 
 type AuthContext = Context<{ Bindings: AppBindings }>

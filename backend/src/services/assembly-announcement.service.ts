@@ -1,10 +1,10 @@
-import { WorkerMailer } from 'worker-mailer'
 import {
   getAssemblyAnnouncementById,
   insertAssemblyAnnouncementFailure,
   updateAssemblyAnnouncementProgress,
   type AssemblyAnnouncementRecord,
 } from '../repositories/assembly-announcements.repository'
+import { isAppEmailConfigured, sendAppEmail } from './app-email.service'
 import {
   countAssemblyEmailRecipients,
   countAssemblyTelegramRecipients,
@@ -22,7 +22,7 @@ import {
 } from '../templates/assembly-announcement-email'
 import { generateId } from '../utils/id'
 
-const EMAIL_BATCH_SIZE = 3
+const EMAIL_BATCH_SIZE = 10
 const TELEGRAM_BATCH_SIZE = 10
 
 interface TelegramNotifyResponse {
@@ -210,7 +210,7 @@ async function sendEmailBatch(
     })
   }
 
-  if (!bindings.SMTP_HOST || !bindings.SMTP_USER || !bindings.SMTP_PASS) {
+  if (!isAppEmailConfigured(bindings)) {
     return updateAssemblyAnnouncementProgress(bindings.VMS_DB, announcement.id, {
       status: 'failed',
       lastError: 'إعداد البريد غير مكتمل.',
@@ -219,81 +219,52 @@ async function sendEmailBatch(
     })
   }
 
-  const smtpPort = Number.parseInt(String(bindings.SMTP_PORT ?? '587'), 10)
-  let mailer: Awaited<ReturnType<typeof WorkerMailer.connect>> | null = null
   let current = announcement
 
-  try {
-    mailer = await WorkerMailer.connect({
-      host: bindings.SMTP_HOST,
-      port: smtpPort,
-      secure: false,
-      startTls: true,
-      credentials: {
-        username: bindings.SMTP_USER,
-        password: bindings.SMTP_PASS,
-      },
-      authType: 'plain',
-    })
-  } catch (error) {
-    throw new Error(errorMessage(error, 'تعذر الاتصال بخادم البريد.'))
-  }
-
-  try {
-    for (const recipient of batch) {
-      try {
-        await mailer.send({
-          from: bindings.SMTP_USER,
-          to: recipient.email,
-          subject: `${announcement.subject} — تجمّع إبتكار`,
-          text: buildAssemblyAnnouncementEmailText({
-            displayName: recipient.displayName,
-            subject: announcement.subject,
-            body: announcement.body,
-            siteUrl,
-          }),
-          html: buildAssemblyAnnouncementEmailHtml({
-            displayName: recipient.displayName,
-            subject: announcement.subject,
-            body: announcement.body,
-            siteUrl,
-          }),
-        })
-        current =
-          (await updateAssemblyAnnouncementProgress(bindings.VMS_DB, announcement.id, {
-            status: 'sending',
-            emailSent: current.emailSent + 1,
-            emailCursor: current.emailCursor + 1,
-            emailTotal: total,
-          })) ?? current
-      } catch (error) {
-        const message = errorMessage(error)
-        await insertAssemblyAnnouncementFailure(bindings.VMS_DB, {
-          id: generateId(),
-          announcementId: announcement.id,
-          channel: 'email',
-          membershipNumber: recipient.membershipNumber,
-          email: recipient.email,
+  for (const recipient of batch) {
+    try {
+      await sendAppEmail(bindings, {
+        to: recipient.email,
+        subject: `${announcement.subject} — تجمّع إبتكار`,
+        text: buildAssemblyAnnouncementEmailText({
           displayName: recipient.displayName,
-          error: message,
-        })
-        current =
-          (await updateAssemblyAnnouncementProgress(bindings.VMS_DB, announcement.id, {
-            status: 'sending',
-            emailFailed: current.emailFailed + 1,
-            emailCursor: current.emailCursor + 1,
-            emailTotal: total,
-            lastError: message,
-          })) ?? current
-      }
-    }
-  } finally {
-    if (mailer) {
-      try {
-        await mailer.close()
-      } catch {
-        // WorkerMailer can throw while tearing down a broken SMTP socket.
-      }
+          subject: announcement.subject,
+          body: announcement.body,
+          siteUrl,
+        }),
+        html: buildAssemblyAnnouncementEmailHtml({
+          displayName: recipient.displayName,
+          subject: announcement.subject,
+          body: announcement.body,
+          siteUrl,
+        }),
+      })
+      current =
+        (await updateAssemblyAnnouncementProgress(bindings.VMS_DB, announcement.id, {
+          status: 'sending',
+          emailSent: current.emailSent + 1,
+          emailCursor: current.emailCursor + 1,
+          emailTotal: total,
+        })) ?? current
+    } catch (error) {
+      const message = errorMessage(error)
+      await insertAssemblyAnnouncementFailure(bindings.VMS_DB, {
+        id: generateId(),
+        announcementId: announcement.id,
+        channel: 'email',
+        membershipNumber: recipient.membershipNumber,
+        email: recipient.email,
+        displayName: recipient.displayName,
+        error: message,
+      })
+      current =
+        (await updateAssemblyAnnouncementProgress(bindings.VMS_DB, announcement.id, {
+          status: 'sending',
+          emailFailed: current.emailFailed + 1,
+          emailCursor: current.emailCursor + 1,
+          emailTotal: total,
+          lastError: message,
+        })) ?? current
     }
   }
 

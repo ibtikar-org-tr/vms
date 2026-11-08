@@ -8,13 +8,18 @@ export interface EmailConfig {
   pass: string;
 }
 
+const DEFAULT_AUTHDEEP_API_BASE = 'https://api.authdeep.com';
+const DEFAULT_AUTHDEEP_TENANT_ID = '0bc3ef3f-d5ed-4281-8e1c-fd6e8519f77a';
+
 export class EmailService {
   private config: EmailConfig;
+  private env: Environment;
 
   constructor(env: Environment) {
+    this.env = env;
     this.config = {
       host: env.SMTP_HOST,
-      port: parseInt(env.SMTP_PORT),
+      port: parseInt(String(env.SMTP_PORT || '587'), 10),
       user: env.SMTP_USER,
       pass: env.SMTP_PASS,
     };
@@ -22,11 +27,16 @@ export class EmailService {
 
   async sendEmail(to: string, subject: string, text: string, html?: string): Promise<void> {
     try {
+      if (this.env.AUTHDEEP_API_TOKEN?.trim()) {
+        await this.sendViaAuthDeep(to, subject, text, html);
+        return;
+      }
+
       const mailer = await WorkerMailer.connect({
         host: this.config.host,
         port: this.config.port,
-        secure: false,
-        startTls: true,
+        secure: this.config.port === 465,
+        startTls: this.config.port !== 465,
         credentials: {
           username: this.config.user,
           password: this.config.pass,
@@ -41,12 +51,42 @@ export class EmailService {
         text,
         html: html || text,
       };
-      
+
       await mailer.send(emailOptions);
       await mailer.close();
     } catch (error) {
       console.error('Failed to send email:', error);
       throw new Error('Failed to send email');
+    }
+  }
+
+  private async sendViaAuthDeep(to: string, subject: string, text: string, html?: string): Promise<void> {
+    const base = (this.env.AUTHDEEP_API_BASE || DEFAULT_AUTHDEEP_API_BASE).replace(/\/+$/, '');
+    const tenantId = this.env.AUTHDEEP_TENANT_ID?.trim() || DEFAULT_AUTHDEEP_TENANT_ID;
+    const response = await fetch(`${base}/api/gateway/notifications/email`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.env.AUTHDEEP_API_TOKEN!.trim()}`,
+        'Content-Type': 'application/json',
+        'X-AuthDeep-Tenant-ID': tenantId,
+      },
+      body: JSON.stringify({
+        to,
+        subject,
+        text_body: text,
+        html_body: html || text,
+      }),
+    });
+
+    if (!response.ok && response.status !== 202) {
+      let detail = `AuthDeep notification failed (${response.status}).`;
+      try {
+        const payload = (await response.json()) as { error?: string; message?: string };
+        detail = payload.error || payload.message || detail;
+      } catch {
+        // Keep the status fallback when AuthDeep returns a non-JSON body.
+      }
+      throw new Error(detail);
     }
   }
 
