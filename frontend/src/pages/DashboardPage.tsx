@@ -126,6 +126,19 @@ export function DashboardPage() {
     )
   }
 
+  const sidebarItems: SidebarItem[] = isAssemblyLeadership
+    ? [
+        ...SIDEBAR_ITEMS.slice(0, 3),
+        {
+          to: paths.assembly,
+          label: 'إدارة التجمّع',
+          helper: 'الأعضاء والرسائل الجماعية',
+          icon: Megaphone,
+        },
+        ...SIDEBAR_ITEMS.slice(3),
+      ]
+    : SIDEBAR_ITEMS
+
   const handleMobileNavigation = () => {
     setIsMobileSidebarOpen(false)
   }
@@ -215,19 +228,7 @@ export function DashboardPage() {
             </div>
 
             <nav className="space-y-1">
-              {(isAssemblyLeadership
-                ? ([
-                    ...SIDEBAR_ITEMS.slice(0, 3),
-                    {
-                      to: paths.assembly,
-                      label: 'إدارة التجمّع',
-                      helper: 'الأعضاء والرسائل الجماعية',
-                      icon: Megaphone,
-                    },
-                    ...SIDEBAR_ITEMS.slice(3),
-                  ] satisfies SidebarItem[])
-                : SIDEBAR_ITEMS
-              ).map((item) => {
+              {sidebarItems.map((item) => {
                 const IconComponent = item.icon
                 return (
                   <NavLink
