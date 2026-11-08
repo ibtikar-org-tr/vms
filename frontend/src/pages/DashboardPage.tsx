@@ -216,7 +216,7 @@ export function DashboardPage() {
 
             <nav className="space-y-1">
               {(isAssemblyLeadership
-                ? [
+                ? ([
                     ...SIDEBAR_ITEMS.slice(0, 3),
                     {
                       to: paths.assembly,
@@ -225,7 +225,7 @@ export function DashboardPage() {
                       icon: Megaphone,
                     },
                     ...SIDEBAR_ITEMS.slice(3),
-                  ]
+                  ] satisfies SidebarItem[])
                 : SIDEBAR_ITEMS
               ).map((item) => {
                 const IconComponent = item.icon
