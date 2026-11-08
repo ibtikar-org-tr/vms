@@ -50,7 +50,7 @@ jobs:
           | .vars.AUTHDEEP_MAIL_FROM = (if $authdeepMailFrom == "" then .vars.AUTHDEEP_MAIL_FROM else $authdeepMailFrom end)
           | .services[0].service = $membershipMsName
           | .account_id = $accountId
-          | del(.vars.SMTP_PASS, .vars.TELEGRAM_BOT_TOKEN, .vars.INTERNAL_SECRET, .vars.DEEPSEEK_API_KEY, .vars.AUTHDEEP_API_TOKEN)'
+          | del(.vars.SMTP_PASS, .vars.TELEGRAM_BOT_TOKEN, .vars.INTERNAL_SECRET, .vars.DEEPSEEK_API_KEY, .vars.AUTHDEEP_API_TOKEN, .vars.AUTHDEEP_HMAC_SECRET)'
 
           jq \
             --arg dbid0 "${{ vars.TELEGRAM_DB_ID }}" \
@@ -88,5 +88,8 @@ jobs:
           echo "${{ secrets.DEEPSEEK_API_KEY }}" | wrangler secret put DEEPSEEK_API_KEY --config wrangler.local.jsonc --name telegram-ms-dev
           if [ -n "${{ secrets.AUTHDEEP_API_TOKEN }}" ]; then
             echo "${{ secrets.AUTHDEEP_API_TOKEN }}" | wrangler secret put AUTHDEEP_API_TOKEN --config wrangler.local.jsonc --name telegram-ms-dev
+          fi
+          if [ -n "${{ secrets.AUTHDEEP_HMAC_SECRET }}" ]; then
+            echo "${{ secrets.AUTHDEEP_HMAC_SECRET }}" | wrangler secret put AUTHDEEP_HMAC_SECRET --config wrangler.local.jsonc --name telegram-ms-dev
           fi
 

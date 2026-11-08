@@ -15,12 +15,47 @@ function authDeepToken(bindings: AppBindings) {
   return bindings.AUTHDEEP_API_TOKEN?.trim() || ''
 }
 
+function authDeepHmacSecret(bindings: AppBindings) {
+  return bindings.AUTHDEEP_HMAC_SECRET?.trim() || ''
+}
+
 function authDeepApiBase(bindings: AppBindings) {
   return (bindings.AUTHDEEP_API_BASE || DEFAULT_AUTHDEEP_API_BASE).replace(/\/+$/, '')
 }
 
 function authDeepTenantId(bindings: AppBindings) {
   return bindings.AUTHDEEP_TENANT_ID?.trim() || DEFAULT_AUTHDEEP_TENANT_ID
+}
+
+const AUTHDEEP_NOTIFY_PATH = '/api/gateway/notifications/email'
+
+function toHex(bytes: ArrayBuffer) {
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return toHex(digest)
+}
+
+async function hmacSha256Hex(secret: string, payload: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
+  return toHex(signature)
+}
+
+async function authDeepHmacHeader(method: string, path: string, body: string, secret: string) {
+  const timestamp = Math.floor(Date.now() / 1000)
+  const bodyHash = await sha256Hex(body)
+  const payload = `${method.toUpperCase()}\n${path}\n${timestamp}\n${bodyHash}`
+  const signature = await hmacSha256Hex(secret, payload)
+  return `t=${timestamp},v1=${signature}`
 }
 
 export function isAppEmailConfigured(bindings: AppBindings) {
@@ -52,7 +87,8 @@ async function readErrorMessage(response: Response) {
 
 async function sendViaAuthDeep(bindings: AppBindings, message: AppEmailMessage): Promise<void> {
   const token = authDeepToken(bindings)
-  const url = `${authDeepApiBase(bindings)}/api/gateway/notifications/email`
+  const hmacSecret = authDeepHmacSecret(bindings)
+  const url = `${authDeepApiBase(bindings)}${AUTHDEEP_NOTIFY_PATH}`
   const body = JSON.stringify({
     to: message.to,
     subject: message.subject,
@@ -60,13 +96,23 @@ async function sendViaAuthDeep(bindings: AppBindings, message: AppEmailMessage):
     html_body: message.html?.trim() || htmlFromText(message.text),
   })
 
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'X-API-Key': token,
+    'X-AuthDeep-Tenant-ID': authDeepTenantId(bindings),
+  }
+
+  if (token.startsWith('sak_')) {
+    if (!hmacSecret) {
+      throw new Error('AUTHDEEP_HMAC_SECRET is required for AuthDeep service API keys.')
+    }
+    headers['X-HMAC-Signature'] = await authDeepHmacHeader('POST', AUTHDEEP_NOTIFY_PATH, body, hmacSecret)
+  }
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'X-AuthDeep-Tenant-ID': authDeepTenantId(bindings),
-    },
+    headers,
     body,
   })
 
