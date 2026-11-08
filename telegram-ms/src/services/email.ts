@@ -10,6 +10,36 @@ export interface EmailConfig {
 
 const DEFAULT_AUTHDEEP_API_BASE = 'https://api.authdeep.com';
 const DEFAULT_AUTHDEEP_TENANT_ID = '0bc3ef3f-d5ed-4281-8e1c-fd6e8519f77a';
+const AUTHDEEP_NOTIFY_PATH = '/api/gateway/notifications/email';
+
+function toHex(bytes: ArrayBuffer) {
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return toHex(digest);
+}
+
+async function hmacSha256Hex(secret: string, payload: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  return toHex(signature);
+}
+
+async function authDeepHmacHeader(method: string, path: string, body: string, secret: string) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const bodyHash = await sha256Hex(body);
+  const payload = `${method.toUpperCase()}\n${path}\n${timestamp}\n${bodyHash}`;
+  const signature = await hmacSha256Hex(secret, payload);
+  return `t=${timestamp},v1=${signature}`;
+}
 
 export class EmailService {
   private config: EmailConfig;
@@ -61,21 +91,34 @@ export class EmailService {
   }
 
   private async sendViaAuthDeep(to: string, subject: string, text: string, html?: string): Promise<void> {
+    const token = this.env.AUTHDEEP_API_TOKEN!.trim();
+    const hmacSecret = this.env.AUTHDEEP_HMAC_SECRET?.trim() || '';
     const base = (this.env.AUTHDEEP_API_BASE || DEFAULT_AUTHDEEP_API_BASE).replace(/\/+$/, '');
     const tenantId = this.env.AUTHDEEP_TENANT_ID?.trim() || DEFAULT_AUTHDEEP_TENANT_ID;
-    const response = await fetch(`${base}/api/gateway/notifications/email`, {
+    const body = JSON.stringify({
+      to,
+      subject,
+      text_body: text,
+      html_body: html || text,
+    });
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-API-Key': token,
+      'X-AuthDeep-Tenant-ID': tenantId,
+    };
+
+    if (token.startsWith('sak_')) {
+      if (!hmacSecret) {
+        throw new Error('AUTHDEEP_HMAC_SECRET is required for AuthDeep service API keys.');
+      }
+      headers['X-HMAC-Signature'] = await authDeepHmacHeader('POST', AUTHDEEP_NOTIFY_PATH, body, hmacSecret);
+    }
+
+    const response = await fetch(`${base}${AUTHDEEP_NOTIFY_PATH}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.env.AUTHDEEP_API_TOKEN!.trim()}`,
-        'Content-Type': 'application/json',
-        'X-AuthDeep-Tenant-ID': tenantId,
-      },
-      body: JSON.stringify({
-        to,
-        subject,
-        text_body: text,
-        html_body: html || text,
-      }),
+      headers,
+      body,
     });
 
     if (!response.ok && response.status !== 202) {

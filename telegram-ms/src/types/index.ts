@@ -11,6 +11,7 @@ export interface Environment {
   SMTP_USER: string;
   SMTP_PASS: string;
   AUTHDEEP_API_TOKEN?: string;
+  AUTHDEEP_HMAC_SECRET?: string;
   AUTHDEEP_API_BASE?: string;
   AUTHDEEP_TENANT_ID?: string;
   AUTHDEEP_MAIL_FROM?: string;

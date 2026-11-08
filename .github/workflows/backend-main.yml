@@ -56,7 +56,7 @@ jobs:
           | .queues.producers[0].queue = (if $queueName == "" then .queues.producers[0].queue else $queueName end)
           | .queues.consumers[0].queue = (if $queueName == "" then .queues.consumers[0].queue else $queueName end)
           | .queues.consumers[0].dead_letter_queue = (if $dlqName == "" then .queues.consumers[0].dead_letter_queue else $dlqName end)
-          | del(.vars.INTERNAL_SECRET, .vars.SMTP_PASS, .vars.JWT_SECRET, .vars.AUTHDEEP_API_TOKEN)'
+          | del(.vars.INTERNAL_SECRET, .vars.SMTP_PASS, .vars.JWT_SECRET, .vars.AUTHDEEP_API_TOKEN, .vars.AUTHDEEP_HMAC_SECRET)'
 
           jq \
             --arg dbid0 "${{ vars.MEMBERS_DB_ID }}" \
@@ -115,6 +115,9 @@ jobs:
           echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put INTERNAL_SECRET --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
           if [ -n "${{ secrets.AUTHDEEP_API_TOKEN }}" ]; then
             echo "${{ secrets.AUTHDEEP_API_TOKEN }}" | wrangler secret put AUTHDEEP_API_TOKEN --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
+          fi
+          if [ -n "${{ secrets.AUTHDEEP_HMAC_SECRET }}" ]; then
+            echo "${{ secrets.AUTHDEEP_HMAC_SECRET }}" | wrangler secret put AUTHDEEP_HMAC_SECRET --config wrangler.local.jsonc --name ${{ vars.THIS_APP_NAME_BE }}
           fi
 
       - name: Migrate D1 Databases
