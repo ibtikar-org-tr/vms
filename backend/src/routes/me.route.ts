@@ -5,6 +5,7 @@ import {
 } from '../repositories/vms-member-title.repository'
 import type { AppEnv } from '../types/hono'
 import { getActorUser } from '../utils/actor'
+import { isAssemblyLeadership } from '../utils/assembly-leadership'
 import { resolveMemberDisplayTitle } from '../utils/member-display-title'
 
 export const meRoute = new Hono<AppEnv>()
@@ -17,7 +18,10 @@ meRoute.get('/me/display-title', async (c) => {
       listMemberAcceptedPositions(c.env.VMS_DB, actor.membershipNumber),
     ])
 
-    return c.json(resolveMemberDisplayTitle(affiliations, positions, actor.role))
+    return c.json({
+      ...resolveMemberDisplayTitle(affiliations, positions, actor.role),
+      isAssemblyLeadership: await isAssemblyLeadership(c.env.VMS_DB, actor),
+    })
   } catch (error) {
     console.error('Failed to resolve member display title', error)
     return c.json({ error: 'Could not resolve member title.' }, 500)

@@ -178,6 +178,24 @@ export async function listProjects(db: D1DatabaseLike) {
   return listProjectRows(db)
 }
 
+export async function listAllProjectsPublic(db: D1DatabaseLike, options?: { activeOnly?: boolean }) {
+  const activeOnly = options?.activeOnly === true
+  const result = await db
+    .prepare(
+      `SELECT id, created_at, updated_at, name, description, parent_project_id, owner, telegram_group_id, status
+       FROM projects
+       ${activeOnly ? "WHERE status = 'active'" : ''}
+       ORDER BY created_at DESC`,
+    )
+    .bind()
+    .all<ProjectRow>()
+
+  return result.results.map(mapProjectRow).map((project) => ({
+    ...toPublicProjectRecord(project),
+    status: project.status,
+  }))
+}
+
 export async function listProjectsForMember(db: D1DatabaseLike, membershipNumber: string) {
   const projects = await listProjects(db)
   const directVisibleIds = await getDirectVisibleProjectIds(db, membershipNumber)
