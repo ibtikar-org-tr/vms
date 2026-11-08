@@ -249,6 +249,48 @@ export interface VmsLeaderboardViewer {
   points: number
 }
 
+export interface AssemblyMember {
+  membershipNumber: string
+  email: string
+  role: string
+  createdAt: string
+  pointBalance: number
+  emailVerified: boolean
+  enName: string | null
+  arName: string | null
+  phoneNumber: string | null
+  sex: string | null
+  country: string | null
+  region: string | null
+  city: string | null
+  school: string | null
+  fieldOfStudy: string | null
+  telegramId: string | null
+  telegramUsername: string | null
+  interestInVolunteering: string | null
+  displayName: string
+  volunteeringLabel: string
+  isVolunteer: boolean
+  projects: string[]
+}
+
+export interface AssemblyAnnouncement {
+  id: string
+  createdAt: string
+  createdBy: string
+  subject: string
+  body: string
+  sendEmail: boolean
+  sendTelegram: boolean
+  status: 'queued' | 'sending' | 'sent' | 'partial' | 'failed'
+  emailSent: number
+  emailFailed: number
+  emailCursor: number
+  telegramSent: number
+  telegramFailed: number
+  lastError: string | null
+}
+
 export interface VmsProjectNote {
   id: string
   createdAt: string

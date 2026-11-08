@@ -7,6 +7,7 @@ import {
   deleteProjectById,
   getDirectProjectByIdForMember,
   getProjectById,
+  listAllProjectsPublic,
   listDirectProjectsForMember,
   listProjectsForMember,
   listProjectsForMemberWithRedactedNames,
@@ -15,7 +16,8 @@ import {
 import { getProjectMember, upsertProjectMember } from '../repositories/vms-project-members.repository'
 import { createProjectSchema, projectParamsSchema, updateProjectSchema } from '../schemas/vms-project.schema'
 import type { AppEnv } from '../types/hono'
-import { getActorMembershipNumber } from '../utils/actor'
+import { getActorMembershipNumber, getActorUser } from '../utils/actor'
+import { isAssemblyLeadership } from '../utils/assembly-leadership'
 import { canManageProject } from '../utils/project-access'
 
 export const vmsProjectsRoute = new Hono<AppEnv>()
@@ -23,9 +25,12 @@ export const vmsProjectsRoute = new Hono<AppEnv>()
 vmsProjectsRoute.get('/projects', async (c) => {
   try {
     const membershipNumber = getActorMembershipNumber(c)
+    const leadership = await isAssemblyLeadership(c.env.VMS_DB, getActorUser(c))
 
     // Full member-visible tree including completed/archived (used by sub-projects pages).
-    const projects = await listProjectsForMember(c.env.VMS_DB, membershipNumber)
+    const projects = leadership
+      ? await listAllProjectsPublic(c.env.VMS_DB)
+      : await listProjectsForMember(c.env.VMS_DB, membershipNumber)
     return c.json({ projects })
   } catch (error) {
     console.error('Failed to list projects', error)
@@ -36,11 +41,14 @@ vmsProjectsRoute.get('/projects', async (c) => {
 vmsProjectsRoute.get('/projects/direct', async (c) => {
   try {
     const membershipNumber = getActorMembershipNumber(c)
+    const leadership = await isAssemblyLeadership(c.env.VMS_DB, getActorUser(c))
 
     // Main projects list: active only; use GET /projects for sub-project trees that need inactive ones.
-    const projects = await listDirectProjectsForMember(c.env.VMS_DB, membershipNumber, {
-      activeOnly: true,
-    })
+    const projects = leadership
+      ? await listAllProjectsPublic(c.env.VMS_DB, { activeOnly: true })
+      : await listDirectProjectsForMember(c.env.VMS_DB, membershipNumber, {
+          activeOnly: true,
+        })
     const displayNameMap = await getUserDisplayNamesByMembershipNumbers(
       c.env.MEMBERS_DB,
       projects.map((project) => project.owner),
@@ -61,10 +69,13 @@ vmsProjectsRoute.get('/projects/direct', async (c) => {
 vmsProjectsRoute.get('/projects/platform', async (c) => {
   try {
     const membershipNumber = getActorMembershipNumber(c)
+    const leadership = await isAssemblyLeadership(c.env.VMS_DB, getActorUser(c))
 
-    const projects = await listProjectsForMemberWithRedactedNames(c.env.VMS_DB, membershipNumber, {
-      activeOnly: true,
-    })
+    const projects = leadership
+      ? await listAllProjectsPublic(c.env.VMS_DB, { activeOnly: true })
+      : await listProjectsForMemberWithRedactedNames(c.env.VMS_DB, membershipNumber, {
+          activeOnly: true,
+        })
     const displayNameMap = await getUserDisplayNamesByMembershipNumbers(
       c.env.MEMBERS_DB,
       projects.map((project) => project.owner),
@@ -86,8 +97,11 @@ vmsProjectsRoute.get('/projects/:id', zValidator('param', projectParamsSchema), 
   try {
     const { id } = c.req.valid('param')
     const membershipNumber = getActorMembershipNumber(c)
+    const leadership = await isAssemblyLeadership(c.env.VMS_DB, getActorUser(c))
 
-    const project = await getDirectProjectByIdForMember(c.env.VMS_DB, id, membershipNumber)
+    const project = leadership
+      ? await getProjectById(c.env.VMS_DB, id)
+      : await getDirectProjectByIdForMember(c.env.VMS_DB, id, membershipNumber)
 
     if (!project) {
       return c.json({ error: 'Project not found.' }, 404)
