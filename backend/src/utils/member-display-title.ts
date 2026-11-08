@@ -22,7 +22,7 @@ type TitleCandidate = MemberDisplayTitle & {
 }
 
 export function isBoardProject(projectName: string) {
-  return /مجلس\s*ال?ا[إا]دارة|board of directors/i.test(projectName)
+  return /مجلس\s*(?:ال)?[إا]دارة|board of directors/i.test(projectName)
 }
 
 function chairBoost(title: string) {
