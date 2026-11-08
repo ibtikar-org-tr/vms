@@ -55,6 +55,25 @@
       "remote": true
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "ASSEMBLY_ANNOUNCEMENT_QUEUE",
+        "queue": "membership-app-backend-assembly-announcements"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "membership-app-backend-assembly-announcements",
+        "dead_letter_queue": "membership-app-backend-assembly-announcements-dlq",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 8,
+        "max_concurrency": 1,
+        "retry_delay": 15
+      }
+    ]
+  },
   "durable_objects": {
     "bindings": [
       {

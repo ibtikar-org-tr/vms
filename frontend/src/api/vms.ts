@@ -22,6 +22,7 @@ import type {
   VmsTaskSubtask,
   AssemblyMember,
   AssemblyAnnouncement,
+  AssemblyAnnouncementFailure,
 } from '../types/vms'
 import type {
   ForgotPasswordResponse,
@@ -221,6 +222,7 @@ export function createAssemblyAnnouncement(payload: {
   return postJson<
     {
       announcement: AssemblyAnnouncement
+      queued: boolean
       needsContinue: boolean
       audience: { email: number; telegram: number }
     },
@@ -228,11 +230,19 @@ export function createAssemblyAnnouncement(payload: {
   >('/assembly/announcements', payload)
 }
 
+export function fetchAssemblyAnnouncement(id: string) {
+  return fetchJson<{
+    announcement: AssemblyAnnouncement
+    failures: AssemblyAnnouncementFailure[]
+    needsContinue: boolean
+  }>(`/assembly/announcements/${encodeURIComponent(id)}`, { cache: false })
+}
+
 export function continueAssemblyAnnouncement(id: string) {
-  return postJson<{ announcement: AssemblyAnnouncement; needsContinue: boolean }, Record<string, never>>(
-    `/assembly/announcements/${encodeURIComponent(id)}/continue`,
-    {},
-  )
+  return postJson<
+    { announcement: AssemblyAnnouncement; queued: boolean; needsContinue: boolean },
+    Record<string, never>
+  >(`/assembly/announcements/${encodeURIComponent(id)}/continue`, {})
 }
 
 export function fetchProfile(membershipNumber: string) {

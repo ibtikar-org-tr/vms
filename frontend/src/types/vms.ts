@@ -288,7 +288,20 @@ export interface AssemblyAnnouncement {
   emailCursor: number
   telegramSent: number
   telegramFailed: number
+  emailTotal: number
+  telegramTotal: number
   lastError: string | null
+}
+
+export interface AssemblyAnnouncementFailure {
+  id: string
+  createdAt: string
+  announcementId: string
+  channel: 'email' | 'telegram'
+  membershipNumber: string | null
+  email: string | null
+  displayName: string | null
+  error: string | null
 }
 
 export interface VmsProjectNote {

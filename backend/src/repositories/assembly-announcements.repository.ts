@@ -1,6 +1,7 @@
 import type { D1DatabaseLike } from '../types/bindings'
 
 export type AssemblyAnnouncementStatus = 'queued' | 'sending' | 'sent' | 'partial' | 'failed'
+export type AssemblyAnnouncementChannel = 'email' | 'telegram'
 
 export interface AssemblyAnnouncementRecord {
   id: string
@@ -17,7 +18,20 @@ export interface AssemblyAnnouncementRecord {
   emailCursor: number
   telegramSent: number
   telegramFailed: number
+  emailTotal: number
+  telegramTotal: number
   lastError: string | null
+}
+
+export interface AssemblyAnnouncementFailureRecord {
+  id: string
+  createdAt: string
+  announcementId: string
+  channel: AssemblyAnnouncementChannel
+  membershipNumber: string | null
+  email: string | null
+  displayName: string | null
+  error: string | null
 }
 
 interface AnnouncementRow {
@@ -35,7 +49,20 @@ interface AnnouncementRow {
   email_cursor: number
   telegram_sent: number
   telegram_failed: number
+  email_total?: number | null
+  telegram_total?: number | null
   last_error: string | null
+}
+
+interface FailureRow {
+  id: string
+  created_at: string
+  announcement_id: string
+  channel: string
+  membership_number: string | null
+  email: string | null
+  display_name: string | null
+  error: string | null
 }
 
 function mapAnnouncement(row: AnnouncementRow): AssemblyAnnouncementRecord {
@@ -54,7 +81,22 @@ function mapAnnouncement(row: AnnouncementRow): AssemblyAnnouncementRecord {
     emailCursor: row.email_cursor,
     telegramSent: row.telegram_sent,
     telegramFailed: row.telegram_failed,
+    emailTotal: Number(row.email_total ?? 0),
+    telegramTotal: Number(row.telegram_total ?? 0),
     lastError: row.last_error,
+  }
+}
+
+function mapFailure(row: FailureRow): AssemblyAnnouncementFailureRecord {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    announcementId: row.announcement_id,
+    channel: row.channel === 'telegram' ? 'telegram' : 'email',
+    membershipNumber: row.membership_number,
+    email: row.email,
+    displayName: row.display_name,
+    error: row.error,
   }
 }
 
@@ -67,13 +109,15 @@ export async function createAssemblyAnnouncement(
     body: string
     sendEmail: boolean
     sendTelegram: boolean
+    emailTotal: number
+    telegramTotal: number
   },
 ) {
   await db
     .prepare(
       `INSERT INTO assembly_announcements (
-         id, created_by, subject, body, send_email, send_telegram, status
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         id, created_by, subject, body, send_email, send_telegram, status, email_total, telegram_total
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       input.id,
@@ -83,6 +127,8 @@ export async function createAssemblyAnnouncement(
       input.sendEmail ? 1 : 0,
       input.sendTelegram ? 1 : 0,
       'queued',
+      input.emailTotal,
+      input.telegramTotal,
     )
     .run()
 
@@ -121,6 +167,8 @@ export async function updateAssemblyAnnouncementProgress(
     emailCursor: number
     telegramSent: number
     telegramFailed: number
+    emailTotal: number
+    telegramTotal: number
     lastError: string | null
   }>,
 ) {
@@ -151,6 +199,14 @@ export async function updateAssemblyAnnouncementProgress(
     updates.push('telegram_failed = ?')
     values.push(patch.telegramFailed)
   }
+  if (patch.emailTotal !== undefined) {
+    updates.push('email_total = ?')
+    values.push(patch.emailTotal)
+  }
+  if (patch.telegramTotal !== undefined) {
+    updates.push('telegram_total = ?')
+    values.push(patch.telegramTotal)
+  }
   if (patch.lastError !== undefined) {
     updates.push('last_error = ?')
     values.push(patch.lastError)
@@ -168,7 +224,55 @@ export async function updateAssemblyAnnouncementProgress(
   return getAssemblyAnnouncementById(db, id)
 }
 
+export async function insertAssemblyAnnouncementFailure(
+  db: D1DatabaseLike,
+  input: {
+    id: string
+    announcementId: string
+    channel: AssemblyAnnouncementChannel
+    membershipNumber?: string | null
+    email?: string | null
+    displayName?: string | null
+    error?: string | null
+  },
+) {
+  await db
+    .prepare(
+      `INSERT INTO assembly_announcement_failures (
+         id, announcement_id, channel, membership_number, email, display_name, error
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      input.id,
+      input.announcementId,
+      input.channel,
+      input.membershipNumber ?? null,
+      input.email ?? null,
+      input.displayName ?? null,
+      input.error ?? null,
+    )
+    .run()
+}
+
+export async function listAssemblyAnnouncementFailures(db: D1DatabaseLike, announcementId: string) {
+  const result = await db
+    .prepare(
+      `SELECT * FROM assembly_announcement_failures
+       WHERE announcement_id = ?
+       ORDER BY created_at ASC`,
+    )
+    .bind(announcementId)
+    .all<FailureRow>()
+
+  return result.results.map(mapFailure)
+}
+
 export function isMissingAnnouncementsTable(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return /no such table: assembly_announcements/i.test(message)
+}
+
+export function isMissingAnnouncementFailuresTable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /no such table: assembly_announcement_failures|no such column: email_total/i.test(message)
 }

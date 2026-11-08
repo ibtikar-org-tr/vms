@@ -328,6 +328,8 @@ CREATE TABLE IF NOT EXISTS assembly_announcements (
     email_cursor INTEGER NOT NULL DEFAULT 0,
     telegram_sent INTEGER NOT NULL DEFAULT 0,
     telegram_failed INTEGER NOT NULL DEFAULT 0,
+    email_total INTEGER NOT NULL DEFAULT 0,
+    telegram_total INTEGER NOT NULL DEFAULT 0,
     last_error TEXT
 );
 
@@ -337,3 +339,18 @@ BEGIN
 END;
 
 CREATE INDEX IF NOT EXISTS idx_assembly_announcements_created_at ON assembly_announcements(created_at);
+
+CREATE TABLE IF NOT EXISTS assembly_announcement_failures (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    announcement_id TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    membership_number TEXT,
+    email TEXT,
+    display_name TEXT,
+    error TEXT,
+    FOREIGN KEY (announcement_id) REFERENCES assembly_announcements(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assembly_announcement_failures_announcement
+    ON assembly_announcement_failures(announcement_id);

@@ -105,6 +105,31 @@ export interface VectorizeBindingLike {
   ): Promise<{ matches: VectorizeMatchLike[] }>
 }
 
+export interface QueueSendOptions {
+  delaySeconds?: number
+}
+
+export interface QueueProducerLike<T = unknown> {
+  send(body: T, options?: QueueSendOptions): Promise<void>
+}
+
+export interface QueueMessageLike<T = unknown> {
+  id: string
+  body: T
+  attempts?: number
+  ack(): void
+  retry(options?: QueueSendOptions): void
+}
+
+export interface QueueMessageBatchLike<T = unknown> {
+  queue: string
+  messages: QueueMessageLike<T>[]
+}
+
+export interface AssemblyAnnouncementQueueMessage {
+  announcementId: string
+}
+
 export interface AppBindings {
   MEMBERS_DB: D1DatabaseLike
   VMS_DB: D1DatabaseLike
@@ -114,6 +139,7 @@ export interface AppBindings {
   AI?: CloudflareAiBindingLike
   VMS_NOTES_VECTORIZE?: VectorizeBindingLike
   TELEGRAM_MS_SERVICE?: Fetcher
+  ASSEMBLY_ANNOUNCEMENT_QUEUE?: QueueProducerLike<AssemblyAnnouncementQueueMessage>
   MEMBERSHIP_NUMBER_PREFIX: string
   SMTP_HOST: string
   SMTP_PORT: string | number
