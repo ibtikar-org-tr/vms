@@ -168,6 +168,52 @@ export async function listAssemblyMembersForExport(
   return result.results.map(mapMemberRow)
 }
 
+function mapEmailRecipient(row: {
+  membershipNumber: string
+  email: string
+  arName: string | null
+  enName: string | null
+}): AssemblyEmailRecipient {
+  return {
+    membershipNumber: row.membershipNumber,
+    email: row.email.trim().toLowerCase(),
+    displayName: row.arName?.trim() || row.enName?.trim() || 'عضو تجمّع إبتكار',
+  }
+}
+
+export async function countAssemblyEmailRecipients(db: D1DatabaseLike) {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS total
+       FROM users
+       WHERE email IS NOT NULL AND trim(email) <> ''`,
+    )
+    .bind()
+    .first<{ total: number }>()
+
+  return Number(row?.total ?? 0)
+}
+
+export async function listAssemblyEmailRecipientsPage(db: D1DatabaseLike, offset: number, limit: number) {
+  const result = await db
+    .prepare(
+      `SELECT
+         u.membership_number AS membershipNumber,
+         u.email AS email,
+         ui.ar_name AS arName,
+         ui.en_name AS enName
+       FROM users u
+       LEFT JOIN user_info ui ON ui.membership_number = u.membership_number
+       WHERE u.email IS NOT NULL AND trim(u.email) <> ''
+       ORDER BY u.membership_number
+       LIMIT ? OFFSET ?`,
+    )
+    .bind(Math.max(1, Math.min(limit, 20)), Math.max(0, offset))
+    .all<{ membershipNumber: string; email: string; arName: string | null; enName: string | null }>()
+
+  return result.results.map(mapEmailRecipient)
+}
+
 export async function listAssemblyEmailRecipients(db: D1DatabaseLike) {
   const result = await db
     .prepare(
@@ -181,23 +227,63 @@ export async function listAssemblyEmailRecipients(db: D1DatabaseLike) {
        WHERE u.email IS NOT NULL AND trim(u.email) <> ''
        ORDER BY u.membership_number`,
     )
+    .bind()
     .all<{ membershipNumber: string; email: string; arName: string | null; enName: string | null }>()
+
+  return result.results.map(mapEmailRecipient)
+}
+
+export async function countAssemblyTelegramRecipients(db: D1DatabaseLike) {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS total
+       FROM user_info
+       WHERE telegram_id IS NOT NULL AND trim(telegram_id) <> ''`,
+    )
+    .bind()
+    .first<{ total: number }>()
+
+  return Number(row?.total ?? 0)
+}
+
+export async function listAssemblyMemberContacts(db: D1DatabaseLike, membershipNumbers: string[]) {
+  const uniqueNumbers = [...new Set(membershipNumbers.map((value) => value.trim()).filter(Boolean))]
+  if (uniqueNumbers.length === 0) {
+    return [] as AssemblyEmailRecipient[]
+  }
+
+  const placeholders = uniqueNumbers.map(() => '?').join(', ')
+  const result = await db
+    .prepare(
+      `SELECT
+         u.membership_number AS membershipNumber,
+         u.email AS email,
+         ui.ar_name AS arName,
+         ui.en_name AS enName
+       FROM users u
+       LEFT JOIN user_info ui ON ui.membership_number = u.membership_number
+       WHERE u.membership_number IN (${placeholders})`,
+    )
+    .bind(...uniqueNumbers)
+    .all<{ membershipNumber: string; email: string | null; arName: string | null; enName: string | null }>()
 
   return result.results.map((row) => ({
     membershipNumber: row.membershipNumber,
-    email: row.email.trim().toLowerCase(),
-    displayName: row.arName?.trim() || row.enName?.trim() || 'عضو تجمّع إبتكار',
-  })) satisfies AssemblyEmailRecipient[]
+    email: row.email?.trim().toLowerCase() || '',
+    displayName: row.arName?.trim() || row.enName?.trim() || row.membershipNumber,
+  }))
 }
 
-export async function listAssemblyTelegramMembershipNumbers(db: D1DatabaseLike) {
+export async function listAssemblyTelegramMembershipNumbersPage(db: D1DatabaseLike, offset: number, limit: number) {
   const result = await db
     .prepare(
       `SELECT membership_number AS membershipNumber
        FROM user_info
        WHERE telegram_id IS NOT NULL AND trim(telegram_id) <> ''
-       ORDER BY membership_number`,
+       ORDER BY membership_number
+       LIMIT ? OFFSET ?`,
     )
+    .bind(Math.max(1, Math.min(limit, 30)), Math.max(0, offset))
     .all<{ membershipNumber: string }>()
 
   return result.results.map((row) => row.membershipNumber)
@@ -214,6 +300,7 @@ export async function countAssemblyDirectory(db: D1DatabaseLike) {
        LEFT JOIN user_info ui ON ui.membership_number = u.membership_number
        LEFT JOIN user_registration_info uri ON uri.membership_number = u.membership_number`,
     )
+    .bind()
     .first<{ totalMembers: number; telegramLinked: number | null; volunteers: number | null }>()
 
   return {

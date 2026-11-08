@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, Mail, Megaphone, Search, Send, Users } from 'lucide-react'
+import { Copy, Download, Mail, Megaphone, Search, Send, Users } from 'lucide-react'
 import {
   continueAssemblyAnnouncement,
   createAssemblyAnnouncement,
   downloadAssemblyMembersCsv,
   fetchAssemblyAccess,
+  fetchAssemblyAnnouncement,
   fetchAssemblyAnnouncements,
   fetchAssemblyMembers,
 } from '../../api/vms'
-import type { AssemblyAnnouncement, AssemblyMember } from '../../types/vms'
+import type { AssemblyAnnouncement, AssemblyAnnouncementFailure, AssemblyMember } from '../../types/vms'
 import { getStoredUser, isPlatformAdmin } from '../../utils/auth'
 
 type TabKey = 'members' | 'broadcast'
@@ -18,6 +19,43 @@ function announcementStatusLabel(status: AssemblyAnnouncement['status']) {
   if (status === 'partial') return 'أُرسلت جزئياً'
   if (status === 'sending' || status === 'queued') return 'جارٍ الإرسال'
   return 'فشلت'
+}
+
+function announcementDone(status: AssemblyAnnouncement['status']) {
+  return status === 'sent' || status === 'partial' || status === 'failed'
+}
+
+function announcementProgress(item: AssemblyAnnouncement) {
+  const telegramTotal = item.sendTelegram ? item.telegramTotal : 0
+  const emailTotal = item.sendEmail ? item.emailTotal : 0
+  const total = telegramTotal + emailTotal
+  const done =
+    (item.sendTelegram ? item.telegramSent + item.telegramFailed : 0) +
+    (item.sendEmail ? item.emailSent + item.emailFailed : 0)
+  const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : item.status === 'queued' ? 2 : 0
+  return { total, done, percent }
+}
+
+function channelLabel(channel: AssemblyAnnouncementFailure['channel']) {
+  return channel === 'telegram' ? 'تيليغرام' : 'بريد'
+}
+
+function downloadFailuresCsv(failures: AssemblyAnnouncementFailure[]) {
+  const header = ['القناة', 'رقم العضوية', 'الاسم', 'البريد', 'السبب']
+  const rows = failures.map((item) =>
+    [channelLabel(item.channel), item.membershipNumber ?? '', item.displayName ?? '', item.email ?? '', item.error ?? '']
+      .map((value) => `"${value.replace(/"/g, '""')}"`)
+      .join(','),
+  )
+  const csv = `\uFEFF${[header.join(','), ...rows].join('\n')}`
+  const objectUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = 'assembly-announcement-failures.csv'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(objectUrl)
 }
 
 export function DashboardAssemblyPage() {
@@ -47,6 +85,9 @@ export function DashboardAssemblyPage() {
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
   const [announcements, setAnnouncements] = useState<AssemblyAnnouncement[]>([])
   const [progress, setProgress] = useState<AssemblyAnnouncement | null>(null)
+  const [failures, setFailures] = useState<AssemblyAnnouncementFailure[]>([])
+  const [watchingId, setWatchingId] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
 
   const pageSize = 40
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -113,6 +154,91 @@ export function DashboardAssemblyPage() {
     }
   }, [isLeadership, loadAnnouncements, tab])
 
+  async function copyText(label: string, value: string) {
+    await navigator.clipboard.writeText(value)
+    setCopied(label)
+    window.setTimeout(() => setCopied(null), 1800)
+  }
+
+  async function pumpAnnouncement(start: AssemblyAnnouncement, startNeedsContinue: boolean) {
+    let announcement = start
+    let needsContinue = startNeedsContinue
+    setProgress(announcement)
+
+    while (needsContinue && announcement?.id) {
+      let next: { announcement: AssemblyAnnouncement; queued?: boolean; needsContinue: boolean } | null = null
+      let lastError: unknown = null
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 400 + attempt * 250))
+        try {
+          next = await continueAssemblyAnnouncement(announcement.id)
+          lastError = null
+          break
+        } catch (error) {
+          lastError = error
+        }
+      }
+
+      if (!next) {
+        throw lastError instanceof Error ? lastError : new Error('تعذر متابعة الإرسال. يمكنك الضغط على متابعة الإرسال.')
+      }
+
+      announcement = next.announcement
+      needsContinue = Boolean(next.queued) ? false : next.needsContinue
+      setProgress(announcement)
+      if (next.queued) {
+        setWatchingId(announcement.id)
+        break
+      }
+    }
+
+    return announcement
+  }
+
+  useEffect(() => {
+    if (!watchingId) return
+
+    let cancelled = false
+
+    async function tick(id: string) {
+      try {
+        const detail = await fetchAssemblyAnnouncement(id)
+        if (cancelled) return
+        setProgress(detail.announcement)
+        setFailures(detail.failures)
+        if (announcementDone(detail.announcement.status)) {
+          setWatchingId(null)
+          setIsSending(false)
+          if (detail.announcement.status === 'failed') {
+            setSendError(detail.announcement.lastError || 'تعذر إرسال الرسالة.')
+          } else {
+            setSendSuccess(
+              `تم الإرسال. تيليغرام: ${detail.announcement.telegramSent} · بريد: ${detail.announcement.emailSent}${
+                detail.announcement.status === 'partial' ? ' · راجع من تعذر الوصول إليهم بالأسفل' : ''
+              }`,
+            )
+            if (detail.announcement.status === 'sent') {
+              setSubject('')
+              setBody('')
+              setConfirmed(false)
+            }
+          }
+          await loadAnnouncements()
+        }
+      } catch {
+        // Keep polling; a single failed status request should not stop the queue.
+      }
+    }
+
+    void tick(watchingId)
+    const handle = window.setInterval(() => void tick(watchingId), 1500)
+    return () => {
+      cancelled = true
+      window.clearInterval(handle)
+    }
+  }, [loadAnnouncements, watchingId])
+
   async function handleExport() {
     setIsExporting(true)
     try {
@@ -141,6 +267,7 @@ export function DashboardAssemblyPage() {
     }
 
     setIsSending(true)
+    setFailures([])
     try {
       const created = await createAssemblyAnnouncement({
         subject: subject.trim(),
@@ -149,32 +276,68 @@ export function DashboardAssemblyPage() {
         sendTelegram,
       })
       let announcement = created.announcement
-      let needsContinue = created.needsContinue
       setProgress(announcement)
+      await loadAnnouncements()
 
-      while (needsContinue && announcement?.id) {
-        const next = await continueAssemblyAnnouncement(announcement.id)
-        announcement = next.announcement
-        needsContinue = next.needsContinue
-        setProgress(announcement)
+      if (created.queued || created.needsContinue) {
+        setWatchingId(announcement.id)
       }
 
-      if (announcement?.status === 'failed') {
+      if (!created.queued && created.needsContinue) {
+        announcement = await pumpAnnouncement(announcement, created.needsContinue)
+      }
+
+      if (!announcementDone(announcement.status)) {
+        return
+      }
+
+      setWatchingId(null)
+      const detail = await fetchAssemblyAnnouncement(announcement.id).catch(() => null)
+      if (detail) {
+        setProgress(detail.announcement)
+        setFailures(detail.failures)
+        announcement = detail.announcement
+      }
+      if (announcement.status === 'failed') {
         setSendError(announcement.lastError || 'تعذر إرسال الرسالة.')
-      } else if (announcement) {
+      } else {
         setSendSuccess(
           `تم الإرسال. تيليغرام: ${announcement.telegramSent} · بريد: ${announcement.emailSent}${
-            announcement.status === 'partial' ? ' (بعض الإرسال فشل)' : ''
+            announcement.status === 'partial' ? ' · راجع من تعذر الوصول إليهم بالأسفل' : ''
           }`,
         )
-        setSubject('')
-        setBody('')
-        setConfirmed(false)
+        if (announcement.status === 'sent') {
+          setSubject('')
+          setBody('')
+          setConfirmed(false)
+        }
       }
-      await loadAnnouncements()
+      setIsSending(false)
     } catch (error) {
-      setSendError(error instanceof Error ? error.message : 'تعذر إرسال الرسالة.')
-    } finally {
+      setSendError(
+        error instanceof Error
+          ? `${error.message} إن توقف الإرسال، اضغط «متابعة الإرسال» من الرسائل السابقة.`
+          : 'تعذر إرسال الرسالة. يمكنك الضغط على متابعة الإرسال.',
+      )
+      await loadAnnouncements()
+      setIsSending(false)
+    }
+  }
+
+  async function resumeAnnouncement(item: AssemblyAnnouncement) {
+    setIsSending(true)
+    setSendError(null)
+    setSendSuccess(null)
+    setProgress(item)
+    setWatchingId(item.id)
+    try {
+      const next = await continueAssemblyAnnouncement(item.id)
+      setProgress(next.announcement)
+      if (!next.queued && next.needsContinue) {
+        await pumpAnnouncement(next.announcement, next.needsContinue)
+      }
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'تعذر متابعة الإرسال.')
       setIsSending(false)
     }
   }
@@ -411,10 +574,31 @@ export function DashboardAssemblyPage() {
             </label>
             {sendError ? <p className="text-sm text-red-600">{sendError}</p> : null}
             {sendSuccess ? <p className="text-sm text-emerald-700">{sendSuccess}</p> : null}
-            {isSending && progress ? (
-              <p className="text-sm text-slate-600">
-                جارٍ الإرسال... بريد {progress.emailSent} · تيليغرام {progress.telegramSent}
-              </p>
+            {progress ? (
+              <div className="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                <div className="flex items-center justify-between text-sm">
+                  <p className="font-semibold text-cyan-950">
+                    {announcementDone(progress.status) ? announcementStatusLabel(progress.status) : 'جارٍ الإرسال في الخلفية'}
+                  </p>
+                  <p className="text-xs text-cyan-800">{announcementProgress(progress).percent}%</p>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-cyan-100">
+                  <div
+                    className="h-full rounded-full bg-cyan-700 transition-all"
+                    style={{ width: `${announcementProgress(progress).percent}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-slate-700">
+                  <p>
+                    تيليغرام: {progress.telegramSent} نجح · {progress.telegramFailed} فشل
+                    {progress.telegramTotal ? ` من ${progress.telegramTotal}` : ''}
+                  </p>
+                  <p>
+                    بريد: {progress.emailSent} نجح · {progress.emailFailed} فشل
+                    {progress.emailTotal ? ` من ${progress.emailTotal}` : ''}
+                  </p>
+                </div>
+              </div>
             ) : null}
             <button
               type="submit"
@@ -443,6 +627,80 @@ export function DashboardAssemblyPage() {
                 </div>
               </div>
             </div>
+            {failures.length > 0 ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-red-950">تعذر الوصول إلى {failures.length} عضو</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copyText(
+                          'emails',
+                          failures
+                            .map((item) => item.email)
+                            .filter((value): value is string => Boolean(value))
+                            .join('\n'),
+                        )
+                      }
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-red-800 underline"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {copied === 'emails' ? 'تم النسخ' : 'نسخ البريد'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copyText(
+                          'numbers',
+                          failures
+                            .map((item) => item.membershipNumber)
+                            .filter((value): value is string => Boolean(value))
+                            .join('\n'),
+                        )
+                      }
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-red-800 underline"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {copied === 'numbers' ? 'تم النسخ' : 'نسخ الأرقام'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadFailuresCsv(failures)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-red-800 underline"
+                    >
+                      <Download className="h-3 w-3" />
+                      CSV
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-3 max-h-64 overflow-auto rounded-lg border border-red-100 bg-white">
+                  <table className="min-w-full text-right text-xs">
+                    <thead className="bg-red-50 text-red-900">
+                      <tr>
+                        <th className="px-2 py-1.5">العضو</th>
+                        <th className="px-2 py-1.5">القناة</th>
+                        <th className="px-2 py-1.5">السبب</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {failures.map((item) => (
+                        <tr key={item.id} className="border-t border-red-50">
+                          <td className="px-2 py-1.5">
+                            <p className="font-semibold text-slate-900">{item.displayName || item.membershipNumber}</p>
+                            <p className="text-slate-500">{item.membershipNumber}</p>
+                            {item.email ? <p className="text-slate-500">{item.email}</p> : null}
+                          </td>
+                          <td className="px-2 py-1.5 text-slate-700">{channelLabel(item.channel)}</td>
+                          <td className="px-2 py-1.5 text-slate-600">{item.error || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
                 <Mail className="h-4 w-4" />
@@ -454,10 +712,36 @@ export function DashboardAssemblyPage() {
                 ) : (
                   announcements.slice(0, 8).map((item) => (
                     <div key={item.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <p className="text-sm font-semibold text-slate-900">{item.subject}</p>
-                      <p className="text-xs text-slate-500">
-                        {announcementStatusLabel(item.status)} · بريد {item.emailSent} · تيليغرام {item.telegramSent}
-                      </p>
+                      <button
+                        type="button"
+                        className="w-full text-right"
+                        onClick={() => {
+                          setProgress(item)
+                          setWatchingId(announcementDone(item.status) ? null : item.id)
+                          void fetchAssemblyAnnouncement(item.id)
+                            .then((detail) => {
+                              setProgress(detail.announcement)
+                              setFailures(detail.failures)
+                            })
+                            .catch(() => undefined)
+                        }}
+                      >
+                        <p className="text-sm font-semibold text-slate-900">{item.subject}</p>
+                        <p className="text-xs text-slate-500">
+                          {announcementStatusLabel(item.status)} · بريد {item.emailSent}/{item.emailTotal || '—'} · تيليغرام{' '}
+                          {item.telegramSent}/{item.telegramTotal || '—'}
+                        </p>
+                      </button>
+                      {item.status === 'queued' || item.status === 'sending' ? (
+                        <button
+                          type="button"
+                          disabled={isSending}
+                          onClick={() => void resumeAnnouncement(item)}
+                          className="mt-2 text-xs font-semibold text-cyan-800 underline"
+                        >
+                          متابعة الإرسال
+                        </button>
+                      ) : null}
                     </div>
                   ))
                 )}

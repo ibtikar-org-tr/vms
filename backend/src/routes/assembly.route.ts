@@ -4,15 +4,17 @@ import { Hono } from 'hono'
 import {
   createAssemblyAnnouncement,
   getAssemblyAnnouncementById,
+  isMissingAnnouncementFailuresTable,
   isMissingAnnouncementsTable,
+  listAssemblyAnnouncementFailures,
   listAssemblyAnnouncements,
 } from '../repositories/assembly-announcements.repository'
 import {
   countAssemblyDirectory,
-  listAssemblyEmailRecipients,
+  countAssemblyEmailRecipients,
+  countAssemblyTelegramRecipients,
   listAssemblyMembers,
   listAssemblyMembersForExport,
-  listAssemblyTelegramMembershipNumbers,
 } from '../repositories/assembly-members.repository'
 import {
   listProjectNamesByMembershipNumbers,
@@ -25,6 +27,7 @@ import {
 import {
   announcementNeedsContinue,
   deliverAssemblyAnnouncement,
+  enqueueAnnouncementDelivery,
 } from '../services/assembly-announcement.service'
 import type { AppEnv } from '../types/hono'
 import { getActorUser } from '../utils/actor'
@@ -192,6 +195,43 @@ assemblyRoute.get('/assembly/announcements', async (c) => {
   }
 })
 
+assemblyRoute.get(
+  '/assembly/announcements/:id',
+  zValidator('param', assemblyAnnouncementParamsSchema),
+  async (c) => {
+    const access = await requireLeadership(c)
+    if (access.error) {
+      return c.json(access.error.body, access.error.status)
+    }
+
+    try {
+      const { id } = c.req.valid('param')
+      const announcement = await getAssemblyAnnouncementById(c.env.VMS_DB, id)
+      if (!announcement) {
+        return c.json({ error: 'الرسالة غير موجودة.' }, 404)
+      }
+
+      let failures: Awaited<ReturnType<typeof listAssemblyAnnouncementFailures>> = []
+      try {
+        failures = await listAssemblyAnnouncementFailures(c.env.VMS_DB, id)
+      } catch (error) {
+        if (!isMissingAnnouncementFailuresTable(error)) {
+          throw error
+        }
+      }
+
+      const needsContinue = await announcementNeedsContinue(c.env, announcement)
+      return c.json({ announcement, failures, needsContinue })
+    } catch (error) {
+      if (isMissingAnnouncementsTable(error)) {
+        return c.json({ error: 'جدول الرسائل غير جاهز بعد. أعد المحاولة بعد دقائق.' }, 503)
+      }
+      console.error('Failed to load assembly announcement', error)
+      return c.json({ error: 'تعذر تحميل الرسالة.' }, 500)
+    }
+  },
+)
+
 assemblyRoute.post(
   '/assembly/announcements',
   zValidator('json', createAssemblyAnnouncementSchema, jsonValidationHook),
@@ -203,39 +243,56 @@ assemblyRoute.post(
 
     try {
       const payload = c.req.valid('json')
+      const sendEmail = payload.sendEmail !== false
+      const sendTelegram = payload.sendTelegram !== false
+      const [emailCount, telegramCount] = await Promise.all([
+        sendEmail ? countAssemblyEmailRecipients(c.env.MEMBERS_DB) : Promise.resolve(0),
+        sendTelegram ? countAssemblyTelegramRecipients(c.env.MEMBERS_DB) : Promise.resolve(0),
+      ])
+
       const created = await createAssemblyAnnouncement(c.env.VMS_DB, {
         id: generateId(),
         createdBy: access.actor.membershipNumber,
         subject: payload.subject,
         body: payload.body,
-        sendEmail: payload.sendEmail !== false,
-        sendTelegram: payload.sendTelegram !== false,
+        sendEmail,
+        sendTelegram,
+        emailTotal: emailCount,
+        telegramTotal: telegramCount,
       })
 
       if (!created) {
         return c.json({ error: 'تعذر إنشاء الرسالة.' }, 500)
       }
 
-      const announcement = await deliverAssemblyAnnouncement(c.env, created.id)
-      const needsContinue = announcement ? await announcementNeedsContinue(c.env, announcement) : false
-      const [emailRecipients, telegramRecipients] = await Promise.all([
-        listAssemblyEmailRecipients(c.env.MEMBERS_DB),
-        listAssemblyTelegramMembershipNumbers(c.env.MEMBERS_DB),
-      ])
+      let announcement = created
+      const queued = await enqueueAnnouncementDelivery(c.env, created.id)
+      let needsContinue = true
+
+      if (!queued) {
+        try {
+          announcement = (await deliverAssemblyAnnouncement(c.env, created.id)) ?? created
+          needsContinue = await announcementNeedsContinue(c.env, announcement)
+        } catch (error) {
+          console.error('Failed first assembly announcement batch', error)
+          needsContinue = true
+        }
+      }
 
       return c.json(
         {
           announcement,
-          needsContinue,
+          queued,
+          needsContinue: queued || needsContinue,
           audience: {
-            email: emailRecipients.length,
-            telegram: telegramRecipients.length,
+            email: emailCount,
+            telegram: telegramCount,
           },
         },
         201,
       )
     } catch (error) {
-      if (isMissingAnnouncementsTable(error)) {
+      if (isMissingAnnouncementsTable(error) || isMissingAnnouncementFailuresTable(error)) {
         return c.json({ error: 'جدول الرسائل غير جاهز بعد. أعد المحاولة بعد دقائق.' }, 503)
       }
       console.error('Failed to create assembly announcement', error)
@@ -260,12 +317,19 @@ assemblyRoute.post(
         return c.json({ error: 'الرسالة غير موجودة.' }, 404)
       }
 
-      const announcement = await deliverAssemblyAnnouncement(c.env, id, { emailOnly: true })
+      const queued = await enqueueAnnouncementDelivery(c.env, id)
+      if (queued) {
+        const announcement = await getAssemblyAnnouncementById(c.env.VMS_DB, id)
+        const needsContinue = announcement ? await announcementNeedsContinue(c.env, announcement) : false
+        return c.json({ announcement, queued: true, needsContinue })
+      }
+
+      const announcement = await deliverAssemblyAnnouncement(c.env, id)
       const needsContinue = announcement ? await announcementNeedsContinue(c.env, announcement) : false
-      return c.json({ announcement, needsContinue })
+      return c.json({ announcement, queued: false, needsContinue })
     } catch (error) {
       console.error('Failed to continue assembly announcement', error)
-      return c.json({ error: 'تعذر متابعة الإرسال.' }, 500)
+      return c.json({ error: 'تعذر متابعة الإرسال.', retryable: true }, 500)
     }
   },
 )

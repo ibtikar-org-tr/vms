@@ -28,9 +28,10 @@ import { assemblyRoute } from './routes/assembly.route'
 import { uploadClubBanner, uploadEventBanner, uploadImages, serveImage } from './routes/images.route'
 import { handleCron } from './cron'
 import { ProjectNoteRoom } from './durable-objects/project-note-room'
+import { handleAssemblyAnnouncementQueue } from './services/assembly-announcement-queue.service'
 import { reindexAllProjectNotes } from './services/note-vector-backfill.service'
 import { reindexAllProjectTasks } from './services/task-vector-backfill.service'
-import type { AppBindings } from './types/bindings'
+import type { AppBindings, AssemblyAnnouncementQueueMessage, QueueMessageBatchLike } from './types/bindings'
 import type { AppEnv } from './types/hono'
 
 export { ProjectNoteRoom }
@@ -199,5 +200,8 @@ export default {
     ctx: ExecutionContext,
   ) {
     ctx.waitUntil(handleCron(env))
+  },
+  async queue(batch: QueueMessageBatchLike<AssemblyAnnouncementQueueMessage>, env: AppBindings) {
+    await handleAssemblyAnnouncementQueue(batch, env)
   },
 }
