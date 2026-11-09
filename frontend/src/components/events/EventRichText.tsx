@@ -17,7 +17,7 @@ export function EventRichText({
 
   return (
     <div
-      className={`event-rich-text max-w-none [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_b]:font-semibold [&_ul]:list-disc [&_ul]:pr-5 [&_ol]:list-decimal [&_ol]:pr-5 [&_li]:mb-1 ${className}`}
+      className={`event-rich-text max-w-none text-pretty [&_p]:mb-4 [&_p]:leading-8 [&_p:last-child]:mb-0 [&_br]:mb-3 [&_br]:block [&_br]:content-[''] [&_strong]:font-semibold [&_b]:font-semibold [&_ul]:list-disc [&_ul]:pr-5 [&_ol]:list-decimal [&_ol]:pr-5 [&_li]:mb-1 ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
