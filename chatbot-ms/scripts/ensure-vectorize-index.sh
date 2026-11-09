@@ -1,13 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_DIR"
+
+# Load local .env if present (npm scripts do not load it automatically)
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
 # Must match @cf/baai/bge-m3 dense output used by src/services/embeddings.ts
 INDEX_NAME="${VECTORIZE_INDEX_NAME:-ibtikar-chatbot}"
 DIMENSIONS="${VECTORIZE_DIMENSIONS:-1024}"
 METRIC="${VECTORIZE_METRIC:-cosine}"
 METADATA_PROPERTY="${VECTORIZE_METADATA_PROPERTY:-source}"
 METADATA_TYPE="${VECTORIZE_METADATA_TYPE:-string}"
-WRANGLER_CONFIG="${WRANGLER_CONFIG:-wrangler.jsonc}"
+
+# Prefer local config (real account_id) when present; CI sets WRANGLER_CONFIG explicitly.
+if [[ -z "${WRANGLER_CONFIG:-}" ]]; then
+  if [[ -f wrangler.local.jsonc ]]; then
+    WRANGLER_CONFIG="wrangler.local.jsonc"
+  else
+    WRANGLER_CONFIG="wrangler.jsonc"
+  fi
+fi
+
 
 WRANGLER_CONFIG_ARGS=(--config "$WRANGLER_CONFIG")
 
@@ -17,11 +38,13 @@ wrangler_vectorize() {
 
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
   echo "CLOUDFLARE_API_TOKEN is required to manage Vectorize."
+  echo "Add it to chatbot-ms/.env or export it in your shell."
   exit 1
 fi
 
 if [[ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
   echo "CLOUDFLARE_ACCOUNT_ID is required to manage Vectorize."
+  echo "Add it to chatbot-ms/.env or export it in your shell."
   exit 1
 fi
 
@@ -32,7 +55,7 @@ is_auth_error() {
 
 is_missing_index() {
   local output="$1"
-  echo "$output" | grep -qiE 'not found|does not exist|couldn.t find|10159|code: 404'
+  echo "$output" | grep -qiE 'not[_ ]found|does not exist|couldn.t find|10159|code: 404|code: 3000'
 }
 
 echo "Ensuring Vectorize index '${INDEX_NAME}' (dimensions=${DIMENSIONS}, metric=${METRIC})"

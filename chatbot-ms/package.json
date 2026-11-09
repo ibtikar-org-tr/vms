@@ -5,7 +5,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "vectorize:ensure": "bash scripts/ensure-vectorize-index.sh"
+    "vectorize:ensure": "bash scripts/ensure-vectorize-index.sh",
+    "vectorize:ingest": "bash scripts/trigger-ingest.sh"
   },
   "dependencies": {
     "hono": "^4.12.14"

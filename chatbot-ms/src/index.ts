@@ -14,7 +14,7 @@ app.use('*', async (c, next) => {
   return middleware(c, next)
 })
 
-const MS_BASE = '/ms/ibtikar-chat'
+const MS_BASE = '/ms/chatbot'
 
 app.get('/', (c) => c.redirect(MS_BASE))
 

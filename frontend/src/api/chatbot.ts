@@ -1,9 +1,9 @@
 const CHATBOT_BASE_URL = (import.meta.env.VITE_CHATBOT_MS as string | undefined)?.trim()
 
-/** Base URL for the Ibtikar chatbot Worker (no trailing slash). */
+/** Base URL for the Ibtikar chatbot Worker (always under /ms/chatbot on the frontend host). */
 export const CHATBOT_BASE = CHATBOT_BASE_URL
   ? CHATBOT_BASE_URL.replace(/\/+$/, '')
-  : '/ms/ibtikar-chat'
+  : '/ms/chatbot'
 
 export interface ChatbotReply {
   reply: string

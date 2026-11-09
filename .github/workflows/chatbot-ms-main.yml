@@ -79,3 +79,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put INTERNAL_SECRET --config wrangler.local.jsonc --name chatbot-ms
+
+      - name: Run Vectorize ingest (website + database)
+        env:
+          INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
+          CHATBOT_BASE_URL: ${{ vars.VITE_SITE_URL }}/ms/chatbot
+        run: bash ./scripts/trigger-ingest.sh
