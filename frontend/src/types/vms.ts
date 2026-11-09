@@ -301,6 +301,8 @@ export interface AssemblyAnnouncementFailure {
   membershipNumber: string | null
   email: string | null
   displayName: string | null
+  phoneNumber?: string | null
+  telegramUsername?: string | null
   error: string | null
 }
 

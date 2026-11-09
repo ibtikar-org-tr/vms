@@ -40,6 +40,7 @@ interface TelegramNotifyResponse {
     successful?: Array<{ member_id?: string }>
     failed?: Array<{ member_id?: string; error?: string }>
   }
+  body?: TelegramNotifyResponse
 }
 
 function errorMessage(error: unknown, fallback = 'تعذر إرسال أحد رسائل البريد.') {
@@ -47,6 +48,37 @@ function errorMessage(error: unknown, fallback = 'تعذر إرسال أحد ر�
     return error.message
   }
   return fallback
+}
+
+function telegramNotifyPayload(result: { error?: string; responseData?: unknown }): TelegramNotifyResponse {
+  const raw = result.responseData
+  if (!raw || typeof raw !== 'object') {
+    return { error: result.error }
+  }
+
+  const record = raw as TelegramNotifyResponse
+  if (record.results || (record.body && record.body.results)) {
+    return record.body?.results ? record.body : record
+  }
+
+  return { ...record, error: record.error || result.error }
+}
+
+export function describeTelegramFailure(error?: string | null) {
+  const text = error?.trim() || ''
+  if (/blocked the bot|bot was blocked|Forbidden: bot|User has blocked/i.test(text) || (/\b403\b/.test(text) && /Forbidden/i.test(text))) {
+    return 'حظر البوت على تيليغرام. اطلب منه إلغاء الحظر ثم /start ثم أعد الإرسال.'
+  }
+  if (/not started|need member|bot was never started/i.test(text)) {
+    return 'لم يبدأ المحادثة مع البوت. اطلب منه إرسال /start ثم أعد الإرسال.'
+  }
+  if (/chat not found|user not found/i.test(text)) {
+    return 'حساب تيليغرام غير موجود أو غير صالح.'
+  }
+  if (/Failed to deliver notification via telegram-ms|Failed to send message to any members/i.test(text)) {
+    return 'تعذر إرسال تيليغرام لهذه الدفعة. أعد المحاولة بعد التأكد أن العضو لم يحظر البوت.'
+  }
+  return text || 'تعذر إرسال رسالة تيليغرام.'
 }
 
 export function hasAssemblyAnnouncementQueue(bindings: AppBindings) {
@@ -149,7 +181,7 @@ async function sendTelegramBatch(
     message,
   })
 
-  const payload = (result.responseData ?? {}) as TelegramNotifyResponse
+  const payload = telegramNotifyPayload(result)
   const successfulIds = new Set(
     (payload.results?.successful ?? [])
       .map((item) => item.member_id?.trim())
@@ -195,7 +227,7 @@ async function sendTelegramBatch(
       membershipNumber,
       email: contact?.email || null,
       displayName: contact?.displayName || membershipNumber,
-      error: item.error || 'تعذر إرسال رسالة تيليغرام.',
+      error: describeTelegramFailure(item.error),
     })
   }
 
@@ -209,7 +241,7 @@ async function sendTelegramBatch(
     status: 'sending',
     telegramSent: sent,
     telegramFailed: failed,
-    lastError: failedItems[0]?.error || announcement.lastError,
+    lastError: describeTelegramFailure(failedItems[0]?.error) || announcement.lastError,
   })
 }
 
@@ -471,7 +503,7 @@ async function sendRetryTelegramBatch(
       targets: batch,
       message,
     })
-    const payload = (result.responseData ?? {}) as TelegramNotifyResponse
+    const payload = telegramNotifyPayload(result)
     const successfulIds = new Set(
       (payload.results?.successful ?? [])
         .map((item) => item.member_id?.trim())
@@ -480,7 +512,7 @@ async function sendRetryTelegramBatch(
     const failedByNumber = new Map(
       (payload.results?.failed ?? [])
         .filter((item) => item.member_id?.trim())
-        .map((item) => [item.member_id!.trim(), item.error || 'تعذر إرسال رسالة تيليغرام.']),
+        .map((item) => [item.member_id!.trim(), describeTelegramFailure(item.error)]),
     )
 
     if (successfulIds.size === 0 && failedByNumber.size === 0 && !result.success && (result.status ?? 500) >= 500) {
@@ -491,7 +523,7 @@ async function sendRetryTelegramBatch(
       result.success &&
       successfulIds.size === 0 &&
       failedByNumber.size === 0 &&
-      (payload.sent_to === undefined || Number(payload.sent_to) === batch.length)
+      Number(payload.sent_to) === batch.length
 
     for (const item of withNumber) {
       const membershipNumber = item.membershipNumber!.trim()
@@ -501,12 +533,9 @@ async function sendRetryTelegramBatch(
         continue
       }
 
-      const error =
-        failedByNumber.get(membershipNumber) ||
-        result.error ||
-        payload.error ||
-        item.error ||
-        'تعذر إرسال رسالة تيليغرام.'
+      const error = describeTelegramFailure(
+        failedByNumber.get(membershipNumber) || result.error || payload.error || item.error,
+      )
       lastError = error
       await markAssemblyAnnouncementFailureAttempted(bindings.VMS_DB, item.id, retryStartedAt, error)
     }

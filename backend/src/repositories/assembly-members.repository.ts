@@ -25,6 +25,8 @@ export interface AssemblyEmailRecipient {
   membershipNumber: string
   email: string
   displayName: string
+  phoneNumber: string | null
+  telegramUsername: string | null
 }
 
 interface AssemblyMemberSqlRow {
@@ -178,6 +180,8 @@ function mapEmailRecipient(row: {
     membershipNumber: row.membershipNumber,
     email: row.email.trim().toLowerCase(),
     displayName: row.arName?.trim() || row.enName?.trim() || 'عضو تجمّع إبتكار',
+    phoneNumber: null,
+    telegramUsername: null,
   }
 }
 
@@ -259,18 +263,29 @@ export async function listAssemblyMemberContacts(db: D1DatabaseLike, membershipN
          u.membership_number AS membershipNumber,
          u.email AS email,
          ui.ar_name AS arName,
-         ui.en_name AS enName
+         ui.en_name AS enName,
+         ui.phone_number AS phoneNumber,
+         ui.telegram_username AS telegramUsername
        FROM users u
        LEFT JOIN user_info ui ON ui.membership_number = u.membership_number
        WHERE u.membership_number IN (${placeholders})`,
     )
     .bind(...uniqueNumbers)
-    .all<{ membershipNumber: string; email: string | null; arName: string | null; enName: string | null }>()
+    .all<{
+      membershipNumber: string
+      email: string | null
+      arName: string | null
+      enName: string | null
+      phoneNumber: string | null
+      telegramUsername: string | null
+    }>()
 
   return result.results.map((row) => ({
     membershipNumber: row.membershipNumber,
     email: row.email?.trim().toLowerCase() || '',
     displayName: row.arName?.trim() || row.enName?.trim() || row.membershipNumber,
+    phoneNumber: row.phoneNumber?.trim() || null,
+    telegramUsername: row.telegramUsername?.replace(/^@/, '').trim() || null,
   }))
 }
 

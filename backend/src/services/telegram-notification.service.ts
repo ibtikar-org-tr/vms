@@ -126,14 +126,25 @@ export async function sendBackendTelegramNotification(
         console.warn('Telegram MS non-OK response body preview:', responseText.slice(0, 500))
       }
 
+      const bodyPayload =
+        responseData && typeof responseData === 'object' ? (responseData as Record<string, unknown>) : null
+      const bodyError =
+        typeof bodyPayload?.error === 'string' && bodyPayload.error.trim() ? bodyPayload.error.trim() : null
+      const hasMemberResults = Boolean(
+        bodyPayload && typeof bodyPayload.results === 'object' && bodyPayload.results !== null,
+      )
+
       return {
         success: false,
         status: response.status,
-        error: 'Failed to deliver notification via telegram-ms',
-        responseData: {
-          ...failureMeta,
-          body: responseData,
-        },
+        error: bodyError || 'Failed to deliver notification via telegram-ms',
+        responseData: hasMemberResults
+          ? bodyPayload
+          : {
+              ...failureMeta,
+              ...(bodyPayload ?? {}),
+              body: responseData,
+            },
       }
     }
 
