@@ -41,10 +41,28 @@ function channelLabel(channel: AssemblyAnnouncementFailure['channel']) {
   return channel === 'telegram' ? 'تيليغرام' : 'بريد'
 }
 
+function formatTelegramLabel(username: string) {
+  const trimmed = username.trim()
+  return trimmed.startsWith('@') ? trimmed : `@${trimmed}`
+}
+
+function telegramProfileUrl(username: string) {
+  const handle = username.replace(/^@/, '').trim()
+  return `https://t.me/${encodeURIComponent(handle)}`
+}
+
 function downloadFailuresCsv(failures: AssemblyAnnouncementFailure[]) {
-  const header = ['القناة', 'رقم العضوية', 'الاسم', 'البريد', 'السبب']
+  const header = ['القناة', 'رقم العضوية', 'الاسم', 'البريد', 'الهاتف', 'تيليغرام', 'السبب']
   const rows = failures.map((item) =>
-    [channelLabel(item.channel), item.membershipNumber ?? '', item.displayName ?? '', item.email ?? '', item.error ?? '']
+    [
+      channelLabel(item.channel),
+      item.membershipNumber ?? '',
+      item.displayName ?? '',
+      item.email ?? '',
+      item.phoneNumber ?? '',
+      item.telegramUsername ? formatTelegramLabel(item.telegramUsername) : '',
+      item.error ?? '',
+    ]
       .map((value) => `"${value.replace(/"/g, '""')}"`)
       .join(','),
   )
@@ -715,6 +733,43 @@ export function DashboardAssemblyPage() {
                       <Copy className="h-3 w-3" />
                       {copied === 'numbers' ? 'تم النسخ' : 'نسخ الأرقام'}
                     </button>
+                    {telegramFailures.length > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void copyText(
+                              'telegram',
+                              telegramFailures
+                                .map((item) => item.telegramUsername)
+                                .filter((value): value is string => Boolean(value))
+                                .map((value) => formatTelegramLabel(value))
+                                .join('\n'),
+                            )
+                          }
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-red-800 underline"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {copied === 'telegram' ? 'تم النسخ' : 'نسخ تيليغرام'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void copyText(
+                              'phones',
+                              telegramFailures
+                                .map((item) => item.phoneNumber)
+                                .filter((value): value is string => Boolean(value))
+                                .join('\n'),
+                            )
+                          }
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-red-800 underline"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {copied === 'phones' ? 'تم النسخ' : 'نسخ الهواتف'}
+                        </button>
+                      </>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => downloadFailuresCsv(failures)}
@@ -731,6 +786,7 @@ export function DashboardAssemblyPage() {
                       <tr>
                         <th className="px-2 py-1.5">العضو</th>
                         <th className="px-2 py-1.5">القناة</th>
+                        <th className="px-2 py-1.5">تيليغرام / الهاتف</th>
                         <th className="px-2 py-1.5">السبب</th>
                       </tr>
                     </thead>
@@ -743,6 +799,27 @@ export function DashboardAssemblyPage() {
                             {item.email ? <p className="text-slate-500">{item.email}</p> : null}
                           </td>
                           <td className="px-2 py-1.5 text-slate-700">{channelLabel(item.channel)}</td>
+                          <td className="px-2 py-1.5 text-slate-700">
+                            {item.channel === 'telegram' ? (
+                              <div className="space-y-0.5">
+                                {item.telegramUsername ? (
+                                  <a
+                                    href={telegramProfileUrl(item.telegramUsername)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-semibold text-cyan-800 underline"
+                                  >
+                                    {formatTelegramLabel(item.telegramUsername)}
+                                  </a>
+                                ) : (
+                                  <p className="text-slate-500">بدون معرف تيليغرام</p>
+                                )}
+                                <p>{item.phoneNumber || 'بدون هاتف'}</p>
+                              </div>
+                            ) : (
+                              <p>{item.phoneNumber || '—'}</p>
+                            )}
+                          </td>
                           <td className="px-2 py-1.5 text-slate-600">{item.error || '—'}</td>
                         </tr>
                       ))}

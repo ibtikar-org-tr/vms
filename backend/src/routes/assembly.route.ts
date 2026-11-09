@@ -13,6 +13,7 @@ import {
   countAssemblyDirectory,
   countAssemblyEmailRecipients,
   countAssemblyTelegramRecipients,
+  listAssemblyMemberContacts,
   listAssemblyMembers,
   listAssemblyMembersForExport,
 } from '../repositories/assembly-members.repository'
@@ -28,6 +29,7 @@ import {
 import {
   announcementNeedsContinue,
   deliverAssemblyAnnouncement,
+  describeTelegramFailure,
   enqueueAnnouncementDelivery,
   startFailedAnnouncementRetry,
 } from '../services/assembly-announcement.service'
@@ -222,8 +224,25 @@ assemblyRoute.get(
         }
       }
 
+      const contacts = await listAssemblyMemberContacts(
+        c.env.MEMBERS_DB,
+        failures.map((item) => item.membershipNumber ?? ''),
+      )
+      const contactByNumber = new Map(contacts.map((contact) => [contact.membershipNumber, contact]))
+      const presentedFailures = failures.map((item) => {
+        const contact = item.membershipNumber ? contactByNumber.get(item.membershipNumber) : undefined
+        return {
+          ...item,
+          email: item.email || contact?.email || null,
+          displayName: item.displayName || contact?.displayName || item.membershipNumber,
+          phoneNumber: contact?.phoneNumber || null,
+          telegramUsername: contact?.telegramUsername || null,
+          error: item.channel === 'telegram' ? describeTelegramFailure(item.error) : item.error,
+        }
+      })
+
       const needsContinue = await announcementNeedsContinue(c.env, announcement)
-      return c.json({ announcement, failures, needsContinue })
+      return c.json({ announcement, failures: presentedFailures, needsContinue })
     } catch (error) {
       if (isMissingAnnouncementsTable(error)) {
         return c.json({ error: 'جدول الرسائل غير جاهز بعد. أعد المحاولة بعد دقائق.' }, 503)
