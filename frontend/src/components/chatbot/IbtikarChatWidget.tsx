@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { LoaderCircle, MessageCircle, Send, X } from 'lucide-react'
 import { askIbtikarChatbot } from '../../api/chatbot'
+import { ChatMarkdown } from './ChatMarkdown'
 
 type ChatRole = 'user' | 'assistant'
 
@@ -74,7 +75,7 @@ export function IbtikarChatWidget() {
           id={panelId}
           role="dialog"
           aria-label="مساعد إبتكار"
-          className="pointer-events-auto flex h-[min(32rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-teal-900/10 bg-white shadow-2xl shadow-teal-950/20"
+          className="pointer-events-auto flex h-[min(36rem,calc(100vh-5.5rem))] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-teal-900/10 bg-white shadow-2xl shadow-teal-950/20"
         >
           <header className="flex items-center justify-between gap-3 bg-teal-700 px-4 py-3 text-white">
             <div className="min-w-0">
@@ -100,13 +101,13 @@ export function IbtikarChatWidget() {
                   className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-6 whitespace-pre-wrap ${
+                    className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 ${
                       isUser
-                        ? 'rounded-br-md bg-teal-700 text-white'
-                        : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'
+                        ? 'rounded-br-md bg-teal-700 text-white whitespace-pre-wrap'
+                        : 'rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-sm'
                     }`}
                   >
-                    {message.content}
+                    {isUser ? message.content : <ChatMarkdown content={message.content} />}
                   </div>
                 </div>
               )

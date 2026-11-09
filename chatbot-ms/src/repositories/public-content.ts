@@ -39,7 +39,7 @@ export async function listPublicEvents(db: D1Database) {
        FROM events
        LEFT JOIN projects ON projects.id = events.project_id
        WHERE events.status = ?
-       ORDER BY events.start_time IS NULL, events.start_time ASC`,
+       ORDER BY events.start_time IS NULL, events.start_time DESC`,
     )
     .bind('public')
     .all<PublicEventRow>()

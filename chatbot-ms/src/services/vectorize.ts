@@ -19,6 +19,8 @@ export interface IngestDocument {
   text: string
   url?: string
   kind?: string
+  /** ISO start time for events — used to sort retrieved context newest-first. */
+  startTime?: string
 }
 
 export async function deleteDocumentVectors(
@@ -52,6 +54,7 @@ export async function upsertDocument(
       title,
       kind: doc.kind || doc.source,
       url: doc.url || '',
+      startTime: doc.startTime || '',
       chunkIndex: index,
       text: truncate(chunk, CHUNK_METADATA_MAX),
     },
