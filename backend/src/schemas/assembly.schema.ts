@@ -21,3 +21,7 @@ export const createAssemblyAnnouncementSchema = z
 export const assemblyAnnouncementParamsSchema = z.object({
   id: z.string().trim().min(1),
 })
+
+export const retryAssemblyAnnouncementSchema = z.object({
+  channel: z.enum(['email', 'telegram']),
+})

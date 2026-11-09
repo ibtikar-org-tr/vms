@@ -1,7 +1,14 @@
 import {
+  countAssemblyAnnouncementFailures,
+  countRetryableAnnouncementFailures,
+  deleteAssemblyAnnouncementFailure,
   getAssemblyAnnouncementById,
   insertAssemblyAnnouncementFailure,
+  listRetryableAnnouncementFailures,
+  markAssemblyAnnouncementFailureAttempted,
+  startAssemblyAnnouncementRetry,
   updateAssemblyAnnouncementProgress,
+  type AssemblyAnnouncementChannel,
   type AssemblyAnnouncementRecord,
 } from '../repositories/assembly-announcements.repository'
 import { isAppEmailConfigured, sendAppEmail } from './app-email.service'
@@ -66,6 +73,20 @@ export async function deliverAssemblyAnnouncement(bindings: AppBindings, announc
 
   let current = await ensureAnnouncementTotals(bindings, loaded)
   const siteUrl = assemblySiteUrl(bindings.FRONTEND_BASE_URL)
+
+  if (current.retryChannel && current.retryStartedAt) {
+    current = (await sendRetryBatch(bindings, current, siteUrl)) ?? current
+    if (await announcementHasPendingRetry(bindings, current)) {
+      return current
+    }
+
+    current =
+      (await updateAssemblyAnnouncementProgress(bindings.VMS_DB, current.id, {
+        retryChannel: null,
+        retryStartedAt: null,
+      })) ?? current
+    return finalizeAnnouncement(bindings, current)
+  }
 
   if (current.sendTelegram) {
     const telegramTotal = current.telegramTotal || (await countAssemblyTelegramRecipients(bindings.MEMBERS_DB))
@@ -302,7 +323,300 @@ async function finalizeAnnouncement(bindings: AppBindings, announcement: Assembl
   )
 }
 
+function originalDeliveryIncomplete(record: AssemblyAnnouncementRecord) {
+  if (record.sendTelegram) {
+    const telegramTotal = record.telegramTotal
+    if (telegramTotal > 0 && record.telegramSent + record.telegramFailed < telegramTotal) {
+      return true
+    }
+  }
+
+  if (record.sendEmail) {
+    const emailTotal = record.emailTotal
+    if (emailTotal > 0 && record.emailCursor < emailTotal) {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function announcementHasPendingRetry(bindings: AppBindings, record: AssemblyAnnouncementRecord) {
+  if (!record.retryChannel || !record.retryStartedAt) {
+    return false
+  }
+
+  const pending = await countRetryableAnnouncementFailures(
+    bindings.VMS_DB,
+    record.id,
+    record.retryChannel,
+    record.retryStartedAt,
+  )
+  return pending > 0
+}
+
+export async function startFailedAnnouncementRetry(
+  bindings: AppBindings,
+  announcementId: string,
+  channel: AssemblyAnnouncementChannel,
+) {
+  const loaded = await getAssemblyAnnouncementById(bindings.VMS_DB, announcementId)
+  if (!loaded) {
+    return { announcement: null as AssemblyAnnouncementRecord | null, error: 'missing' as const }
+  }
+
+  if (loaded.retryChannel && loaded.retryChannel !== channel) {
+    return { announcement: loaded, error: 'busy' as const }
+  }
+
+  if (!loaded.retryChannel && originalDeliveryIncomplete(loaded)) {
+    return { announcement: loaded, error: 'in_progress' as const }
+  }
+
+  const failureCount = await countAssemblyAnnouncementFailures(bindings.VMS_DB, loaded.id, channel)
+  if (failureCount === 0) {
+    return { announcement: loaded, error: 'none' as const }
+  }
+
+  const started =
+    loaded.retryChannel === channel && loaded.retryStartedAt
+      ? loaded
+      : ((await startAssemblyAnnouncementRetry(bindings.VMS_DB, loaded.id, channel)) ?? loaded)
+
+  return { announcement: started, error: null }
+}
+
+async function sendRetryBatch(
+  bindings: AppBindings,
+  announcement: AssemblyAnnouncementRecord,
+  siteUrl: string,
+) {
+  if (!announcement.retryChannel || !announcement.retryStartedAt) {
+    return announcement
+  }
+
+  if (announcement.retryChannel === 'telegram') {
+    return sendRetryTelegramBatch(bindings, announcement, siteUrl)
+  }
+
+  return sendRetryEmailBatch(bindings, announcement, siteUrl)
+}
+
+async function syncChannelFailureCount(
+  bindings: AppBindings,
+  announcement: AssemblyAnnouncementRecord,
+  channel: AssemblyAnnouncementChannel,
+  extra: { emailSent?: number; telegramSent?: number; lastError?: string | null },
+) {
+  const failed = await countAssemblyAnnouncementFailures(bindings.VMS_DB, announcement.id, channel)
+  return updateAssemblyAnnouncementProgress(bindings.VMS_DB, announcement.id, {
+    status: 'sending',
+    ...(channel === 'email' ? { emailFailed: failed } : { telegramFailed: failed }),
+    ...extra,
+  })
+}
+
+async function sendRetryTelegramBatch(
+  bindings: AppBindings,
+  announcement: AssemblyAnnouncementRecord,
+  siteUrl: string,
+) {
+  const retryStartedAt = announcement.retryStartedAt
+  if (!retryStartedAt) {
+    return announcement
+  }
+
+  const pending = await listRetryableAnnouncementFailures(
+    bindings.VMS_DB,
+    announcement.id,
+    'telegram',
+    retryStartedAt,
+    TELEGRAM_BATCH_SIZE,
+  )
+  if (pending.length === 0) {
+    return announcement
+  }
+
+  const message = buildAssemblyAnnouncementTelegramText({
+    subject: announcement.subject,
+    body: announcement.body,
+    siteUrl,
+  })
+
+  const withoutNumber: typeof pending = []
+  const withNumber: typeof pending = []
+  for (const item of pending) {
+    if (item.membershipNumber?.trim()) {
+      withNumber.push(item)
+    } else {
+      withoutNumber.push(item)
+    }
+  }
+
+  for (const item of withoutNumber) {
+    await markAssemblyAnnouncementFailureAttempted(
+      bindings.VMS_DB,
+      item.id,
+      retryStartedAt,
+      item.error || 'لا يوجد رقم عضوية لإعادة إرسال تيليغرام.',
+    )
+  }
+
+  let sentDelta = 0
+  let lastError = announcement.lastError
+
+  if (withNumber.length > 0) {
+    const batch = withNumber.map((item) => item.membershipNumber!.trim())
+    const result = await sendBackendTelegramNotification(bindings, {
+      targets: batch,
+      message,
+    })
+    const payload = (result.responseData ?? {}) as TelegramNotifyResponse
+    const successfulIds = new Set(
+      (payload.results?.successful ?? [])
+        .map((item) => item.member_id?.trim())
+        .filter((value): value is string => Boolean(value)),
+    )
+    const failedByNumber = new Map(
+      (payload.results?.failed ?? [])
+        .filter((item) => item.member_id?.trim())
+        .map((item) => [item.member_id!.trim(), item.error || 'تعذر إرسال رسالة تيليغرام.']),
+    )
+
+    if (successfulIds.size === 0 && failedByNumber.size === 0 && !result.success && (result.status ?? 500) >= 500) {
+      throw new Error(result.error || 'تعذر إرسال رسالة تيليغرام مؤقتاً.')
+    }
+
+    const treatBatchAsSuccessful =
+      result.success &&
+      successfulIds.size === 0 &&
+      failedByNumber.size === 0 &&
+      (payload.sent_to === undefined || Number(payload.sent_to) === batch.length)
+
+    for (const item of withNumber) {
+      const membershipNumber = item.membershipNumber!.trim()
+      if (successfulIds.has(membershipNumber) || treatBatchAsSuccessful) {
+        await deleteAssemblyAnnouncementFailure(bindings.VMS_DB, item.id)
+        sentDelta += 1
+        continue
+      }
+
+      const error =
+        failedByNumber.get(membershipNumber) ||
+        result.error ||
+        payload.error ||
+        item.error ||
+        'تعذر إرسال رسالة تيليغرام.'
+      lastError = error
+      await markAssemblyAnnouncementFailureAttempted(bindings.VMS_DB, item.id, retryStartedAt, error)
+    }
+  }
+
+  return (
+    (await syncChannelFailureCount(bindings, announcement, 'telegram', {
+      telegramSent: announcement.telegramSent + sentDelta,
+      lastError,
+    })) ?? announcement
+  )
+}
+
+async function sendRetryEmailBatch(
+  bindings: AppBindings,
+  announcement: AssemblyAnnouncementRecord,
+  siteUrl: string,
+) {
+  const retryStartedAt = announcement.retryStartedAt
+  if (!retryStartedAt) {
+    return announcement
+  }
+
+  const pending = await listRetryableAnnouncementFailures(
+    bindings.VMS_DB,
+    announcement.id,
+    'email',
+    retryStartedAt,
+    EMAIL_BATCH_SIZE,
+  )
+  if (pending.length === 0) {
+    return announcement
+  }
+
+  if (!isAppEmailConfigured(bindings)) {
+    for (const item of pending) {
+      await markAssemblyAnnouncementFailureAttempted(
+        bindings.VMS_DB,
+        item.id,
+        retryStartedAt,
+        'إعداد البريد غير مكتمل.',
+      )
+    }
+    return (
+      (await syncChannelFailureCount(bindings, announcement, 'email', {
+        lastError: 'إعداد البريد غير مكتمل.',
+      })) ?? announcement
+    )
+  }
+
+  const contacts = await listAssemblyMemberContacts(
+    bindings.MEMBERS_DB,
+    pending.map((item) => item.membershipNumber ?? ''),
+  )
+  const contactByNumber = new Map(contacts.map((contact) => [contact.membershipNumber, contact]))
+
+  let current = announcement
+  let sentDelta = 0
+  let lastError = announcement.lastError
+
+  for (const item of pending) {
+    const contact = item.membershipNumber ? contactByNumber.get(item.membershipNumber) : undefined
+    const email = item.email?.trim() || contact?.email || ''
+    const displayName = item.displayName || contact?.displayName || item.membershipNumber || email
+
+    if (!email) {
+      lastError = 'لا يوجد بريد لإعادة الإرسال.'
+      await markAssemblyAnnouncementFailureAttempted(bindings.VMS_DB, item.id, retryStartedAt, lastError)
+      continue
+    }
+
+    try {
+      await sendAppEmail(bindings, {
+        to: email,
+        subject: `${announcement.subject} — تجمّع إبتكار`,
+        text: buildAssemblyAnnouncementEmailText({
+          displayName,
+          subject: announcement.subject,
+          body: announcement.body,
+          siteUrl,
+        }),
+        html: buildAssemblyAnnouncementEmailHtml({
+          displayName,
+          subject: announcement.subject,
+          body: announcement.body,
+          siteUrl,
+        }),
+      })
+      await deleteAssemblyAnnouncementFailure(bindings.VMS_DB, item.id)
+      sentDelta += 1
+    } catch (error) {
+      lastError = errorMessage(error)
+      await markAssemblyAnnouncementFailureAttempted(bindings.VMS_DB, item.id, retryStartedAt, lastError)
+    }
+  }
+
+  current =
+    (await syncChannelFailureCount(bindings, announcement, 'email', {
+      emailSent: announcement.emailSent + sentDelta,
+      lastError,
+    })) ?? current
+
+  return current
+}
+
 export async function announcementNeedsContinue(bindings: AppBindings, record: AssemblyAnnouncementRecord) {
+  if (await announcementHasPendingRetry(bindings, record)) {
+    return true
+  }
+
   if (record.status === 'failed' || record.status === 'sent' || record.status === 'partial') {
     return false
   }
