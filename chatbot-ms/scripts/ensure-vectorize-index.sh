@@ -55,7 +55,7 @@ is_auth_error() {
 
 is_missing_index() {
   local output="$1"
-  echo "$output" | grep -qiE 'not found|does not exist|couldn.t find|10159|code: 404'
+  echo "$output" | grep -qiE 'not[_ ]found|does not exist|couldn.t find|10159|code: 404|code: 3000'
 }
 
 echo "Ensuring Vectorize index '${INDEX_NAME}' (dimensions=${DIMENSIONS}, metric=${METRIC})"
