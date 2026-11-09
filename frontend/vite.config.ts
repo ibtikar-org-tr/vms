@@ -27,12 +27,19 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5930,
       proxy: {
+        '/ms/ibtikar-chat': {
+          target: env.VITE_DEV_CHATBOT_PROXY || 'http://127.0.0.1:8791',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/ms\/ibtikar-chat/, ''),
+        },
         '/ms': {
           target: env.VITE_DEV_API_PROXY || 'http://127.0.0.1:5931',
           changeOrigin: true,
           secure: true,
         },
       },
+
       watch: {
         usePolling: true,
         interval: 1000,

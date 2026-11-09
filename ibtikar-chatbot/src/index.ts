@@ -14,19 +14,23 @@ app.use('*', async (c, next) => {
   return middleware(c, next)
 })
 
-app.get('/', (c) => {
+const MS_BASE = '/ms/ibtikar-chat'
+
+app.get('/', (c) => c.redirect(MS_BASE))
+
+app.get(MS_BASE, (c) => {
   return c.json({
     name: 'Ibtikar Chatbot',
     status: 'ok',
     endpoints: {
-      health: 'GET /health',
-      chat: 'POST /chat',
-      ingest: 'POST /internal/ingest',
+      health: `GET ${MS_BASE}/health`,
+      chat: `POST ${MS_BASE}/chat`,
+      ingest: `POST ${MS_BASE}/internal/ingest`,
     },
   })
 })
 
-app.get('/health', (c) => {
+app.get(`${MS_BASE}/health`, (c) => {
   return c.json({
     status: 'ok',
     service: 'ibtikar-chatbot',
@@ -35,8 +39,9 @@ app.get('/health', (c) => {
   })
 })
 
-app.route('/chat', chatRoutes)
-app.route('/internal/ingest', ingestRoutes)
+app.route(`${MS_BASE}/chat`, chatRoutes)
+app.route(`${MS_BASE}/internal/ingest`, ingestRoutes)
+
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 
