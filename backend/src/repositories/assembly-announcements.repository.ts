@@ -21,6 +21,8 @@ export interface AssemblyAnnouncementRecord {
   emailTotal: number
   telegramTotal: number
   lastError: string | null
+  retryChannel: AssemblyAnnouncementChannel | null
+  retryStartedAt: string | null
 }
 
 export interface AssemblyAnnouncementFailureRecord {
@@ -32,6 +34,7 @@ export interface AssemblyAnnouncementFailureRecord {
   email: string | null
   displayName: string | null
   error: string | null
+  attemptedAt: string | null
 }
 
 interface AnnouncementRow {
@@ -52,6 +55,8 @@ interface AnnouncementRow {
   email_total?: number | null
   telegram_total?: number | null
   last_error: string | null
+  retry_channel?: string | null
+  retry_started_at?: string | null
 }
 
 interface FailureRow {
@@ -63,6 +68,7 @@ interface FailureRow {
   email: string | null
   display_name: string | null
   error: string | null
+  attempted_at?: string | null
 }
 
 function mapAnnouncement(row: AnnouncementRow): AssemblyAnnouncementRecord {
@@ -84,6 +90,8 @@ function mapAnnouncement(row: AnnouncementRow): AssemblyAnnouncementRecord {
     emailTotal: Number(row.email_total ?? 0),
     telegramTotal: Number(row.telegram_total ?? 0),
     lastError: row.last_error,
+    retryChannel: row.retry_channel === 'telegram' ? 'telegram' : row.retry_channel === 'email' ? 'email' : null,
+    retryStartedAt: row.retry_started_at ?? null,
   }
 }
 
@@ -97,6 +105,7 @@ function mapFailure(row: FailureRow): AssemblyAnnouncementFailureRecord {
     email: row.email,
     displayName: row.display_name,
     error: row.error,
+    attemptedAt: row.attempted_at ?? null,
   }
 }
 
@@ -170,6 +179,8 @@ export async function updateAssemblyAnnouncementProgress(
     emailTotal: number
     telegramTotal: number
     lastError: string | null
+    retryChannel: AssemblyAnnouncementChannel | null
+    retryStartedAt: string | null
   }>,
 ) {
   const updates: string[] = []
@@ -210,6 +221,14 @@ export async function updateAssemblyAnnouncementProgress(
   if (patch.lastError !== undefined) {
     updates.push('last_error = ?')
     values.push(patch.lastError)
+  }
+  if (patch.retryChannel !== undefined) {
+    updates.push('retry_channel = ?')
+    values.push(patch.retryChannel)
+  }
+  if (patch.retryStartedAt !== undefined) {
+    updates.push('retry_started_at = ?')
+    values.push(patch.retryStartedAt)
   }
 
   if (updates.length === 0) {
@@ -265,6 +284,114 @@ export async function listAssemblyAnnouncementFailures(db: D1DatabaseLike, annou
     .all<FailureRow>()
 
   return result.results.map(mapFailure)
+}
+
+export async function countAssemblyAnnouncementFailures(
+  db: D1DatabaseLike,
+  announcementId: string,
+  channel?: AssemblyAnnouncementChannel,
+) {
+  const result = channel
+    ? await db
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM assembly_announcement_failures
+           WHERE announcement_id = ? AND channel = ?`,
+        )
+        .bind(announcementId, channel)
+        .first<{ total: number }>()
+    : await db
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM assembly_announcement_failures
+           WHERE announcement_id = ?`,
+        )
+        .bind(announcementId)
+        .first<{ total: number }>()
+
+  return Number(result?.total ?? 0)
+}
+
+export async function listRetryableAnnouncementFailures(
+  db: D1DatabaseLike,
+  announcementId: string,
+  channel: AssemblyAnnouncementChannel,
+  retryStartedAt: string,
+  limit: number,
+) {
+  const result = await db
+    .prepare(
+      `SELECT * FROM assembly_announcement_failures
+       WHERE announcement_id = ?
+         AND channel = ?
+         AND (attempted_at IS NULL OR attempted_at < ?)
+       ORDER BY created_at ASC
+       LIMIT ?`,
+    )
+    .bind(announcementId, channel, retryStartedAt, Math.max(1, Math.min(limit, 20)))
+    .all<FailureRow>()
+
+  return result.results.map(mapFailure)
+}
+
+export async function countRetryableAnnouncementFailures(
+  db: D1DatabaseLike,
+  announcementId: string,
+  channel: AssemblyAnnouncementChannel,
+  retryStartedAt: string,
+) {
+  const result = await db
+    .prepare(
+      `SELECT COUNT(*) AS total
+       FROM assembly_announcement_failures
+       WHERE announcement_id = ?
+         AND channel = ?
+         AND (attempted_at IS NULL OR attempted_at < ?)`,
+    )
+    .bind(announcementId, channel, retryStartedAt)
+    .first<{ total: number }>()
+
+  return Number(result?.total ?? 0)
+}
+
+export async function deleteAssemblyAnnouncementFailure(db: D1DatabaseLike, id: string) {
+  await db.prepare('DELETE FROM assembly_announcement_failures WHERE id = ?').bind(id).run()
+}
+
+export async function markAssemblyAnnouncementFailureAttempted(
+  db: D1DatabaseLike,
+  id: string,
+  attemptedAt: string,
+  error: string,
+) {
+  await db
+    .prepare(
+      `UPDATE assembly_announcement_failures
+       SET attempted_at = ?, error = ?
+       WHERE id = ?`,
+    )
+    .bind(attemptedAt, error, id)
+    .run()
+}
+
+export async function startAssemblyAnnouncementRetry(
+  db: D1DatabaseLike,
+  id: string,
+  channel: AssemblyAnnouncementChannel,
+) {
+  await db
+    .prepare(
+      `UPDATE assembly_announcements
+       SET status = 'sending',
+           retry_channel = ?,
+           retry_started_at = datetime('now'),
+           last_error = NULL
+       WHERE id = ?`,
+    )
+    .bind(channel, id)
+    .run()
+
+  return getAssemblyAnnouncementById(db, id)
 }
 
 export function isMissingAnnouncementsTable(error: unknown) {

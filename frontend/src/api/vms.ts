@@ -245,6 +245,13 @@ export function continueAssemblyAnnouncement(id: string) {
   >(`/assembly/announcements/${encodeURIComponent(id)}/continue`, {})
 }
 
+export function retryAssemblyAnnouncement(id: string, channel: 'email' | 'telegram') {
+  return postJson<
+    { announcement: AssemblyAnnouncement; queued: boolean; needsContinue: boolean },
+    { channel: 'email' | 'telegram' }
+  >(`/assembly/announcements/${encodeURIComponent(id)}/retry`, { channel })
+}
+
 export function fetchProfile(membershipNumber: string) {
   return fetchJson<{ profile: MemberProfile }>(`/profile/${encodeURIComponent(membershipNumber)}`)
 }

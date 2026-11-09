@@ -23,11 +23,13 @@ import {
   assemblyAnnouncementParamsSchema,
   assemblyMembersQuerySchema,
   createAssemblyAnnouncementSchema,
+  retryAssemblyAnnouncementSchema,
 } from '../schemas/assembly.schema'
 import {
   announcementNeedsContinue,
   deliverAssemblyAnnouncement,
   enqueueAnnouncementDelivery,
+  startFailedAnnouncementRetry,
 } from '../services/assembly-announcement.service'
 import type { AppEnv } from '../types/hono'
 import { getActorUser } from '../utils/actor'
@@ -330,6 +332,50 @@ assemblyRoute.post(
     } catch (error) {
       console.error('Failed to continue assembly announcement', error)
       return c.json({ error: 'تعذر متابعة الإرسال.', retryable: true }, 500)
+    }
+  },
+)
+
+assemblyRoute.post(
+  '/assembly/announcements/:id/retry',
+  zValidator('param', assemblyAnnouncementParamsSchema),
+  zValidator('json', retryAssemblyAnnouncementSchema, jsonValidationHook),
+  async (c) => {
+    const access = await requireLeadership(c)
+    if (access.error) {
+      return c.json(access.error.body, access.error.status)
+    }
+
+    try {
+      const { id } = c.req.valid('param')
+      const { channel } = c.req.valid('json')
+      const started = await startFailedAnnouncementRetry(c.env, id, channel)
+      if (started.error === 'missing' || !started.announcement) {
+        return c.json({ error: 'الرسالة غير موجودة.' }, 404)
+      }
+      if (started.error === 'in_progress') {
+        return c.json({ error: 'الإرسال الأصلي ما زال جارياً. انتظر أو اضغط متابعة الإرسال.' }, 409)
+      }
+      if (started.error === 'busy') {
+        return c.json({ error: 'إعادة إرسال القناة الأخرى جارية الآن. انتظر حتى تنتهي ثم أعد المحاولة.' }, 409)
+      }
+      if (started.error === 'none') {
+        return c.json({ error: channel === 'telegram' ? 'لا يوجد فشل تيليغرام لإعادة الإرسال.' : 'لا يوجد فشل بريد لإعادة الإرسال.' }, 400)
+      }
+
+      const queued = await enqueueAnnouncementDelivery(c.env, id)
+      if (queued) {
+        const announcement = await getAssemblyAnnouncementById(c.env.VMS_DB, id)
+        const needsContinue = announcement ? await announcementNeedsContinue(c.env, announcement) : false
+        return c.json({ announcement, queued: true, needsContinue })
+      }
+
+      const announcement = await deliverAssemblyAnnouncement(c.env, id)
+      const needsContinue = announcement ? await announcementNeedsContinue(c.env, announcement) : false
+      return c.json({ announcement, queued: false, needsContinue })
+    } catch (error) {
+      console.error('Failed to retry assembly announcement failures', error)
+      return c.json({ error: 'تعذر إعادة إرسال الفاشلين.', retryable: true }, 500)
     }
   },
 )

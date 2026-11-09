@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, Download, Mail, Megaphone, Search, Send, Users } from 'lucide-react'
+import { Copy, Download, Mail, Megaphone, RotateCcw, Search, Send, Users } from 'lucide-react'
 import {
   continueAssemblyAnnouncement,
   createAssemblyAnnouncement,
@@ -8,6 +8,7 @@ import {
   fetchAssemblyAnnouncement,
   fetchAssemblyAnnouncements,
   fetchAssemblyMembers,
+  retryAssemblyAnnouncement,
 } from '../../api/vms'
 import type { AssemblyAnnouncement, AssemblyAnnouncementFailure, AssemblyMember } from '../../types/vms'
 import { getStoredUser, isPlatformAdmin } from '../../utils/auth'
@@ -91,6 +92,8 @@ export function DashboardAssemblyPage() {
 
   const pageSize = 40
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const emailFailures = failures.filter((item) => item.channel === 'email')
+  const telegramFailures = failures.filter((item) => item.channel === 'telegram')
 
   useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
@@ -324,6 +327,18 @@ export function DashboardAssemblyPage() {
     }
   }
 
+  async function watchQueuedAnnouncement(
+    announcement: AssemblyAnnouncement,
+    queued: boolean,
+    needsContinue: boolean,
+  ) {
+    setProgress(announcement)
+    setWatchingId(announcement.id)
+    if (!queued && needsContinue) {
+      await pumpAnnouncement(announcement, needsContinue)
+    }
+  }
+
   async function resumeAnnouncement(item: AssemblyAnnouncement) {
     setIsSending(true)
     setSendError(null)
@@ -332,13 +347,27 @@ export function DashboardAssemblyPage() {
     setWatchingId(item.id)
     try {
       const next = await continueAssemblyAnnouncement(item.id)
-      setProgress(next.announcement)
-      if (!next.queued && next.needsContinue) {
-        await pumpAnnouncement(next.announcement, next.needsContinue)
-      }
+      await watchQueuedAnnouncement(next.announcement, Boolean(next.queued), next.needsContinue)
     } catch (error) {
       setSendError(error instanceof Error ? error.message : 'تعذر متابعة الإرسال.')
       setIsSending(false)
+    }
+  }
+
+  async function retryFailed(item: AssemblyAnnouncement, channel: 'email' | 'telegram') {
+    setIsSending(true)
+    setSendError(null)
+    setSendSuccess(null)
+    setProgress(item)
+    setWatchingId(item.id)
+    try {
+      const next = await retryAssemblyAnnouncement(item.id, channel)
+      setSendSuccess(channel === 'telegram' ? 'جارٍ إعادة إرسال تيليغرام للفاشلين...' : 'جارٍ إعادة إرسال البريد للفاشلين...')
+      await watchQueuedAnnouncement(next.announcement, Boolean(next.queued), next.needsContinue)
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'تعذر إعادة إرسال الفاشلين.')
+      setIsSending(false)
+      setWatchingId(null)
     }
   }
 
@@ -632,6 +661,28 @@ export function DashboardAssemblyPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-red-950">تعذر الوصول إلى {failures.length} عضو</p>
                   <div className="flex flex-wrap gap-2">
+                    {progress && telegramFailures.length > 0 ? (
+                      <button
+                        type="button"
+                        disabled={isSending}
+                        onClick={() => void retryFailed(progress, 'telegram')}
+                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-900 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        إعادة تيليغرام
+                      </button>
+                    ) : null}
+                    {progress && emailFailures.length > 0 ? (
+                      <button
+                        type="button"
+                        disabled={isSending}
+                        onClick={() => void retryFailed(progress, 'email')}
+                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-900 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        إعادة البريد
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() =>
@@ -741,6 +792,30 @@ export function DashboardAssemblyPage() {
                         >
                           متابعة الإرسال
                         </button>
+                      ) : null}
+                      {announcementDone(item.status) && (item.emailFailed > 0 || item.telegramFailed > 0) ? (
+                        <div className="mt-2 flex flex-wrap gap-3">
+                          {item.telegramFailed > 0 ? (
+                            <button
+                              type="button"
+                              disabled={isSending}
+                              onClick={() => void retryFailed(item, 'telegram')}
+                              className="text-xs font-semibold text-cyan-800 underline disabled:opacity-50"
+                            >
+                              إعادة تيليغرام الفاشل ({item.telegramFailed})
+                            </button>
+                          ) : null}
+                          {item.emailFailed > 0 ? (
+                            <button
+                              type="button"
+                              disabled={isSending}
+                              onClick={() => void retryFailed(item, 'email')}
+                              className="text-xs font-semibold text-cyan-800 underline disabled:opacity-50"
+                            >
+                              إعادة البريد الفاشل ({item.emailFailed})
+                            </button>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   ))
