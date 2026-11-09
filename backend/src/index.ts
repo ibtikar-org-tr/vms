@@ -24,12 +24,14 @@ import { vmsSkillsRoute } from './routes/vms-skills.route'
 import { vmsAgendaRoute } from './routes/vms-agenda.route'
 import { vmsTasksRoute } from './routes/vms-tasks.route'
 import { handleProjectNoteWebSocket, vmsProjectNotesRoute } from './routes/vms-project-notes.route'
+import { assemblyRoute } from './routes/assembly.route'
 import { uploadClubBanner, uploadEventBanner, uploadImages, serveImage } from './routes/images.route'
 import { handleCron } from './cron'
 import { ProjectNoteRoom } from './durable-objects/project-note-room'
+import { handleAssemblyAnnouncementQueue } from './services/assembly-announcement-queue.service'
 import { reindexAllProjectNotes } from './services/note-vector-backfill.service'
 import { reindexAllProjectTasks } from './services/task-vector-backfill.service'
-import type { AppBindings } from './types/bindings'
+import type { AppBindings, AssemblyAnnouncementQueueMessage, QueueMessageBatchLike } from './types/bindings'
 import type { AppEnv } from './types/hono'
 
 export { ProjectNoteRoom }
@@ -182,6 +184,7 @@ securedApi.route('/', vmsSkillsRoute)
 securedApi.route('/', vmsLeaderboardRoute)
 securedApi.route('/', vmsPointTransactionsRoute)
 securedApi.route('/', vmsProjectNotesRoute)
+securedApi.route('/', assemblyRoute)
 securedApi.post('/images/upload', uploadImages)
 securedApi.put('/events/:id/banner', uploadEventBanner)
 securedApi.put('/clubs/:id/banner', uploadClubBanner)
@@ -197,5 +200,8 @@ export default {
     ctx: ExecutionContext,
   ) {
     ctx.waitUntil(handleCron(env))
+  },
+  async queue(batch: QueueMessageBatchLike<AssemblyAnnouncementQueueMessage>, env: AppBindings) {
+    await handleAssemblyAnnouncementQueue(batch, env)
   },
 }

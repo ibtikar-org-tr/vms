@@ -21,8 +21,8 @@ type TitleCandidate = MemberDisplayTitle & {
   rank: number
 }
 
-function isBoardProject(projectName: string) {
-  return /مجلس\s*الإدارة|board of directors/i.test(projectName)
+export function isBoardProject(projectName: string) {
+  return /مجلس\s*(?:ال)?[إا]دارة|board of directors/i.test(projectName)
 }
 
 function chairBoost(title: string) {

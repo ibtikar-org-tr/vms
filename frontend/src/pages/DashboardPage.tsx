@@ -24,6 +24,7 @@ import {
   ChevronLeft,
   Menu,
   X,
+  Megaphone,
 } from 'lucide-react'
 
 interface SidebarItem {
@@ -52,6 +53,9 @@ export function DashboardPage() {
   const [memberTitle, setMemberTitle] = useState(() =>
     user?.role?.trim().toLowerCase() === 'admin' ? 'مدير المنصة' : 'عضو',
   )
+  const [isAssemblyLeadership, setIsAssemblyLeadership] = useState(
+    () => user?.role?.trim().toLowerCase() === 'admin',
+  )
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const isGuestPublicEventView = !user && isPublicEventDetailPath(location.pathname)
@@ -71,6 +75,9 @@ export function DashboardPage() {
         const title = payload.title?.trim()
         if (!cancelled && title) {
           setMemberTitle(title)
+        }
+        if (!cancelled) {
+          setIsAssemblyLeadership(payload.isAssemblyLeadership === true)
         }
       })
       .catch(() => {})
@@ -118,6 +125,19 @@ export function DashboardPage() {
       </>
     )
   }
+
+  const sidebarItems: SidebarItem[] = isAssemblyLeadership
+    ? [
+        ...SIDEBAR_ITEMS.slice(0, 3),
+        {
+          to: paths.assembly,
+          label: 'إدارة التجمّع',
+          helper: 'الأعضاء والرسائل الجماعية',
+          icon: Megaphone,
+        },
+        ...SIDEBAR_ITEMS.slice(3),
+      ]
+    : SIDEBAR_ITEMS
 
   const handleMobileNavigation = () => {
     setIsMobileSidebarOpen(false)
@@ -208,7 +228,7 @@ export function DashboardPage() {
             </div>
 
             <nav className="space-y-1">
-              {SIDEBAR_ITEMS.map((item) => {
+              {sidebarItems.map((item) => {
                 const IconComponent = item.icon
                 return (
                   <NavLink

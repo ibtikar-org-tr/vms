@@ -45,9 +45,12 @@ jobs:
           | .vars.SMTP_USER = $smtpUser
           | .vars.TELEGRAM_MS = $telegramMs
           | .vars.MEMBERSHIP_MS =$membershipMs
+          | .vars.AUTHDEEP_API_BASE = (if $authdeepApiBase == "" then .vars.AUTHDEEP_API_BASE else $authdeepApiBase end)
+          | .vars.AUTHDEEP_TENANT_ID = (if $authdeepTenantId == "" then .vars.AUTHDEEP_TENANT_ID else $authdeepTenantId end)
+          | .vars.AUTHDEEP_MAIL_FROM = (if $authdeepMailFrom == "" then .vars.AUTHDEEP_MAIL_FROM else $authdeepMailFrom end)
           | .services[0].service = $membershipMsName
           | .account_id = $accountId
-          | del(.vars.SMTP_PASS, .vars.TELEGRAM_BOT_TOKEN, .vars.INTERNAL_SECRET, .vars.DEEPSEEK_API_KEY)'
+          | del(.vars.SMTP_PASS, .vars.TELEGRAM_BOT_TOKEN, .vars.INTERNAL_SECRET, .vars.DEEPSEEK_API_KEY, .vars.AUTHDEEP_API_TOKEN, .vars.AUTHDEEP_HMAC_SECRET)'
 
           jq \
             --arg dbid0 "${{ vars.TELEGRAM_DB_ID }}" \
@@ -60,6 +63,9 @@ jobs:
             --arg smtpHost "${{ vars.SMTP_HOST }}" \
             --arg smtpPort "${{ vars.SMTP_PORT }}" \
             --arg smtpUser "${{ vars.SMTP_USER }}" \
+            --arg authdeepApiBase "${{ vars.AUTHDEEP_API_BASE }}" \
+            --arg authdeepTenantId "${{ vars.AUTHDEEP_TENANT_ID }}" \
+            --arg authdeepMailFrom "${{ vars.AUTHDEEP_MAIL_FROM }}" \
             --arg telegramMs "${{ vars.TELEGRAM_MS }}" \
             --arg membershipMs "${{ vars.VITE_MEMBER_MS }}" \
             --arg membershipMsName "${{ vars.THIS_APP_NAME_BE }}" \
@@ -80,4 +86,10 @@ jobs:
           echo "${{ secrets.SMTP_PASS }}" | wrangler secret put SMTP_PASS --config wrangler.local.jsonc --name telegram-ms-dev
           echo "${{ secrets.TELEGRAM_BOT_TOKEN }}" | wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.local.jsonc --name telegram-ms-dev
           echo "${{ secrets.DEEPSEEK_API_KEY }}" | wrangler secret put DEEPSEEK_API_KEY --config wrangler.local.jsonc --name telegram-ms-dev
+          if [ -n "${{ secrets.AUTHDEEP_API_TOKEN }}" ]; then
+            echo "${{ secrets.AUTHDEEP_API_TOKEN }}" | wrangler secret put AUTHDEEP_API_TOKEN --config wrangler.local.jsonc --name telegram-ms-dev
+          fi
+          if [ -n "${{ secrets.AUTHDEEP_HMAC_SECRET }}" ]; then
+            echo "${{ secrets.AUTHDEEP_HMAC_SECRET }}" | wrangler secret put AUTHDEEP_HMAC_SECRET --config wrangler.local.jsonc --name telegram-ms-dev
+          fi
 

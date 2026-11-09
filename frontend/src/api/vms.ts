@@ -20,6 +20,9 @@ import type {
   VmsSkill,
   VmsTask,
   VmsTaskSubtask,
+  AssemblyMember,
+  AssemblyAnnouncement,
+  AssemblyAnnouncementFailure,
 } from '../types/vms'
 import type {
   ForgotPasswordResponse,
@@ -156,10 +159,97 @@ export function changePassword(payload: { currentPassword: string; newPassword: 
 }
 
 export function fetchMemberDisplayTitle() {
-  return fetchJson<{ title: string; source: 'position' | 'project_role' | 'platform_role' }>(
-    '/me/display-title',
-    { cache: false },
-  )
+  return fetchJson<{
+    title: string
+    source: 'position' | 'project_role' | 'platform_role'
+    isAssemblyLeadership?: boolean
+  }>('/me/display-title', { cache: false })
+}
+
+export function fetchAssemblyAccess() {
+  return fetchJson<{ isAssemblyLeadership: boolean }>('/assembly/access', { cache: false })
+}
+
+export function fetchAssemblyMembers(params?: {
+  q?: string
+  volunteersOnly?: boolean
+  page?: number
+  pageSize?: number
+}) {
+  const search = new URLSearchParams()
+  if (params?.q?.trim()) search.set('q', params.q.trim())
+  if (params?.volunteersOnly) search.set('volunteersOnly', 'true')
+  if (params?.page) search.set('page', String(params.page))
+  if (params?.pageSize) search.set('pageSize', String(params.pageSize))
+  const query = search.toString()
+  return fetchJson<{
+    members: AssemblyMember[]
+    total: number
+    page: number
+    pageSize: number
+    counts: { totalMembers: number; telegramLinked: number; volunteers: number }
+  }>(`/assembly/members${query ? `?${query}` : ''}`, { cache: false })
+}
+
+export async function downloadAssemblyMembersCsv(params?: { q?: string; volunteersOnly?: boolean }) {
+  const search = new URLSearchParams()
+  if (params?.q?.trim()) search.set('q', params.q.trim())
+  if (params?.volunteersOnly) search.set('volunteersOnly', 'true')
+  const query = search.toString()
+  const { blob, filename } = await apiDownload(`/assembly/members/export${query ? `?${query}` : ''}`)
+  const csvBlob = new Blob([await blob.arrayBuffer()], { type: 'text/csv;charset=utf-8' })
+  const downloadName = filename || 'assembly-members.csv'
+  const objectUrl = URL.createObjectURL(csvBlob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = downloadName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(objectUrl)
+}
+
+export function fetchAssemblyAnnouncements() {
+  return fetchJson<{ announcements: AssemblyAnnouncement[] }>('/assembly/announcements', { cache: false })
+}
+
+export function createAssemblyAnnouncement(payload: {
+  subject: string
+  body: string
+  sendEmail: boolean
+  sendTelegram: boolean
+}) {
+  return postJson<
+    {
+      announcement: AssemblyAnnouncement
+      queued: boolean
+      needsContinue: boolean
+      audience: { email: number; telegram: number }
+    },
+    typeof payload
+  >('/assembly/announcements', payload)
+}
+
+export function fetchAssemblyAnnouncement(id: string) {
+  return fetchJson<{
+    announcement: AssemblyAnnouncement
+    failures: AssemblyAnnouncementFailure[]
+    needsContinue: boolean
+  }>(`/assembly/announcements/${encodeURIComponent(id)}`, { cache: false })
+}
+
+export function continueAssemblyAnnouncement(id: string) {
+  return postJson<
+    { announcement: AssemblyAnnouncement; queued: boolean; needsContinue: boolean },
+    Record<string, never>
+  >(`/assembly/announcements/${encodeURIComponent(id)}/continue`, {})
+}
+
+export function retryAssemblyAnnouncement(id: string, channel: 'email' | 'telegram') {
+  return postJson<
+    { announcement: AssemblyAnnouncement; queued: boolean; needsContinue: boolean },
+    { channel: 'email' | 'telegram' }
+  >(`/assembly/announcements/${encodeURIComponent(id)}/retry`, { channel })
 }
 
 export function fetchProfile(membershipNumber: string) {
@@ -430,6 +520,7 @@ export function createEvent(payload: {
   displayAttendeeNumbers?: boolean
   cancellationDeadlineHours?: number
   allowGuestRegistration?: boolean
+  allowMultipleTickets?: boolean
 }) {
   return postJson<{ event: VmsEvent }, typeof payload>('/events', payload)
 }
@@ -571,6 +662,7 @@ export function updateEvent(
     displayAttendeeNumbers: boolean
     cancellationDeadlineHours: number
     allowGuestRegistration: boolean
+    allowMultipleTickets: boolean
     registrationSuccessMessage: string | null
   }>,
 ) {

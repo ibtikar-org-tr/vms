@@ -180,16 +180,12 @@ api.post('/notify-member', async (c) => {
       }
     }
 
-    if (successful.length === 0) {
-      return c.json({
-        error: 'Failed to send message to any members',
-        results: { successful, failed }
-      }, 400);
-    }
-
     return c.json({
-      success: true,
-      message: `Message sent to ${successful.length} out of ${memberIdsArray.length} members`,
+      success: successful.length > 0,
+      message: successful.length > 0
+        ? `Message sent to ${successful.length} out of ${memberIdsArray.length} members`
+        : 'Failed to send message to any members',
+      error: successful.length > 0 ? undefined : 'Failed to send message to any members',
       results: { successful, failed },
       total_requested: memberIdsArray.length,
       sent_to: successful.length,

@@ -134,7 +134,9 @@ vmsPublicEventsRoute.post(
       }
 
       const ticketIds = uniqueTicketIds(payload)
-      const ticketIdsError = validateRequestedTicketIds(ticketIds)
+      const ticketIdsError = validateRequestedTicketIds(ticketIds, {
+        allowMultipleTickets: event.allowMultipleTickets,
+      })
       if (ticketIdsError) {
         return c.json({ error: ticketIdsError }, 400)
       }
@@ -155,6 +157,7 @@ vmsPublicEventsRoute.post(
         guestEmail: payload.guestEmail,
         guestName: payload.guestName,
         guestPhone: payload.guestPhone,
+        allowMultipleTickets: event.allowMultipleTickets,
       })
 
       if (!result.ok) {

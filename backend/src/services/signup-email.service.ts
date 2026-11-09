@@ -1,46 +1,19 @@
-import { WorkerMailer } from 'worker-mailer'
 import { RegistrationEmailError } from '../errors/registration.errors'
 import type { AppBindings } from '../types/bindings'
-
-async function connectMailer(bindings: AppBindings) {
-  if (!bindings.SMTP_HOST || !bindings.SMTP_USER || !bindings.SMTP_PASS) {
-    throw new RegistrationEmailError(
-      'SMTP configuration is incomplete. Please configure SMTP_HOST, SMTP_USER, and SMTP_PASS. يرجى التواصل مع الأدمين وإخباره',
-    )
-  }
-
-  const smtpPort = Number.parseInt(String(bindings.SMTP_PORT ?? '587'), 10)
-  if (!Number.isFinite(smtpPort) || smtpPort <= 0) {
-    throw new RegistrationEmailError('SMTP_PORT must be a valid positive number. يرجى التواصل مع الأدمين وإخباره')
-  }
-
-  return WorkerMailer.connect({
-    host: bindings.SMTP_HOST,
-    port: smtpPort,
-    secure: false,
-    startTls: true,
-    credentials: {
-      username: bindings.SMTP_USER,
-      password: bindings.SMTP_PASS,
-    },
-    authType: 'plain',
-  })
-}
+import { isAppEmailConfigured, sendAppEmail } from './app-email.service'
 
 async function sendPlainEmail(
   bindings: AppBindings,
   params: { to: string; subject: string; text: string },
 ): Promise<void> {
-  let mailer: Awaited<ReturnType<typeof WorkerMailer.connect>> | null = null
+  if (!isAppEmailConfigured(bindings)) {
+    throw new RegistrationEmailError(
+      'Email configuration is incomplete. Please configure AUTHDEEP_API_TOKEN or SMTP. يرجى التواصل مع الأدمين وإخباره',
+    )
+  }
 
   try {
-    mailer = await connectMailer(bindings)
-    await mailer.send({
-      from: bindings.SMTP_USER,
-      to: params.to,
-      subject: params.subject,
-      text: params.text,
-    })
+    await sendAppEmail(bindings, params)
   } catch (error) {
     if (error instanceof RegistrationEmailError) {
       throw error
@@ -49,10 +22,6 @@ async function sendPlainEmail(
     throw new RegistrationEmailError('Unable to send email at this time. يرجى التواصل مع الأدمين وإخباره', {
       cause: error,
     })
-  } finally {
-    if (mailer) {
-      await mailer.close()
-    }
   }
 }
 

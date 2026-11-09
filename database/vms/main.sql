@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS events (
     display_attendee_numbers INTEGER NOT NULL DEFAULT 1, -- 1 = show attendee counts publicly, 0 = hide from non-managers
     cancellation_deadline_hours INTEGER NOT NULL DEFAULT 48, -- hours before start_time when self-cancellation closes; 0 = disabled
     allow_guest_registration INTEGER NOT NULL DEFAULT 0, -- 1 = unauthenticated visitors may register with name/email/phone
+    allow_multiple_tickets INTEGER NOT NULL DEFAULT 0, -- 1 = a person may hold more than one ticket type, 0 = one ticket only
     registration_success_message TEXT -- optional rich text shown to the registrant after a successful apply
 );
 
@@ -311,3 +312,51 @@ BEGIN
 END;
 
 CREATE INDEX IF NOT EXISTS idx_task_subtasks_parent ON task_subtasks(parent_task_id);
+
+CREATE TABLE IF NOT EXISTS assembly_announcements (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    send_email INTEGER NOT NULL DEFAULT 1,
+    send_telegram INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL, -- queued, sending, sent, partial, failed
+    email_sent INTEGER NOT NULL DEFAULT 0,
+    email_failed INTEGER NOT NULL DEFAULT 0,
+    email_cursor INTEGER NOT NULL DEFAULT 0,
+    telegram_sent INTEGER NOT NULL DEFAULT 0,
+    telegram_failed INTEGER NOT NULL DEFAULT 0,
+    email_total INTEGER NOT NULL DEFAULT 0,
+    telegram_total INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    retry_channel TEXT,
+    retry_started_at TEXT
+);
+
+CREATE TRIGGER IF NOT EXISTS update_assembly_announcement_updated_at AFTER UPDATE ON assembly_announcements
+BEGIN
+    UPDATE assembly_announcements SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
+CREATE INDEX IF NOT EXISTS idx_assembly_announcements_created_at ON assembly_announcements(created_at);
+
+CREATE TABLE IF NOT EXISTS assembly_announcement_failures (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    announcement_id TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    membership_number TEXT,
+    email TEXT,
+    display_name TEXT,
+    error TEXT,
+    attempted_at TEXT,
+    FOREIGN KEY (announcement_id) REFERENCES assembly_announcements(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assembly_announcement_failures_announcement
+    ON assembly_announcement_failures(announcement_id);
+
+CREATE INDEX IF NOT EXISTS idx_assembly_announcement_failures_retry
+    ON assembly_announcement_failures(announcement_id, channel, attempted_at);

@@ -7,10 +7,19 @@ export const API_BASE = MEMBER_MS_BASE_URL ? `${MEMBER_MS_BASE_URL.replace(/\/+$
 let refreshInFlight: Promise<boolean> | null = null
 
 async function parseErrorMessage(response: Response, fallbackMessage: string) {
+  const contentType = response.headers.get('content-type') ?? ''
   try {
-    const body = (await response.json()) as { error?: unknown }
-    if (typeof body.error === 'string' && body.error.trim()) {
-      return body.error
+    if (contentType.includes('application/json')) {
+      const body = (await response.json()) as { error?: unknown }
+      if (typeof body.error === 'string' && body.error.trim()) {
+        return body.error
+      }
+      return fallbackMessage
+    }
+
+    const text = await response.text()
+    if (/Error 1101|Worker threw exception|Please enable cookies/i.test(text)) {
+      return 'الخادم انقطع أثناء الإرسال. أعد المحاولة أو اضغط متابعة الإرسال.'
     }
   } catch {
     // ignore

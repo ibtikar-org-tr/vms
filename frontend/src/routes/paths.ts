@@ -21,4 +21,5 @@ export const paths = {
   positionEdit: (positionId: string) => `/positions/${encodeURIComponent(positionId)}/edit`,
   profile: '/profile',
   agenda: '/agenda',
+  assembly: '/assembly',
 } as const

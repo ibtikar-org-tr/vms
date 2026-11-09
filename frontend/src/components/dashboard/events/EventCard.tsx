@@ -13,11 +13,11 @@ export function EventCard({ eventItem }: { eventItem: VmsEvent }) {
       to={`/event/${eventItem.id}`}
       className="group block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-md"
     >
-      <div className="relative aspect-[4/1] overflow-hidden bg-linear-to-br from-cyan-50 to-slate-100">
+      <div className="relative aspect-[21/9] overflow-hidden bg-linear-to-br from-cyan-50 to-slate-100">
         {eventItem.imageUrl ? (
           <img
             src={eventItem.imageUrl}
-            alt={eventItem.name}
+            alt=""
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
             loading="lazy"
           />
@@ -27,28 +27,24 @@ export function EventCard({ eventItem }: { eventItem: VmsEvent }) {
           </div>
         )}
 
-        <div className="absolute inset-0 bg-linear-to-t from-slate-950/85 via-slate-950/35 to-slate-950/5" />
-
-        <div className="absolute inset-0 flex flex-col justify-end p-3 sm:p-4">
-          <div className="mb-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm sm:text-[11px]">
-              <CalendarDays className="h-3 w-3 shrink-0" />
-              {formatDateEnCA(eventItem.startTime)}
-            </span>
-          </div>
-
-          <h3 className="line-clamp-2 text-sm font-bold leading-snug text-white sm:text-base">{eventItem.name}</h3>
-
-          {locationLabel ? (
-            <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-white/85 sm:text-xs">
-              <MapPin className="h-3 w-3 shrink-0" />
-              <span className="truncate">{locationLabel}</span>
-            </p>
-          ) : null}
+        <div className="absolute top-3 start-3">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm">
+            <CalendarDays className="h-3 w-3 shrink-0" />
+            {formatDateEnCA(eventItem.startTime)}
+          </span>
         </div>
       </div>
 
-      <div className="min-h-[3.25rem] border-t border-slate-100 px-3 py-2.5 sm:px-4">
+      <div className="space-y-2 px-4 py-3.5 sm:px-5 sm:py-4">
+        <h3 className="text-xl font-extrabold leading-snug text-slate-900 sm:text-2xl">{eventItem.name}</h3>
+
+        {locationLabel ? (
+          <p className="inline-flex max-w-full items-center gap-1 text-xs text-slate-500 sm:text-sm">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{locationLabel}</span>
+          </p>
+        ) : null}
+
         {descriptionPreview ? (
           <p className="line-clamp-2 text-xs leading-relaxed text-slate-600 sm:text-sm">{descriptionPreview}</p>
         ) : null}
