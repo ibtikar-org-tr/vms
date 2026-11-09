@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ibtikar-chatbot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
+  "vectorize": [
+    {
+      "binding": "IBTIKAR_CHAT_VECTORIZE",
+      "index_name": "ibtikar-chatbot",
+      "remote": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "VMS_DB",
+      "database_name": "vms-database",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "remote": true
+    }
+  ],
+  "triggers": {
+    // Daily re-ingest of website + database into Vectorize (not on every DB write)
+    "crons": ["0 3 * * *"]
+  },
+  "vars": {
+    "CHAT_MODEL": "@cf/google/gemma-4-26b-a4b-it",
+    "EMBEDDING_MODEL": "@cf/baai/bge-m3",
+    "CORS_ALLOW_ORIGINS": "*",
+    "WEBSITE_BASE_URL": "https://ibtikar.org.tr",
+    "MEMBERS_SITE_URL": "https://ibtikar.tr",
+    // Comma-separated absolute URLs to crawl during ingest (in addition to base pages)
+    "WEBSITE_INGEST_URLS": "https://ibtikar.org.tr,https://ibtikar.org.tr/,https://ibtikar.tr,https://ibtikar.tr/signup,https://ibtikar.tr/telegram-bot",
+    "RAG_TOP_K": "8",
+    "INTERNAL_SECRET": "delete-on-deployment"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "dev": {
+    "port": 8791,
+    "ip": "0.0.0.0"
+  }
+}
