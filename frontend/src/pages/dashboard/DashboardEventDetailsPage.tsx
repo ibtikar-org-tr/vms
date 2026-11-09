@@ -1,4 +1,4 @@
-import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
@@ -53,6 +53,7 @@ import { canManageVmsEvent } from '../../utils/event-access'
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
 import {
   EventApplicationForm,
+  EventRegistrationPrivacyNote,
   type EventApplicationFormHandle,
 } from '../../components/events/EventApplicationForm'
 
@@ -93,7 +94,6 @@ type GuestApplyPrompt = 'member' | 'join' | 'guest'
 export function DashboardEventDetailsPage() {
   const { eventID } = useParams()
   const location = useLocation()
-  const navigate = useNavigate()
   const user = useMemo(() => getStoredUser(), [])
   const isStandaloneView = isStandalonePublicEventPath(location.pathname)
   const loginRedirect = `${location.pathname}${location.search}`
@@ -126,7 +126,7 @@ export function DashboardEventDetailsPage() {
   const [guestPhone, setGuestPhone] = useState('')
   const [guestApplyComplete, setGuestApplyComplete] = useState(false)
   const [guestOwnedTicketIds, setGuestOwnedTicketIds] = useState<string[]>([])
-  const [guestApplyPrompt, setGuestApplyPrompt] = useState<GuestApplyPrompt>('member')
+  const [guestApplyPrompt, setGuestApplyPrompt] = useState<GuestApplyPrompt>('guest')
   const [applicationFields, setApplicationFields] = useState<VmsEventFormField[]>([])
   const [hasSubmittedApplication, setHasSubmittedApplication] = useState(false)
 
@@ -159,9 +159,6 @@ export function DashboardEventDetailsPage() {
       }
       return allowMultiple ? [...current, ticketId] : [ticketId]
     })
-    if (!user && !guestApplyComplete) {
-      setGuestApplyPrompt('member')
-    }
   }
 
   useEffect(() => {
@@ -612,33 +609,37 @@ export function DashboardEventDetailsPage() {
         </Link>
       </div>
 
-      {/* Hero: banner + title */}
+      {/* Hero: full poster + title + primary register action */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5">
         {eventItem.imageUrl ? (
-          <div className="relative aspect-[4/1]">
+          <div className="bg-slate-950">
             <img
               src={eventItem.imageUrl}
-              alt=""
-              className="h-full w-full object-cover"
+              alt={eventItem.name}
+              className="mx-auto max-h-[min(32rem,80vw)] w-full object-contain"
             />
-            <div className="absolute inset-0 bg-linear-to-t from-slate-900/50 via-slate-900/10 to-transparent" />
           </div>
         ) : (
-          <div className="relative flex aspect-[4/1] items-center justify-center bg-linear-to-br from-slate-100 via-slate-50 to-cyan-50/40">
+          <div className="relative flex h-32 items-center justify-center bg-linear-to-br from-slate-100 via-slate-50 to-cyan-50/40 sm:h-40">
             <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
               <Calendar className="h-10 w-10 text-slate-400" strokeWidth={1.25} />
             </div>
           </div>
         )}
-        <div className="flex flex-col gap-4 border-t border-slate-100 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6 md:p-8">
+        <div className="flex flex-col gap-4 border-t border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6 md:px-8 md:py-6">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-cyan-700/90">تفاصيل الفعالية</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-cyan-700/90">
+              {isStandaloneView ? 'فعالية عامة' : 'تفاصيل الفعالية'}
+            </p>
             <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{eventItem.name}</h1>
-            <EventRichText
-              value={eventItem.description}
-              className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base"
-              emptyText="لا يوجد وصف متاح للفعالية."
-            />
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {formatDateEnCA(eventItem.startTime)}
+              {eventItem.address === 'online'
+                ? ' · أون لاين'
+                : eventItem.city
+                  ? ` · ${eventItem.city}`
+                  : ''}
+            </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-stretch sm:gap-2 lg:flex-row">
             {canEditEvent ? (
@@ -675,12 +676,12 @@ export function DashboardEventDetailsPage() {
                 hasUserRegistered &&
                 !(allowMultipleTickets && remainingTickets.length > 0)
               }
-              className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-medium shadow-sm transition ${
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-sm transition ${
                 applicationFields.length === 0 &&
                 hasUserRegistered &&
                 !(allowMultipleTickets && remainingTickets.length > 0)
-                  ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500'
-                  : 'border-cyan-200 bg-transparent text-cyan-700 hover:bg-cyan-50 hover:text-cyan-800'
+                  ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-500'
+                  : 'bg-cyan-700 text-white hover:bg-cyan-800'
               }`}
             >
               {applicationFields.length > 0
@@ -689,7 +690,9 @@ export function DashboardEventDetailsPage() {
                   ? allowMultipleTickets && remainingTickets.length > 0
                     ? 'أضف تذكرة'
                     : 'مسجّل بالفعل'
-                  : 'سجّل الآن'}
+                  : !user && eventItem.allowGuestRegistration
+                    ? 'سجّل كزائر'
+                    : 'سجّل الآن'}
               {applicationFields.length === 0 &&
               hasUserRegistered &&
               !(allowMultipleTickets && remainingTickets.length > 0) ? (
@@ -768,134 +771,6 @@ export function DashboardEventDetailsPage() {
         </div>
       </div>
 
-      {eventItem.address === 'online' || eventItem.country || eventItem.region || eventItem.city || eventItem.address ? (
-        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <MapPin className="h-5 w-5 text-slate-500" strokeWidth={1.5} />
-            <h2 className="text-base font-semibold text-slate-900">تفاصيل الموقع</h2>
-          </div>
-          {eventItem.address === 'online' ? (
-            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
-              <p className="text-sm font-medium text-blue-900">فعالية أون لاين</p>
-            </div>
-          ) : (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {eventItem.country && (
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
-                  <span className="text-slate-500">الدولة</span>
-                  <p className="mt-1 font-semibold text-slate-900">{eventItem.country}</p>
-                </div>
-              )}
-              {eventItem.region && (
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
-                  <span className="text-slate-500">المنطقة</span>
-                  <p className="mt-1 font-semibold text-slate-900">{eventItem.region}</p>
-                </div>
-              )}
-              {eventItem.city && (
-                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
-                  <span className="text-slate-500">المدينة</span>
-                  <p className="mt-1 font-semibold text-slate-900">{eventItem.city}</p>
-                </div>
-              )}
-              {eventItem.address && (
-                <div className="sm:col-span-2 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
-                  <span className="text-slate-500">العنوان التفصيلي</span>
-                  <p className="mt-1 font-semibold text-slate-900">{eventItem.address}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </article>
-      ) : null}
-
-      <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Users className="h-5 w-5 text-slate-500" strokeWidth={1.5} />
-          <h2 className="text-base font-semibold text-slate-900">معلومات إضافية</h2>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
-            <span className="text-slate-500">المشروع</span>
-            <p className="mt-1 font-mono text-sm font-medium text-slate-900">
-              {eventItem.projectName ?? (eventItem.projectId ? 'غير متاح' : 'غير مرتبط بمشروع')}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
-            <span className="text-slate-500">سعة التذاكر</span>
-            <p className="mt-1 font-semibold text-slate-900">{totalTicketCapacity} مقعد</p>
-          </div>
-        </div>
-      </article>
-
-      <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Sparkles className="h-5 w-5 text-amber-500" strokeWidth={1.5} />
-          <h2 className="text-base font-semibold text-slate-900">المهارات</h2>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {Object.keys(eventItem.skills ?? {}).length === 0 ? (
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">لا توجد مهارات مرتبطة</span>
-          ) : null}
-          {Object.entries(eventItem.skills ?? {}).map(([skillName, skillType]) => (
-            <span
-              key={skillName}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-linear-to-br from-white to-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm"
-            >
-              {skillName}
-              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">{skillType}</span>
-            </span>
-          ))}
-        </div>
-      </article>
-
-      {eventItem.associatedUrls && Object.keys(eventItem.associatedUrls).length > 0 ? (
-        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Link2 className="h-5 w-5 text-cyan-600" strokeWidth={1.5} />
-            <h2 className="text-base font-semibold text-slate-900">الروابط المرتبطة</h2>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {Object.entries(eventItem.associatedUrls).map(([label, url]) => (
-              <a
-                key={label}
-                href={typeof url === 'string' ? url : String(url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-medium text-cyan-700 transition hover:bg-cyan-100 hover:text-cyan-800"
-              >
-                {label}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ))}
-          </div>
-        </article>
-      ) : null}
-
-      {eventItem.telegramGroupId ? (
-        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Link2 className="h-5 w-5 text-cyan-600" strokeWidth={1.5} />
-            <h2 className="text-base font-semibold text-slate-900">مجموعة التلغرام</h2>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void handleSendTelegramInvite()}
-              disabled={isSendingTelegramInvite || !canSendTelegramInvite}
-              title={!canSendTelegramInvite ? telegramInviteHelperText ?? undefined : undefined}
-              className="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-            >
-              <Send className="h-4 w-4" />
-              {isSendingTelegramInvite ? 'جار الإرسال...' : 'إرسال دعوة المجموعة عبر البوت'}
-            </button>
-          </div>
-          {telegramInviteHelperText ? <p className="mt-3 text-sm text-slate-600">{telegramInviteHelperText}</p> : null}
-          {telegramInviteError ? <p className="mt-3 text-sm text-red-600">{telegramInviteError}</p> : null}
-          {telegramInviteSuccess ? <p className="mt-3 text-sm font-medium text-emerald-700">{telegramInviteSuccess}</p> : null}
-        </article>
-      ) : null}
-
       {applicationFields.length > 0 ? (
         <div ref={applicationSectionRef} className="scroll-mt-24">
           <EventApplicationForm
@@ -916,7 +791,11 @@ export function DashboardEventDetailsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Ticket className="h-5 w-5 text-slate-700" strokeWidth={1.5} />
             <h2 className="text-base font-semibold text-slate-900">
-              {combineApplicationWithTickets ? '2. اختيار التذكرة' : 'التذاكر والتسجيلات'}
+              {combineApplicationWithTickets
+                ? '2. اختيار التذكرة'
+                : !user && eventItem.allowGuestRegistration
+                  ? 'التسجيل كزائر'
+                  : 'التذاكر والتسجيلات'}
             </h2>
           </div>
         </div>
@@ -947,11 +826,9 @@ export function DashboardEventDetailsPage() {
             ) : null}
             {!user && eventItem.allowGuestRegistration === true && remainingTickets.length > 0 && !hasUserRegistered ? (
               <div className="mt-5 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-sm text-cyan-950">
-                <p className="font-semibold">
-                  {allowMultipleTickets ? 'اختر تذكرة أو أكثر للمتابعة' : 'اختر تذكرة واحدة للمتابعة'}
-                </p>
+                <p className="font-semibold">التسجيل كزائر</p>
                 <p className="mt-2 leading-7">
-                  نفضّل الانتساب إلى تجمّع إبتكار لإدارة تسجيلك والاستفادة من عضويتك. يمكنك التقديم كزائر إذا لم ترغب بذلك.
+                  اختر نوع الحضور وأدخل اسمك وبريدك ورقم هاتفك. لا تحتاج حساباً لإكمال التسجيل.
                 </p>
               </div>
             ) : null}
@@ -990,7 +867,7 @@ export function DashboardEventDetailsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-slate-900">{ticket.name}</p>
                           {ticket.description ? (
-                            <p className="mt-1 text-xs text-slate-500 line-clamp-2">{ticket.description}</p>
+                            <p className="mt-1 text-xs leading-5 text-slate-500">{ticket.description}</p>
                           ) : null}
                         </div>
                         {soldOut ? (
@@ -1035,68 +912,13 @@ export function DashboardEventDetailsPage() {
                   </button>
                 </form>
               ) : null}
-              {hasSelectedTickets && !user && !guestApplyComplete && guestApplyPrompt === 'member' ? (
-                <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-900">هل أنت عضو في تجمّع إبتكار؟</p>
-                  <p className="text-xs leading-6 text-slate-600">
-                    إذا كان لديك حساب، سجّل الدخول لإكمال التقديم كعضو.
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/login?redirect=${encodeURIComponent(loginRedirect)}`)}
-                      className="rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800"
-                    >
-                      نعم، أنا عضو
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGuestApplyPrompt('join')}
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
-                    >
-                      لا، لست عضواً
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              {hasSelectedTickets && !user && !guestApplyComplete && guestApplyPrompt === 'join' ? (
-                <div className="mt-4 space-y-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
-                  <p className="text-sm font-semibold text-cyan-950">هل ترغب بالانتساب إلى تجمّع إبتكار؟</p>
-                  <p className="text-xs leading-6 text-cyan-900">
-                    الانتساب يتيح لك إدارة تسجيلك والنقاط ودعوات التلغرام، ويربط هذه الفعالية بحسابك لاحقاً.
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/signup?redirect=${encodeURIComponent(loginRedirect)}`)}
-                      className="rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800"
-                    >
-                      نعم، أريد الانتساب
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGuestApplyPrompt('guest')}
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
-                    >
-                      لا، سأقدّم كزائر
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setGuestApplyPrompt('member')}
-                    className="text-xs font-semibold text-cyan-800 underline-offset-4 hover:underline"
-                  >
-                    رجوع
-                  </button>
-                </div>
-              ) : null}
-              {hasSelectedTickets && !user && guestApplyPrompt === 'guest' ? (
-                <form onSubmit={handleGuestApplyToEvent} className="mt-4 space-y-4">
+              {!user && !guestApplyComplete && guestApplyPrompt === 'guest' ? (
+                <form onSubmit={handleGuestApplyToEvent} className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   {combineApplicationWithTickets ? (
                     <p className="text-sm font-medium text-slate-800">سيتم إرسال النموذج والتذكرة معاً ببياناتك من الأعلى.</p>
                   ) : (
                     <>
-                      <p className="text-sm font-medium text-slate-800">تقديم الطلب كزائر</p>
+                      <p className="text-sm font-semibold text-slate-900">بيانات التسجيل</p>
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="min-w-0 md:col-span-2">
                           <TextField
@@ -1116,10 +938,16 @@ export function DashboardEventDetailsPage() {
                             required
                           />
                         </div>
-                        <PhoneNumberField value={guestPhone} onChange={setGuestPhone} required />
+                        <div className="min-w-0 md:col-span-2">
+                          <PhoneNumberField value={guestPhone} onChange={setGuestPhone} required />
+                        </div>
                       </div>
+                      <EventRegistrationPrivacyNote />
                     </>
                   )}
+                  {!hasSelectedTickets ? (
+                    <p className="text-xs leading-6 text-slate-600">اختر نوع الحضور أعلاه ثم اضغط إرسال الطلب.</p>
+                  ) : null}
                   <button
                     type="submit"
                     disabled={isApplying || !hasSelectedTickets}
@@ -1128,13 +956,17 @@ export function DashboardEventDetailsPage() {
                     {applyButtonLabel}
                   </button>
                   {!guestApplyComplete ? (
-                    <button
-                      type="button"
-                      onClick={() => setGuestApplyPrompt('join')}
-                      className="text-xs font-semibold text-cyan-800 underline-offset-4 hover:underline"
-                    >
-                      رجوع
-                    </button>
+                    <p className="text-xs leading-6 text-slate-500">
+                      عضو في تجمّع إبتكار؟{' '}
+                      <Link to={`/login?redirect=${encodeURIComponent(loginRedirect)}`} className="font-semibold text-cyan-800 underline-offset-4 hover:underline">
+                        سجّل الدخول
+                      </Link>
+                      {' · '}
+                      راغب بالانتساب؟{' '}
+                      <Link to={`/signup?redirect=${encodeURIComponent(loginRedirect)}`} className="font-semibold text-cyan-800 underline-offset-4 hover:underline">
+                        أنشئ حساباً
+                      </Link>
+                    </p>
                   ) : null}
                 </form>
               ) : null}
@@ -1350,7 +1182,7 @@ export function DashboardEventDetailsPage() {
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-slate-900">{ticket.name}</p>
                             {ticket.description ? (
-                              <p className="mt-1 text-xs text-slate-500 line-clamp-2">{ticket.description}</p>
+                              <p className="mt-1 text-xs leading-5 text-slate-500">{ticket.description}</p>
                             ) : null}
                           </div>
                           {ticket.currencyPrice ? (
@@ -1450,6 +1282,144 @@ export function DashboardEventDetailsPage() {
           ) : null}
         </div>
       </article>
+
+      {!isEventRichTextEmpty(eventItem.description) ? (
+        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+          <h2 className="border-b border-slate-100 pb-3 text-base font-semibold text-slate-900">عن الفعالية</h2>
+          <EventRichText
+            value={eventItem.description}
+            className="mt-4 max-w-none text-base text-slate-700"
+          />
+        </article>
+      ) : null}
+
+      {eventItem.address === 'online' || eventItem.country || eventItem.region || eventItem.city || eventItem.address ? (
+        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <MapPin className="h-5 w-5 text-slate-500" strokeWidth={1.5} />
+            <h2 className="text-base font-semibold text-slate-900">تفاصيل الموقع</h2>
+          </div>
+          {eventItem.address === 'online' ? (
+            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-sm font-medium text-blue-900">فعالية أون لاين</p>
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {eventItem.country && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
+                  <span className="text-slate-500">الدولة</span>
+                  <p className="mt-1 font-semibold text-slate-900">{eventItem.country}</p>
+                </div>
+              )}
+              {eventItem.region && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
+                  <span className="text-slate-500">المنطقة</span>
+                  <p className="mt-1 font-semibold text-slate-900">{eventItem.region}</p>
+                </div>
+              )}
+              {eventItem.city && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
+                  <span className="text-slate-500">المدينة</span>
+                  <p className="mt-1 font-semibold text-slate-900">{eventItem.city}</p>
+                </div>
+              )}
+              {eventItem.address && (
+                <div className="sm:col-span-2 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
+                  <span className="text-slate-500">العنوان التفصيلي</span>
+                  <p className="mt-1 font-semibold text-slate-900">{eventItem.address}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </article>
+      ) : null}
+
+      <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Users className="h-5 w-5 text-slate-500" strokeWidth={1.5} />
+          <h2 className="text-base font-semibold text-slate-900">معلومات إضافية</h2>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
+            <span className="text-slate-500">المشروع</span>
+            <p className="mt-1 font-mono text-sm font-medium text-slate-900">
+              {eventItem.projectName ?? (eventItem.projectId ? 'غير متاح' : 'غير مرتبط بمشروع')}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm">
+            <span className="text-slate-500">سعة التذاكر</span>
+            <p className="mt-1 font-semibold text-slate-900">{totalTicketCapacity} مقعد</p>
+          </div>
+        </div>
+      </article>
+
+      <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Sparkles className="h-5 w-5 text-amber-500" strokeWidth={1.5} />
+          <h2 className="text-base font-semibold text-slate-900">المهارات</h2>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {Object.keys(eventItem.skills ?? {}).length === 0 ? (
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">لا توجد مهارات مرتبطة</span>
+          ) : null}
+          {Object.entries(eventItem.skills ?? {}).map(([skillName, skillType]) => (
+            <span
+              key={skillName}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-linear-to-br from-white to-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm"
+            >
+              {skillName}
+              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">{skillType}</span>
+            </span>
+          ))}
+        </div>
+      </article>
+
+      {eventItem.associatedUrls && Object.keys(eventItem.associatedUrls).length > 0 ? (
+        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Link2 className="h-5 w-5 text-cyan-600" strokeWidth={1.5} />
+            <h2 className="text-base font-semibold text-slate-900">الروابط المرتبطة</h2>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {Object.entries(eventItem.associatedUrls).map(([label, url]) => (
+              <a
+                key={label}
+                href={typeof url === 'string' ? url : String(url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-medium text-cyan-700 transition hover:bg-cyan-100 hover:text-cyan-800"
+              >
+                {label}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ))}
+          </div>
+        </article>
+      ) : null}
+
+      {eventItem.telegramGroupId ? (
+        <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Link2 className="h-5 w-5 text-cyan-600" strokeWidth={1.5} />
+            <h2 className="text-base font-semibold text-slate-900">مجموعة التلغرام</h2>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleSendTelegramInvite()}
+              disabled={isSendingTelegramInvite || !canSendTelegramInvite}
+              title={!canSendTelegramInvite ? telegramInviteHelperText ?? undefined : undefined}
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              <Send className="h-4 w-4" />
+              {isSendingTelegramInvite ? 'جار الإرسال...' : 'إرسال دعوة المجموعة عبر البوت'}
+            </button>
+          </div>
+          {telegramInviteHelperText ? <p className="mt-3 text-sm text-slate-600">{telegramInviteHelperText}</p> : null}
+          {telegramInviteError ? <p className="mt-3 text-sm text-red-600">{telegramInviteError}</p> : null}
+          {telegramInviteSuccess ? <p className="mt-3 text-sm font-medium text-emerald-700">{telegramInviteSuccess}</p> : null}
+        </article>
+      ) : null}
     </section>
   )
 }

@@ -15,6 +15,14 @@ import { TextField } from '../registration/TextField'
 import { EventRichText } from './EventRichText'
 import { isEventRichTextEmpty } from '../../utils/event-rich-text'
 
+export function EventRegistrationPrivacyNote({ className = '' }: { className?: string }) {
+  return (
+    <p className={`text-xs leading-6 text-slate-500 ${className}`}>
+      نستخدم بياناتك لتأكيد الحضور وإرسال التذكيرات المتعلقة بهذه الفعالية فقط، ولا نشاركها مع أي جهة خارج تجمّع إبتكار.
+    </p>
+  )
+}
+
 export type EventApplicationContact = {
   name: string
   email: string
@@ -182,6 +190,7 @@ export const EventApplicationForm = forwardRef<EventApplicationFormHandle, Event
             <p className="mt-1 text-xs text-slate-500">سيتم التواصل عبر هذا الرقم (واتساب). مثال: 05051239898</p>
           </div>
         </div>
+        <EventRegistrationPrivacyNote />
 
         {fields.map((field) => (
           <div key={field.id}>
