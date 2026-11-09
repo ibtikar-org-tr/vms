@@ -1,0 +1,86 @@
+name: (dev) [chatbot-ms] Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'chatbot-ms/**'
+      - '.github/workflows/chatbot-ms-dev.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: ./chatbot-ms
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install project dependencies
+        run: npm install
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Update wrangler config with environment variables
+        run: |
+          jq_filter='.d1_databases[0].database_id = $dbid
+          | .d1_databases[0].database_name = $dbname
+          | .vectorize[0].index_name = (if $vectorizeIndex == "" then .vectorize[0].index_name else $vectorizeIndex end)
+          | .vars.CORS_ALLOW_ORIGINS = (if $corsAllowOrigins == "" then .vars.CORS_ALLOW_ORIGINS else $corsAllowOrigins end)
+          | .vars.WEBSITE_BASE_URL = (if $websiteBaseUrl == "" then .vars.WEBSITE_BASE_URL else $websiteBaseUrl end)
+          | .vars.MEMBERS_SITE_URL = (if $membersSiteUrl == "" then .vars.MEMBERS_SITE_URL else $membersSiteUrl end)
+          | .vars.WEBSITE_INGEST_URLS = (if $websiteIngestUrls == "" then .vars.WEBSITE_INGEST_URLS else $websiteIngestUrls end)
+          | .vars.CHAT_MODEL = (if $chatModel == "" then .vars.CHAT_MODEL else $chatModel end)
+          | .vars.EMBEDDING_MODEL = (if $embeddingModel == "" then .vars.EMBEDDING_MODEL else $embeddingModel end)
+          | .vars.RAG_TOP_K = (if $ragTopK == "" then .vars.RAG_TOP_K else $ragTopK end)
+          | .account_id = $accountId
+          | del(.vars.INTERNAL_SECRET)'
+
+          jq \
+            --arg dbid "${{ vars.VMS_DB_ID }}" \
+            --arg dbname "${{ vars.VMS_DB_NAME }}" \
+            --arg vectorizeIndex "${{ vars.CHATBOT_MS_VECTORIZE_INDEX }}" \
+            --arg corsAllowOrigins "${{ vars.CORS_ALLOW_ORIGINS }}" \
+            --arg websiteBaseUrl "${{ vars.WEBSITE_BASE_URL }}" \
+            --arg membersSiteUrl "${{ vars.FRONTEND_BASE_URL }}" \
+            --arg websiteIngestUrls "${{ vars.CHATBOT_MS_INGEST_URLS }}" \
+            --arg chatModel "${{ vars.CHATBOT_MS_CHAT_MODEL }}" \
+            --arg embeddingModel "${{ vars.CHATBOT_MS_EMBEDDING_MODEL }}" \
+            --arg ragTopK "${{ vars.CHATBOT_MS_RAG_TOP_K }}" \
+            --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
+            "$jq_filter" \
+            wrangler.jsonc > wrangler.local.jsonc
+
+      - name: Ensure Vectorize index exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VECTORIZE_INDEX_NAME: ${{ vars.CHATBOT_MS_VECTORIZE_INDEX }}
+          WRANGLER_CONFIG: wrangler.local.jsonc
+        run: |
+          if [ -z "$VECTORIZE_INDEX_NAME" ]; then
+            VECTORIZE_INDEX_NAME=chatbot-ms
+          fi
+          export VECTORIZE_INDEX_NAME
+          bash ./scripts/ensure-vectorize-index.sh
+
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy --config wrangler.local.jsonc --name chatbot-ms-dev
+
+      - name: Set secrets in Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put INTERNAL_SECRET --config wrangler.local.jsonc --name chatbot-ms-dev
