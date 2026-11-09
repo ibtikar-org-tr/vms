@@ -25,7 +25,6 @@
     }
   ],
   "triggers": {
-    // Daily re-ingest of website + database into Vectorize (not on every DB write)
     "crons": ["0 3 * * *"]
   },
   "vars": {
@@ -34,7 +33,6 @@
     "CORS_ALLOW_ORIGINS": "*",
     "WEBSITE_BASE_URL": "https://ibtikar.org.tr",
     "MEMBERS_SITE_URL": "https://ibtikar.tr",
-    // Comma-separated absolute URLs to crawl during ingest (in addition to base pages)
     "WEBSITE_INGEST_URLS": "https://ibtikar.org.tr,https://ibtikar.org.tr/,https://ibtikar.tr,https://ibtikar.tr/signup,https://ibtikar.tr/telegram-bot",
     "RAG_TOP_K": "8",
     "INTERNAL_SECRET": "delete-on-deployment"
