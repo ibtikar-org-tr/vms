@@ -2,9 +2,12 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getUserProfileByMembershipNumber, updateUserInfo } from '../repositories/user-info.repository'
+import {
+  hydrateProfileSkills,
+  replaceProfileSkillsFromText,
+} from '../services/member-skills-profile.service'
 import { sendEmailVerificationEmail } from '../services/signup-email.service'
 import { createEmailVerificationLink } from '../services/signup-link.service'
-import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber } from '../utils/actor'
 
@@ -62,7 +65,9 @@ profileRoute.get('/profile/:membershipNumber', zValidator('param', profileParams
       return c.json({ error: 'Profile not found.' }, 404)
     }
 
-    return c.json({ profile })
+    const skillFields = await hydrateProfileSkills(c.env.MEMBERS_DB, c.env.VMS_DB, membershipNumber)
+
+    return c.json({ profile: { ...profile, ...skillFields } })
   } catch (error) {
     console.error('Failed to fetch profile', error)
     return c.json({ error: 'Could not fetch profile.' }, 500)
@@ -111,8 +116,16 @@ profileRoute.put(
       }
 
       const payload = c.req.valid('json')
+      const { skills, interests, ...userInfoPayload } = payload
 
-      await updateUserInfo(c.env.MEMBERS_DB, membershipNumber, payload)
+      await updateUserInfo(c.env.MEMBERS_DB, membershipNumber, userInfoPayload)
+      await replaceProfileSkillsFromText(
+        c.env.MEMBERS_DB,
+        c.env.VMS_DB,
+        membershipNumber,
+        skills,
+        interests,
+      )
 
       const profile = await getUserProfileByMembershipNumber(c.env.MEMBERS_DB, membershipNumber)
 
@@ -120,7 +133,9 @@ profileRoute.put(
         return c.json({ error: 'Profile not found.' }, 404)
       }
 
-      return c.json({ profile })
+      const skillFields = await hydrateProfileSkills(c.env.MEMBERS_DB, c.env.VMS_DB, membershipNumber)
+
+      return c.json({ profile: { ...profile, ...skillFields } })
     } catch (error) {
       console.error('Failed to update profile', error)
       const message = error instanceof Error ? error.message : ''
