@@ -4,3 +4,8 @@ skills-lock.json
 !README.md
 .logs
 .keys
+
+# Local-only offline VMS development (do not commit)
+backend/wrangler.offline.jsonc
+backend/scripts/seed-offline.mjs
+database/members/migrations/

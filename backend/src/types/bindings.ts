@@ -154,6 +154,8 @@ export interface AppBindings {
   FRONTEND_BASE_URL: string
   /** Comma-separated list of allowed browser origins for CORS. */
   CORS_ALLOW_ORIGINS?: string
+  /** Comma-separated list of allowed origins for external SSO redirect_uri (e.g. Kitchen FE). */
+  EXTERNAL_AUTH_REDIRECT_ORIGINS?: string
   INTERNAL_SECRET: string
   JWT_SECRET: string
   CRON_TIMEZONE?: string

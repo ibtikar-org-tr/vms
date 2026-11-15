@@ -112,3 +112,32 @@ export function getSafeRedirectPath(path: string | null | undefined): string | n
 
   return trimmed
 }
+
+/**
+ * Absolute external redirect_uri for SSO clients (e.g. Kitchen).
+ * Final allowlist is enforced by the backend handoff endpoint.
+ */
+export function getExternalRedirectUri(value: string | null | undefined): string | null {
+  if (!value?.trim()) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(value.trim())
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return null
+    }
+    if (parsed.username || parsed.password) {
+      return null
+    }
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+export function buildExternalHandoffRedirectUrl(redirectUri: string, code: string): string {
+  const target = new URL(redirectUri)
+  target.searchParams.set('code', code)
+  return target.toString()
+}

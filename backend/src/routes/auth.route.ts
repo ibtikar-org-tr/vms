@@ -4,11 +4,17 @@ import { memberHasTelegramId } from '../repositories/user-info.repository'
 import { getUserByEmail, getUserByMembershipNumber, updateUserPasswordHash } from '../repositories/users.repository'
 import {
   changePasswordSchema,
+  externalExchangeSchema,
+  externalHandoffSchema,
   forgotPasswordSchema,
   type ForgotPasswordInput,
   loginSchema,
   resetPasswordSchema,
 } from '../schemas/auth.schema'
+import {
+  consumeExternalAuthCode,
+  createExternalAuthCode,
+} from '../repositories/external-auth-codes.repository'
 import { createRefreshToken, findValidRefreshToken, revokeRefreshToken, revokeRefreshTokenById } from '../repositories/refresh-tokens.repository'
 import {
   consumePasswordResetToken,
@@ -18,8 +24,12 @@ import { isAppEmailConfigured, sendAppEmail } from '../services/app-email.servic
 import { sendBackendTelegramNotification } from '../services/telegram-notification.service'
 import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
-import { getActorMembershipNumber } from '../utils/actor'
+import { getActorMembershipNumber, getActorUser } from '../utils/actor'
 import { clearRefreshTokenCookie, getRefreshTokenFromCookie, setRefreshTokenCookie } from '../utils/auth-cookies'
+import {
+  getSafeExternalRedirectUri,
+  parseExternalAuthRedirectOrigins,
+} from '../utils/external-auth-redirect'
 import { createAccessToken } from '../utils/jwt'
 import { hashPassword, verifyPassword } from '../utils/password'
 
@@ -602,7 +612,74 @@ authRoute.get('/reset-password/status', async (c) => {
   }
 })
 
+authRoute.post('/external-exchange', zValidator('json', externalExchangeSchema), async (c) => {
+  const apiKey = c.req.header('X-API-Key')?.trim()
+  const expected = c.env.INTERNAL_SECRET?.trim()
+
+  if (!expected || apiKey !== expected) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  try {
+    const { code } = c.req.valid('json')
+    const record = await consumeExternalAuthCode(c.env.VMS_LOGS_DB, code)
+    if (!record) {
+      return c.json({ error: 'Invalid or expired code.' }, 400)
+    }
+
+    const user = await getUserByMembershipNumber(c.env.MEMBERS_DB, record.membership_number)
+    if (!user) {
+      return c.json({ error: 'User not found.' }, 404)
+    }
+
+    const authUser = {
+      membershipNumber: user.membership_number,
+      email: user.email,
+      role: user.role,
+    }
+    const accessToken = await createAccessToken(c.env, authUser)
+
+    return c.json({
+      membershipNumber: authUser.membershipNumber,
+      email: authUser.email,
+      role: authUser.role,
+      accessToken,
+    })
+  } catch (error) {
+    console.error('Failed to exchange external auth code', error)
+    return c.json({ error: 'Could not exchange code.' }, 500)
+  }
+})
+
 export const securedAuthRoute = new Hono<AppEnv>()
+
+securedAuthRoute.post('/external-handoff', zValidator('json', externalHandoffSchema), async (c) => {
+  try {
+    const payload = c.req.valid('json')
+    const allowedOrigins = parseExternalAuthRedirectOrigins(c.env.EXTERNAL_AUTH_REDIRECT_ORIGINS)
+    const redirectUri = getSafeExternalRedirectUri(payload.redirectUri, allowedOrigins)
+
+    if (!redirectUri) {
+      return c.json({ error: 'redirectUri is not allowed.' }, 400)
+    }
+
+    const actor = getActorUser(c)
+    const record = await createExternalAuthCode(c.env.VMS_LOGS_DB, {
+      membershipNumber: actor.membershipNumber,
+      redirectUri,
+      clientId: payload.client ?? null,
+    })
+
+    return c.json({
+      code: record.code,
+      redirectUri,
+      expiresAt: record.expiresAt,
+    })
+  } catch (error) {
+    console.error('Failed to create external auth handoff', error)
+    return c.json({ error: 'Could not create handoff code.' }, 500)
+  }
+})
 
 securedAuthRoute.post('/change-password', zValidator('json', changePasswordSchema), async (c) => {
   try {

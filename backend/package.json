@@ -4,9 +4,12 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:local": "wrangler dev --config wrangler.local.jsonc",
+    "dev:offline": "wrangler dev --config wrangler.offline.jsonc",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:migrate:local": "wrangler d1 migrations apply membership-app-database --local && wrangler d1 migrations apply vms-database --local && wrangler d1 migrations apply vms-logs-database --local",
+    "db:migrate:offline": "wrangler d1 migrations apply membership-app-database-local --local --config wrangler.offline.jsonc && wrangler d1 migrations apply vms-database-local --local --config wrangler.offline.jsonc && wrangler d1 migrations apply vms-logs-database-local --local --config wrangler.offline.jsonc",
+    "db:seed:offline": "node scripts/seed-offline.mjs",
     "db:migrate:remote": "wrangler d1 migrations apply membership-app-database --remote && wrangler d1 migrations apply vms-database --remote && wrangler d1 migrations apply vms-logs-database --remote",
     "db:migrate:remote:config:local": "wrangler d1 migrations apply membership-app-database --remote --config wrangler.local.jsonc && wrangler d1 migrations apply vms-database --remote --config wrangler.local.jsonc && wrangler d1 migrations apply vms-logs-database --remote --config wrangler.local.jsonc"
   },

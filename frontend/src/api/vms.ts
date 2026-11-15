@@ -135,6 +135,13 @@ export function logout() {
   return logoutRequest()
 }
 
+export function createExternalHandoff(payload: { redirectUri: string; client?: string }) {
+  return apiPostJson<
+    { code: string; redirectUri: string; expiresAt: string },
+    { redirectUri: string; client?: string }
+  >('/external-handoff', payload)
+}
+
 export function forgotPassword(payload: { type: 'email' | 'phone' | 'membership_number'; value: string }) {
   return postJson<ForgotPasswordResponse, { type: 'email' | 'phone' | 'membership_number'; value: string }>(
     '/forgot-password',
