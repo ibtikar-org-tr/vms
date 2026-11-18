@@ -5,6 +5,7 @@ import authRouter from './routers/auth'
 import profilesRouter from './routers/profiles'
 
 const app = new Hono<AppBindings>()
+const MS_BASE = '/ms/career'
 
 app.use(
   '*',
@@ -16,23 +17,28 @@ app.use(
   }),
 )
 
-app.get('/', (c) =>
+app.get('/', (c) => c.redirect(MS_BASE))
+
+app.get(MS_BASE, (c) =>
   c.json({
     message: 'Ibtikar Career Platform API',
     version: '1.0.0',
     runtime: 'Cloudflare Workers + Hono + D1 + R2',
     endpoints: {
-      auth: '/api/auth',
-      profiles: '/api/profiles',
+      health: `GET ${MS_BASE}/health`,
+      auth: `${MS_BASE}/api/auth`,
+      profiles: `${MS_BASE}/api/profiles`,
     },
   }),
 )
 
-app.get('/health', (c) =>
+app.get(`${MS_BASE}/health`, (c) =>
   c.json({ status: 'healthy', app: c.env.APP_NAME }),
 )
 
-app.route('/api/auth', authRouter)
-app.route('/api/profiles', profilesRouter)
+app.route(`${MS_BASE}/api/auth`, authRouter)
+app.route(`${MS_BASE}/api/profiles`, profilesRouter)
+
+app.notFound((c) => c.json({ message: 'Not found' }, 404))
 
 export default app

@@ -34,4 +34,5 @@ npm run db:migrate:local
 npm run dev
 ```
 
-API: `http://localhost:9690`
+API base: `http://localhost:9690/ms/career`  
+Health: `GET /ms/career/health`
