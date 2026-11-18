@@ -13,9 +13,16 @@ import {
   User,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { ChangelogModal } from '../components/ChangelogModal'
 import { CountrySelect } from '../components/CountrySelect'
 import { CvDocument } from '../components/CvDocument'
 import { SkillPicker, type SkillOption } from '../components/SkillPicker'
+import {
+  buildProfileChangelog,
+  snapshotFromDraft,
+  type ChangelogEntry,
+  type ProfileDraftSnapshot,
+} from '../lib/profile-changelog'
 import {
   displayNameOf,
   formatBirthDate,
@@ -47,6 +54,10 @@ export default function ProfilePage() {
   const [summary, setSummary] = useState('')
   const [languagePrefs, setLanguagePrefs] = useState<LanguagePref[]>([])
   const [workPrefs, setWorkPrefs] = useState<WorkPreferences>(emptyWorkPreferences())
+  const [baseline, setBaseline] = useState<ProfileDraftSnapshot | null>(null)
+  const [changelogOpen, setChangelogOpen] = useState(false)
+  const [changelogEntries, setChangelogEntries] = useState<ChangelogEntry[]>([])
+  const [pendingAction, setPendingAction] = useState<'save' | 'publish' | null>(null)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<Tab>('preview')
   const [workForm, setWorkForm] = useState({
@@ -76,7 +87,7 @@ export default function ProfilePage() {
   const load = async () => {
     const payload = await profilesApi.me()
     setData(payload)
-    setSummary(payload.profile?.summary || '')
+    const nextSummary = payload.profile?.summary || ''
     const fromApi: LanguagePref[] = Array.isArray(payload.languages)
       ? payload.languages.map((item: any) => ({
           language: String(item.language || '').trim(),
@@ -91,8 +102,75 @@ export default function ProfilePage() {
           proficiency: null,
           openToTranslate: false,
         }))
-    setLanguagePrefs(fromApi.filter((item) => item.language))
-    setWorkPrefs(normalizeWorkPreferences(payload.workPreferences))
+    const nextLanguages = fromApi.filter((item) => item.language)
+    const nextWorkPrefs = normalizeWorkPreferences(payload.workPreferences)
+    setSummary(nextSummary)
+    setLanguagePrefs(nextLanguages)
+    setWorkPrefs(nextWorkPrefs)
+    setBaseline(
+      snapshotFromDraft({
+        summary: nextSummary,
+        languages: nextLanguages,
+        workPreferences: nextWorkPrefs,
+      }),
+    )
+    setChangelogOpen(false)
+    setChangelogEntries([])
+    setPendingAction(null)
+  }
+
+  const currentDraft = () =>
+    snapshotFromDraft({
+      summary,
+      languages: languagePrefs,
+      workPreferences: workPrefs,
+    })
+
+  const openChangelog = (action: 'save' | 'publish') => {
+    if (!baseline) return
+    const entries = buildProfileChangelog(baseline, currentDraft())
+    if (!entries.length) {
+      if (action === 'publish') {
+        void commitChanges(action)
+        return
+      }
+      toast('لا توجد تغييرات للحفظ')
+      return
+    }
+    setChangelogEntries(entries)
+    setPendingAction(action)
+    setChangelogOpen(true)
+  }
+
+  const commitChanges = async (action: 'save' | 'publish' = pendingAction || 'save') => {
+    setSaving(true)
+    try {
+      const publishNext =
+        action === 'publish' ? !data?.profile?.is_published : undefined
+      await profilesApi.updateMe({
+        summary,
+        ...(publishNext === undefined ? {} : { is_published: publishNext }),
+      })
+      await profilesApi.updateLanguages(languagePrefs)
+      await profilesApi.updateWorkPreferences({
+        canRelocate: workPrefs.canRelocate,
+        relocateNotes: workPrefs.relocateNotes,
+        jobTypes: workPrefs.jobTypes,
+        locations: workPrefs.locations,
+      })
+      if (action === 'publish') {
+        toast.success(
+          publishNext ? 'تم نشر السيرة' : 'تم إلغاء النشر',
+        )
+      } else {
+        toast.success('تم حفظ السيرة')
+      }
+      setChangelogOpen(false)
+      setPendingAction(null)
+      await load()
+    } finally {
+      setSaving(false)
+    }
   }
 
   useEffect(() => {
@@ -112,36 +190,13 @@ export default function ProfilePage() {
     return [...fromMember, ...fromCsv]
   }, [data, skills])
 
-  const saveProfile = async (event: FormEvent) => {
-    event.preventDefault()
-    setSaving(true)
-    try {
-      await profilesApi.updateMe({ summary })
-      await profilesApi.updateLanguages(languagePrefs)
-      await profilesApi.updateWorkPreferences({
-        canRelocate: workPrefs.canRelocate,
-        relocateNotes: workPrefs.relocateNotes,
-        jobTypes: workPrefs.jobTypes,
-        locations: workPrefs.locations,
-      })
-      toast.success('تم حفظ السيرة')
-      await load()
-    } finally {
-      setSaving(false)
-    }
+  const saveProfile = (event?: FormEvent) => {
+    event?.preventDefault()
+    openChangelog('save')
   }
 
-  const togglePublish = async () => {
-    await profilesApi.updateMe({ summary, is_published: !data?.profile?.is_published })
-    await profilesApi.updateLanguages(languagePrefs)
-    await profilesApi.updateWorkPreferences({
-      canRelocate: workPrefs.canRelocate,
-      relocateNotes: workPrefs.relocateNotes,
-      jobTypes: workPrefs.jobTypes,
-      locations: workPrefs.locations,
-    })
-    toast.success(data?.profile?.is_published ? 'تم إلغاء النشر' : 'تم نشر السيرة')
-    await load()
+  const togglePublish = () => {
+    openChangelog('publish')
   }
 
   const updateLanguage = (language: string, patch: Partial<LanguagePref>) => {
@@ -1050,12 +1105,12 @@ export default function ProfilePage() {
           type="button"
           className="btn-primary"
           disabled={saving}
-          onClick={(e) => void saveProfile(e as any)}
+          onClick={() => saveProfile()}
         >
           <Save className="h-4 w-4" />
           {saving ? 'جاري الحفظ…' : 'حفظ السيرة'}
         </button>
-        <button type="button" className="btn-ghost" onClick={() => void togglePublish()}>
+        <button type="button" className="btn-ghost" disabled={saving} onClick={() => togglePublish()}>
           {data.profile.is_published ? 'إلغاء النشر' : 'نشر السيرة للمراجعة'}
         </button>
         {tab === 'edit' ? (
@@ -1065,6 +1120,25 @@ export default function ProfilePage() {
           </button>
         ) : null}
       </div>
+
+      <ChangelogModal
+        open={changelogOpen}
+        entries={changelogEntries}
+        saving={saving}
+        confirmLabel={
+          pendingAction === 'publish'
+            ? data.profile.is_published
+              ? 'تأكيد إلغاء النشر'
+              : 'تأكيد النشر والحفظ'
+            : 'تأكيد الحفظ'
+        }
+        onCancel={() => {
+          if (saving) return
+          setChangelogOpen(false)
+          setPendingAction(null)
+        }}
+        onConfirm={() => void commitChanges()}
+      />
     </div>
   )
 }
