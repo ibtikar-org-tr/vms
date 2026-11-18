@@ -1,17 +1,6 @@
-/** Parse comma-separated allowlist of origins (scheme + host[+port]). */
-export function parseExternalAuthRedirectOrigins(raw: string | undefined | null): string[] {
-  if (!raw?.trim()) {
-    return []
-  }
-
-  return raw
-    .split(',')
-    .map((entry) => entry.trim().replace(/\/+$/, ''))
-    .filter(Boolean)
-}
-
 /**
- * Accept absolute https/http redirect URIs whose origin is on the allowlist.
+ * Accept absolute https/http redirect URIs whose origin is on the allowlist
+ * (same list as CORS: CORS_ALLOW_ORIGINS + FRONTEND_BASE_URL [+ local defaults]).
  * Rejects relative paths, protocol-relative URLs, and unknown origins.
  */
 export function getSafeExternalRedirectUri(

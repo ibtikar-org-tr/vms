@@ -152,10 +152,8 @@ export interface AppBindings {
   AUTHDEEP_MAIL_FROM?: string
   TELEGRAM_MS: string
   FRONTEND_BASE_URL: string
-  /** Comma-separated list of allowed browser origins for CORS. */
+  /** Comma-separated browser origins for CORS and external SSO redirect_uri (Kitchen/Career FE, etc.). */
   CORS_ALLOW_ORIGINS?: string
-  /** Comma-separated list of allowed origins for external SSO redirect_uri (e.g. Kitchen FE). */
-  EXTERNAL_AUTH_REDIRECT_ORIGINS?: string
   INTERNAL_SECRET: string
   JWT_SECRET: string
   CRON_TIMEZONE?: string

@@ -26,10 +26,8 @@ import type { AppBindings } from '../types/bindings'
 import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber, getActorUser } from '../utils/actor'
 import { clearRefreshTokenCookie, getRefreshTokenFromCookie, setRefreshTokenCookie } from '../utils/auth-cookies'
-import {
-  getSafeExternalRedirectUri,
-  parseExternalAuthRedirectOrigins,
-} from '../utils/external-auth-redirect'
+import { listAllowedBrowserOrigins } from '../utils/cors'
+import { getSafeExternalRedirectUri } from '../utils/external-auth-redirect'
 import { createAccessToken } from '../utils/jwt'
 import { hashPassword, verifyPassword } from '../utils/password'
 
@@ -656,7 +654,10 @@ export const securedAuthRoute = new Hono<AppEnv>()
 securedAuthRoute.post('/external-handoff', zValidator('json', externalHandoffSchema), async (c) => {
   try {
     const payload = c.req.valid('json')
-    const allowedOrigins = parseExternalAuthRedirectOrigins(c.env.EXTERNAL_AUTH_REDIRECT_ORIGINS)
+    const allowedOrigins = listAllowedBrowserOrigins(
+      c.env,
+      new URL(c.req.url).hostname,
+    )
     const redirectUri = getSafeExternalRedirectUri(payload.redirectUri, allowedOrigins)
 
     if (!redirectUri) {
