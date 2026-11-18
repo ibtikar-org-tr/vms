@@ -44,13 +44,48 @@ function ensureFonts() {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 36,
+    paddingTop: 28,
     paddingBottom: 40,
     paddingHorizontal: 42,
     fontFamily: 'Tajawal',
     fontSize: 10,
     color: '#111827',
     direction: 'rtl',
+  },
+  brandBar: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  brandLeft: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+  },
+  brandTextWrap: {
+    flexShrink: 1,
+  },
+  brandTitle: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#0f766e',
+    textAlign: 'right',
+  },
+  brandSubtitle: {
+    marginTop: 1,
+    fontSize: 7.5,
+    color: '#64748b',
+    textAlign: 'right',
   },
   header: {
     borderBottomWidth: 1.5,
@@ -66,14 +101,27 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexShrink: 1,
   },
+  docLabel: {
+    marginBottom: 4,
+    fontSize: 7.5,
+    fontWeight: 700,
+    color: '#0f766e',
+    textAlign: 'right',
+    letterSpacing: 0.4,
+  },
   qrBlock: {
-    width: 72,
+    width: 76,
     alignItems: 'center',
     flexShrink: 0,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 6,
+    backgroundColor: '#f8fafc',
   },
   qrImage: {
-    width: 64,
-    height: 64,
+    width: 62,
+    height: 62,
   },
   qrCaption: {
     marginTop: 3,
@@ -174,10 +222,12 @@ function StandardCvPdfDocument({
   data,
   cvUrl,
   qrDataUrl,
+  logoUrl,
 }: {
   data: CvDocumentData
   cvUrl: string
   qrDataUrl: string
+  logoUrl: string
 }) {
   const vms = data.vmsProfile
   const name = displayNameOf(data)
@@ -207,16 +257,27 @@ function StandardCvPdfDocument({
       language="ar"
     >
       <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <View style={styles.headerMain}>
-            <Text style={styles.name}>{name}</Text>
-            {role ? <Text style={styles.role}>{role}</Text> : null}
-            {contact ? <Text style={styles.contact}>{contact}</Text> : null}
-            <Text style={styles.linkHint}>Scan QR for online CV · امسح الرمز لعرض السيرة</Text>
+        <View style={styles.brandBar}>
+          <View style={styles.brandLeft}>
+            <Image style={styles.brandLogo} src={logoUrl} />
+            <View style={styles.brandTextWrap}>
+              <Text style={styles.brandTitle}>المسار المهني</Text>
+              <Text style={styles.brandSubtitle}>Career Path · Professional CV</Text>
+            </View>
           </View>
           <View style={styles.qrBlock}>
             <Image style={styles.qrImage} src={qrDataUrl} />
             <Text style={styles.qrCaption}>Online CV</Text>
+          </View>
+        </View>
+
+        <View style={styles.header}>
+          <View style={styles.headerMain}>
+            <Text style={styles.docLabel}>Curriculum Vitae / سيرة ذاتية</Text>
+            <Text style={styles.name}>{name}</Text>
+            {role ? <Text style={styles.role}>{role}</Text> : null}
+            {contact ? <Text style={styles.contact}>{contact}</Text> : null}
+            <Text style={styles.linkHint}>Scan QR for online CV · امسح الرمز لعرض السيرة</Text>
           </View>
         </View>
 
@@ -332,7 +393,7 @@ function StandardCvPdfDocument({
         <Text
           style={styles.footer}
           render={({ pageNumber, totalPages }) =>
-            `Curriculum Vitae · Ibtikar  |  ${cvUrl}  |  ${pageNumber} / ${totalPages}`
+            `Curriculum Vitae · المسار المهني  |  ${cvUrl}  |  ${pageNumber} / ${totalPages}`
           }
           fixed
         />
@@ -355,6 +416,11 @@ export async function downloadCvPdf(data: CvDocumentData) {
   if (!membership) {
     throw new Error('Missing membership number for CV link')
   }
+  const origin =
+    (typeof window !== 'undefined' && window.location.origin) ||
+    (import.meta.env.VITE_CAREER_PUBLIC_URL as string | undefined)?.replace(/\/$/, '') ||
+    ''
+  const logoUrl = `${origin}/career-mark.png`
   const cvUrl = publicCvUrl(membership)
   const qrDataUrl = await QRCode.toDataURL(cvUrl, {
     errorCorrectionLevel: 'M',
@@ -364,7 +430,12 @@ export async function downloadCvPdf(data: CvDocumentData) {
   })
   const name = displayNameOf(data)
   const blob = await pdf(
-    <StandardCvPdfDocument data={data} cvUrl={cvUrl} qrDataUrl={qrDataUrl} />,
+    <StandardCvPdfDocument
+      data={data}
+      cvUrl={cvUrl}
+      qrDataUrl={qrDataUrl}
+      logoUrl={logoUrl}
+    />,
   ).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { startVmsSsoLogin } from '../lib/vms-sso'
 
 export default function Login() {
@@ -10,9 +10,11 @@ export default function Login() {
     <section className="mx-auto max-w-md overflow-hidden rounded-3xl border border-line bg-white shadow-sheet">
       <div className="h-1.5 bg-gradient-to-l from-brand via-teal-500 to-accent" />
       <div className="px-8 py-10 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light text-brand">
-          <ShieldCheck className="h-6 w-6" />
-        </div>
+        <img
+          src="/career-mark.svg"
+          alt="المسار المهني"
+          className="mx-auto h-14 w-14 rounded-2xl object-cover shadow-sm ring-1 ring-line"
+        />
         <h1 className="mt-4 text-2xl font-extrabold text-slate-900 sm:text-3xl">تسجيل الدخول</h1>
         <p className="mt-3 text-sm leading-7 text-slate-600">
           أنشئ أو حدّث سيرتك عبر عضويتك في منصة أعضاء إبتكار. سيتم تحويلك للمنصة ثم إعادتك هنا بعد

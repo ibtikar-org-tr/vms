@@ -137,9 +137,15 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
       <div className="h-1.5 bg-gradient-to-l from-brand via-teal-500 to-accent" />
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-slate-50/70 px-4 py-3 sm:px-6">
-        <p className="text-xs font-medium text-slate-500">
-          تنزيل بصيغة CV قياسية (A4) مناسبة للمراجعة والتقديم
-        </p>
+        <div className="flex items-center gap-2.5">
+          <img src="/career-mark.svg" alt="" className="h-8 w-8 rounded-lg object-cover ring-1 ring-line" />
+          <div>
+            <p className="text-xs font-bold text-slate-800">المسار المهني</p>
+            <p className="text-[11px] text-slate-500">
+              تنزيل بصيغة CV قياسية (A4) مع رمز QR للسيرة
+            </p>
+          </div>
+        </div>
         <button
           type="button"
           className="btn-primary py-2 text-xs sm:text-sm"

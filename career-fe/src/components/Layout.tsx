@@ -15,16 +15,18 @@ export function Layout() {
   return (
     <div className="min-h-screen" dir="rtl" lang="ar">
       <header className="sticky top-0 z-20 border-b border-line/80 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3.5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
           <Link to="/" className="group flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-sm font-extrabold text-white shadow-sm transition group-hover:bg-[#0d5f59]">
-              إ
-            </span>
+            <img
+              src="/career-mark.svg"
+              alt="المسار المهني"
+              className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-line transition group-hover:ring-teal-200"
+            />
             <span className="leading-tight">
               <span className="block text-base font-extrabold text-slate-900 sm:text-lg">
                 المسار المهني
               </span>
-              <span className="block text-[11px] font-medium text-slate-500">منصة أعضاء إبتكار</span>
+              <span className="block text-[11px] font-medium text-slate-500">تجمّع إبتكار</span>
             </span>
           </Link>
 
@@ -56,8 +58,11 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <footer className="border-t border-line/70 py-6 text-center text-xs text-slate-400">
-        تجمّع إبتكار · المسار المهني
+      <footer className="border-t border-line/70 py-6">
+        <div className="mx-auto flex max-w-5xl flex-col items-center gap-2 px-4 text-center">
+          <img src="/career-mark.svg" alt="" className="h-7 w-7 rounded-lg object-cover opacity-90" />
+          <p className="text-xs text-slate-400">تجمّع إبتكار · المسار المهني</p>
+        </div>
       </footer>
     </div>
   )
