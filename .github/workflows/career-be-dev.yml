@@ -1,0 +1,77 @@
+name: (dev) [career-be] Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'career-be/**'
+      - '.github/workflows/career-be-dev.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: ./career-be
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install project dependencies
+        run: npm install
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Update wrangler config with environment variables
+        run: |
+          jq_filter='.d1_databases[0].database_id = $careerDbId
+          | .d1_databases[0].database_name = $careerDbName
+          | .d1_databases[1].database_id = $membersDbId
+          | .d1_databases[1].database_name = $membersDbName
+          | .d1_databases[2].database_id = $vmsDbId
+          | .d1_databases[2].database_name = $vmsDbName
+          | .r2_buckets[0].bucket_name = $bucketName
+          | .vars.APP_NAME = $appName
+          | .vars.VMS_API_BASE = $vmsApiBase
+          | .account_id = $accountId
+          | del(.vars.JWT_SECRET, .vars.VMS_INTERNAL_SECRET)'
+
+          jq \
+            --arg careerDbId "${{ vars.CAREER_DB_ID }}" \
+            --arg careerDbName "${{ vars.CAREER_DB_NAME }}" \
+            --arg membersDbId "${{ vars.MEMBERS_DB_ID }}" \
+            --arg membersDbName "${{ vars.MEMBERS_DB_NAME }}" \
+            --arg vmsDbId "${{ vars.VMS_DB_ID }}" \
+            --arg vmsDbName "${{ vars.VMS_DB_NAME }}" \
+            --arg bucketName "${{ vars.CAREER_BUCKET_NAME }}" \
+            --arg appName "ibtikar-career" \
+            --arg vmsApiBase "${{ vars.VMS_API_BASE }}" \
+            --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
+            "$jq_filter" \
+            wrangler.jsonc > wrangler.local.jsonc
+
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy --config wrangler.local.jsonc --name ${{ vars.CAREER_BE_NAME }}
+
+      - name: Set secrets in Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET --config wrangler.local.jsonc --name ${{ vars.CAREER_BE_NAME }}
+          echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put VMS_INTERNAL_SECRET --config wrangler.local.jsonc --name ${{ vars.CAREER_BE_NAME }}
+
+      - name: Migrate Career D1 Database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler d1 migrations apply ${{ vars.CAREER_DB_NAME }} --remote --config wrangler.local.jsonc
