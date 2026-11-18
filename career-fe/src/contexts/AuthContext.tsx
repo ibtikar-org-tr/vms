@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { authApi } from '../services/api'
 import { clearSession, getAccessToken, getSession, setSession, type CareerSession } from '../lib/auth-session'
 
@@ -18,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!getAccessToken()) {
       setSessionState(null)
       setMe(null)
@@ -42,11 +50,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void refresh()
+  }, [refresh])
+
+  const logout = useCallback(() => {
+    clearSession()
+    setSessionState(null)
+    setMe(null)
   }, [])
+
+  const establish = useCallback(
+    async (token: string, nextSession: CareerSession) => {
+      setSession(token, nextSession)
+      setSessionState(nextSession)
+      await refresh()
+    },
+    [refresh],
+  )
 
   const value = useMemo<AuthState>(
     () => ({
@@ -54,18 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       me,
       loading,
       refresh,
-      logout: () => {
-        clearSession()
-        setSessionState(null)
-        setMe(null)
-      },
-      establish: async (token, nextSession) => {
-        setSession(token, nextSession)
-        setSessionState(nextSession)
-        await refresh()
-      },
+      logout,
+      establish,
     }),
-    [session, me, loading],
+    [session, me, loading, refresh, logout, establish],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -9,6 +9,8 @@ type ExchangeResult = Awaited<ReturnType<typeof authApi.exchangeVmsCode>>
 
 /** Deduplicate one-time code exchange across React Strict Mode remounts. */
 const exchangeByCode = new Map<string, Promise<ExchangeResult>>()
+/** Prevent toast/navigate loops when auth context identity changes after login. */
+const completedCodes = new Set<string>()
 
 function exchangeVmsCodeOnce(code: string): Promise<ExchangeResult> {
   const existing = exchangeByCode.get(code)
@@ -41,11 +43,17 @@ export default function AuthCallback() {
       return
     }
 
+    if (completedCodes.has(code)) {
+      navigate(next, { replace: true })
+      return
+    }
+
     let cancelled = false
     ;(async () => {
       try {
         const response = await exchangeVmsCodeOnce(code)
-        if (cancelled) return
+        if (cancelled || completedCodes.has(code)) return
+        completedCodes.add(code)
         await establish(response.access_token, { user: response.user })
         toast.success('تم تسجيل الدخول بنجاح')
         navigate(next, { replace: true })
@@ -60,7 +68,9 @@ export default function AuthCallback() {
     return () => {
       cancelled = true
     }
-  }, [establish, navigate, searchParams])
+    // intentionally omit `establish` — it changes after login and would retrigger this effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, searchParams])
 
   return (
     <section className="panel mx-auto max-w-md p-8 text-center">
