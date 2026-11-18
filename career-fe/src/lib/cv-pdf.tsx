@@ -1,12 +1,14 @@
 import {
   Document,
   Font,
+  Image,
   Page,
   StyleSheet,
   Text,
   View,
   pdf,
 } from '@react-pdf/renderer'
+import QRCode from 'qrcode'
 import type { CvDocumentData } from '../components/CvDocument'
 import {
   displayNameOf,
@@ -14,6 +16,14 @@ import {
   latestRoleOf,
   splitCsv,
 } from './profile-utils'
+
+export function publicCvUrl(membershipNumber: string) {
+  const origin =
+    (typeof window !== 'undefined' && window.location.origin) ||
+    (import.meta.env.VITE_CAREER_PUBLIC_URL as string | undefined)?.replace(/\/$/, '') ||
+    ''
+  return `${origin}/talent/${encodeURIComponent(membershipNumber)}`
+}
 
 let fontsRegistered = false
 
@@ -47,6 +57,29 @@ const styles = StyleSheet.create({
     borderBottomColor: '#0f766e',
     paddingBottom: 12,
     marginBottom: 14,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  headerMain: {
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  qrBlock: {
+    width: 72,
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  qrImage: {
+    width: 64,
+    height: 64,
+  },
+  qrCaption: {
+    marginTop: 3,
+    fontSize: 6.5,
+    color: '#64748b',
+    textAlign: 'center',
   },
   name: {
     fontSize: 20,
@@ -65,6 +98,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 9,
     color: '#475569',
+    textAlign: 'right',
+  },
+  linkHint: {
+    marginTop: 4,
+    fontSize: 7.5,
+    color: '#94a3b8',
     textAlign: 'right',
   },
   section: {
@@ -131,7 +170,15 @@ const styles = StyleSheet.create({
   },
 })
 
-function StandardCvPdfDocument({ data }: { data: CvDocumentData }) {
+function StandardCvPdfDocument({
+  data,
+  cvUrl,
+  qrDataUrl,
+}: {
+  data: CvDocumentData
+  cvUrl: string
+  qrDataUrl: string
+}) {
   const vms = data.vmsProfile
   const name = displayNameOf(data)
   const role = latestRoleOf(data.workExperiences)
@@ -161,9 +208,16 @@ function StandardCvPdfDocument({ data }: { data: CvDocumentData }) {
     >
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Text style={styles.name}>{name}</Text>
-          {role ? <Text style={styles.role}>{role}</Text> : null}
-          {contact ? <Text style={styles.contact}>{contact}</Text> : null}
+          <View style={styles.headerMain}>
+            <Text style={styles.name}>{name}</Text>
+            {role ? <Text style={styles.role}>{role}</Text> : null}
+            {contact ? <Text style={styles.contact}>{contact}</Text> : null}
+            <Text style={styles.linkHint}>Scan QR for online CV · امسح الرمز لعرض السيرة</Text>
+          </View>
+          <View style={styles.qrBlock}>
+            <Image style={styles.qrImage} src={qrDataUrl} />
+            <Text style={styles.qrCaption}>Online CV</Text>
+          </View>
         </View>
 
         {data.profile.summary ? (
@@ -278,7 +332,7 @@ function StandardCvPdfDocument({ data }: { data: CvDocumentData }) {
         <Text
           style={styles.footer}
           render={({ pageNumber, totalPages }) =>
-            `Curriculum Vitae · Ibtikar  |  ${pageNumber} / ${totalPages}`
+            `Curriculum Vitae · Ibtikar  |  ${cvUrl}  |  ${pageNumber} / ${totalPages}`
           }
           fixed
         />
@@ -297,8 +351,21 @@ function safeFileName(name: string) {
 
 export async function downloadCvPdf(data: CvDocumentData) {
   ensureFonts()
+  const membership = data.profile.membership_number
+  if (!membership) {
+    throw new Error('Missing membership number for CV link')
+  }
+  const cvUrl = publicCvUrl(membership)
+  const qrDataUrl = await QRCode.toDataURL(cvUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 256,
+    color: { dark: '#0f172a', light: '#ffffff' },
+  })
   const name = displayNameOf(data)
-  const blob = await pdf(<StandardCvPdfDocument data={data} />).toBlob()
+  const blob = await pdf(
+    <StandardCvPdfDocument data={data} cvUrl={cvUrl} qrDataUrl={qrDataUrl} />,
+  ).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
