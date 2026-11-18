@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { clearSession, getAccessToken } from '../lib/auth-session'
 
-const API_BASE_URL = import.meta.env.VITE_API_TARGET || 'http://localhost:9690'
+const API_BASE_URL = import.meta.env.VITE_API_TARGET || 'http://localhost:9690/ms/career'
 
 const api = axios.create({
   baseURL: API_BASE_URL + '/api',

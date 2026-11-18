@@ -341,13 +341,14 @@ profilesRouter.get('/discover', async (c) => {
 profilesRouter.get('/:membershipNumber', async (c) => {
   const actor = c.get('member')
   const membershipNumber = c.req.param('membershipNumber')
+  const isSelf = membershipNumber === actor.membership_number
 
-  if (membershipNumber === actor.membership_number) {
-    return c.redirect('/api/profiles/me')
-  }
-
-  const published = await getPublishedProfile(c.env, membershipNumber)
-  if (!published) {
+  // Own profile: allow draft preview. Others: published only.
+  // Never HTTP-redirect here — browsers drop/strip API base path (/ms/career).
+  const profile = isSelf
+    ? await ensureCareerProfile(c.env, membershipNumber)
+    : await getPublishedProfile(c.env, membershipNumber)
+  if (!profile) {
     return c.json({ message: 'Not found' }, 404)
   }
 
@@ -365,7 +366,7 @@ profilesRouter.get('/:membershipNumber', async (c) => {
   const vmsProfile = await fetchVmsPartnerProfile(c.env, membershipNumber)
 
   return c.json({
-    profile: published,
+    profile,
     workExperiences,
     projects,
     documents: documents.map(({ r2_key: _r2, ...rest }) => rest),
