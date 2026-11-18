@@ -11,8 +11,10 @@ import {
 import { publicCvUrl } from './cv-url'
 import {
   formatSalaryRange,
+  jobTypeLabel,
   locationLabel,
   normalizeWorkPreferences,
+  type OpenJobType,
 } from './work-preferences'
 
 function languagesOf(data: CvDocumentData) {
@@ -76,9 +78,20 @@ export function buildCvMarkdown(data: CvDocumentData): string {
 
   {
     const workPreferences = normalizeWorkPreferences(data.workPreferences)
-    if (workPreferences.canRelocate || workPreferences.locations.length) {
+    if (
+      workPreferences.canRelocate ||
+      workPreferences.jobTypes.length ||
+      workPreferences.locations.length
+    ) {
       lines.push('## Work Preferences / تفضيلات العمل')
       lines.push('')
+      if (workPreferences.jobTypes.length) {
+        lines.push(
+          `- Open to: ${workPreferences.jobTypes
+            .map((id) => jobTypeLabel(id as OpenJobType, 'en'))
+            .join(', ')}`,
+        )
+      }
       lines.push(`- Relocation: ${workPreferences.canRelocate ? 'Yes' : 'No'}`)
       if (workPreferences.canRelocate && workPreferences.relocateNotes) {
         lines.push(`- Notes: ${workPreferences.relocateNotes}`)
@@ -223,9 +236,20 @@ export function buildCvPlainText(data: CvDocumentData): string {
 
   {
     const workPreferences = normalizeWorkPreferences(data.workPreferences)
-    if (workPreferences.canRelocate || workPreferences.locations.length) {
+    if (
+      workPreferences.canRelocate ||
+      workPreferences.jobTypes.length ||
+      workPreferences.locations.length
+    ) {
       lines.push('WORK PREFERENCES / تفضيلات العمل')
       lines.push('-'.repeat(32))
+      if (workPreferences.jobTypes.length) {
+        lines.push(
+          `Open to: ${workPreferences.jobTypes
+            .map((id) => jobTypeLabel(id as OpenJobType, 'en'))
+            .join(', ')}`,
+        )
+      }
       lines.push(`Relocation: ${workPreferences.canRelocate ? 'Yes' : 'No'}`)
       if (workPreferences.canRelocate && workPreferences.relocateNotes) {
         lines.push(workPreferences.relocateNotes)

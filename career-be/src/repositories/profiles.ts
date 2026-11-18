@@ -1,6 +1,10 @@
 import type { Environment } from '../types/env'
 import { createId, nowIso } from '../utils/id'
 
+export type OpenJobType = 'full_time' | 'part_time' | 'temp_full_time'
+
+export const OPEN_JOB_TYPES: OpenJobType[] = ['full_time', 'part_time', 'temp_full_time']
+
 export type CareerProfileRow = {
   membership_number: string
   headline: string | null
@@ -8,6 +12,7 @@ export type CareerProfileRow = {
   is_published: number
   can_relocate: number
   relocate_notes: string | null
+  open_job_types: string | null
   created_at: string
   updated_at: string
 }
@@ -36,6 +41,7 @@ export type WorkLocationDto = {
 export type WorkPreferencesDto = {
   canRelocate: boolean
   relocateNotes: string | null
+  jobTypes: OpenJobType[]
   locations: WorkLocationDto[]
 }
 
@@ -86,7 +92,30 @@ export type DocumentRow = {
 }
 
 const PROFILE_SELECT = `membership_number, headline, summary, is_published,
-  COALESCE(can_relocate, 0) AS can_relocate, relocate_notes, created_at, updated_at`
+  COALESCE(can_relocate, 0) AS can_relocate, relocate_notes, open_job_types, created_at, updated_at`
+
+export function parseOpenJobTypes(raw: string | null | undefined): OpenJobType[] {
+  if (!raw?.trim()) return []
+  const allowed = new Set<string>(OPEN_JOB_TYPES)
+  const seen = new Set<OpenJobType>()
+  for (const part of raw.split(/[,|]/)) {
+    const key = part.trim() as OpenJobType
+    if (allowed.has(key)) seen.add(key)
+  }
+  return OPEN_JOB_TYPES.filter((item) => seen.has(item))
+}
+
+export function serializeOpenJobTypes(types: unknown): string | null {
+  if (!Array.isArray(types)) return null
+  const allowed = new Set<string>(OPEN_JOB_TYPES)
+  const seen = new Set<OpenJobType>()
+  for (const item of types) {
+    const key = String(item || '').trim() as OpenJobType
+    if (allowed.has(key)) seen.add(key)
+  }
+  const ordered = OPEN_JOB_TYPES.filter((item) => seen.has(item))
+  return ordered.length ? ordered.join(',') : null
+}
 
 export async function ensureCareerProfile(
   env: Environment,
@@ -116,6 +145,7 @@ export async function ensureCareerProfile(
     is_published: 0,
     can_relocate: 0,
     relocate_notes: null,
+    open_job_types: null,
     created_at: stamp,
     updated_at: stamp,
   }
@@ -130,6 +160,7 @@ export async function updateCareerProfile(
     is_published?: boolean
     can_relocate?: boolean
     relocate_notes?: string | null
+    open_job_types?: OpenJobType[] | string | null
   },
 ): Promise<CareerProfileRow> {
   await ensureCareerProfile(env, membershipNumber)
@@ -156,13 +187,28 @@ export async function updateCareerProfile(
     patch.relocate_notes !== undefined
       ? patch.relocate_notes?.trim() || null
       : current.relocate_notes
+  const openJobTypes =
+    patch.open_job_types !== undefined
+      ? typeof patch.open_job_types === 'string'
+        ? serializeOpenJobTypes(parseOpenJobTypes(patch.open_job_types))
+        : serializeOpenJobTypes(patch.open_job_types)
+      : current.open_job_types
 
   await env.D1_DB.prepare(
     `UPDATE career_profiles
-     SET headline = ?, summary = ?, is_published = ?, can_relocate = ?, relocate_notes = ?, updated_at = ?
+     SET headline = ?, summary = ?, is_published = ?, can_relocate = ?, relocate_notes = ?, open_job_types = ?, updated_at = ?
      WHERE membership_number = ?`,
   )
-    .bind(headline, summary, isPublished, canRelocate, relocateNotes, stamp, membershipNumber)
+    .bind(
+      headline,
+      summary,
+      isPublished,
+      canRelocate,
+      relocateNotes,
+      openJobTypes,
+      stamp,
+      membershipNumber,
+    )
     .run()
 
   return {
@@ -172,6 +218,7 @@ export async function updateCareerProfile(
     is_published: isPublished,
     can_relocate: canRelocate,
     relocate_notes: relocateNotes,
+    open_job_types: openJobTypes,
     updated_at: stamp,
   }
 }
@@ -751,6 +798,7 @@ export async function getWorkPreferences(
   return {
     canRelocate: profile.can_relocate === 1,
     relocateNotes: profile.relocate_notes,
+    jobTypes: parseOpenJobTypes(profile.open_job_types),
     locations,
   }
 }
@@ -761,6 +809,7 @@ export async function replaceWorkPreferences(
   input: {
     canRelocate?: boolean
     relocateNotes?: string | null
+    jobTypes?: OpenJobType[] | string[] | null
     locations?: Array<{
       kind?: string
       countryName?: string | null
@@ -773,10 +822,15 @@ export async function replaceWorkPreferences(
   await ensureCareerProfile(env, membershipNumber)
   const stamp = nowIso()
 
-  if (input.canRelocate !== undefined || input.relocateNotes !== undefined) {
+  if (
+    input.canRelocate !== undefined ||
+    input.relocateNotes !== undefined ||
+    input.jobTypes !== undefined
+  ) {
     await updateCareerProfile(env, membershipNumber, {
       can_relocate: input.canRelocate,
       relocate_notes: input.relocateNotes,
+      open_job_types: input.jobTypes as OpenJobType[] | null | undefined,
     })
   }
 

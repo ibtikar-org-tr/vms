@@ -26,7 +26,9 @@ import {
 import { getVmsProfileUrl } from '../lib/vms-sso'
 import {
   emptyWorkPreferences,
+  JOB_TYPE_OPTIONS,
   normalizeWorkPreferences,
+  type OpenJobType,
   type WorkLocationPref,
   type WorkPreferences,
 } from '../lib/work-preferences'
@@ -120,6 +122,7 @@ export default function ProfilePage() {
       await profilesApi.updateWorkPreferences({
         canRelocate: workPrefs.canRelocate,
         relocateNotes: workPrefs.relocateNotes,
+        jobTypes: workPrefs.jobTypes,
         locations: workPrefs.locations,
       })
       toast.success('تم حفظ السيرة')
@@ -135,6 +138,7 @@ export default function ProfilePage() {
     await profilesApi.updateWorkPreferences({
       canRelocate: workPrefs.canRelocate,
       relocateNotes: workPrefs.relocateNotes,
+      jobTypes: workPrefs.jobTypes,
       locations: workPrefs.locations,
     })
     toast.success(data?.profile?.is_published ? 'تم إلغاء النشر' : 'تم نشر السيرة')
@@ -188,6 +192,16 @@ export default function ProfilePage() {
       const target = prev.locations[index]
       if (!target || target.kind === 'remote') return prev
       return { ...prev, locations: prev.locations.filter((_, i) => i !== index) }
+    })
+  }
+
+  const toggleJobType = (id: OpenJobType) => {
+    setWorkPrefs((prev) => {
+      const has = prev.jobTypes.includes(id)
+      return {
+        ...prev,
+        jobTypes: has ? prev.jobTypes.filter((item) => item !== id) : [...prev.jobTypes, id],
+      }
     })
   }
 
@@ -537,6 +551,29 @@ export default function ProfilePage() {
               <MapPinned className="h-5 w-5 text-brand" />
               تفضيلات العمل والراتب
             </h2>
+
+            <div className="mb-4">
+              <p className="label">أنواع العمل المتاحة حالياً</p>
+              <p className="mb-2 text-xs text-slate-500">يمكن اختيار أكثر من نوع.</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {JOB_TYPE_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.id}
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-sm text-slate-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={workPrefs.jobTypes.includes(opt.id)}
+                      onChange={() => toggleJobType(opt.id)}
+                    />
+                    <span>
+                      <span className="font-semibold text-slate-900">{opt.labelAr}</span>
+                      <span className="ms-1 text-xs text-slate-400">({opt.labelEn})</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <label className="flex items-start gap-3 rounded-xl border border-line bg-slate-50/80 p-3 text-sm text-slate-700">
               <input

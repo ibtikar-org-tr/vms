@@ -24,8 +24,10 @@ import {
 } from '../lib/profile-utils'
 import {
   formatSalaryRange,
+  jobTypeLabel,
   locationLabel,
   normalizeWorkPreferences,
+  type OpenJobType,
 } from '../lib/work-preferences'
 import { CvExportMenu } from './CvExportMenu'
 
@@ -94,6 +96,7 @@ export type CvDocumentData = {
   workPreferences?: {
     canRelocate?: boolean
     relocateNotes?: string | null
+    jobTypes?: Array<'full_time' | 'part_time' | 'temp_full_time' | string>
     locations?: Array<{
       kind: 'remote' | 'country' | string
       countryName?: string | null
@@ -323,12 +326,23 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
             </section>
           ) : null}
 
-          {(workPreferences.canRelocate || workPreferences.locations.length > 0) && (
+          {(workPreferences.canRelocate ||
+            workPreferences.jobTypes.length > 0 ||
+            workPreferences.locations.length > 0) && (
             <section>
               <h2 className="cv-section-title">
                 <MapPinned className="h-3.5 w-3.5" />
                 تفضيلات العمل
               </h2>
+              {!!workPreferences.jobTypes.length && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {workPreferences.jobTypes.map((id) => (
+                    <span key={id} className="chip">
+                      {jobTypeLabel(id as OpenJobType)}
+                    </span>
+                  ))}
+                </div>
+              )}
               <p className="text-sm text-slate-700">
                 الانتقال للعمل:{' '}
                 <span className="font-semibold">

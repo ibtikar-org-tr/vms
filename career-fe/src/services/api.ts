@@ -58,6 +58,7 @@ export const profilesApi = {
   updateWorkPreferences: async (payload: {
     canRelocate?: boolean
     relocateNotes?: string | null
+    jobTypes?: Array<'full_time' | 'part_time' | 'temp_full_time'>
     locations?: Array<{
       kind: 'remote' | 'country'
       countryName?: string | null

@@ -22,8 +22,10 @@ import {
 import { careerAssetUrl, publicCvUrl } from './cv-url'
 import {
   formatSalaryRange,
+  jobTypeLabel,
   locationLabel,
   normalizeWorkPreferences,
+  type OpenJobType,
 } from './work-preferences'
 
 export type CvPdfStyle = 'standard' | 'modern'
@@ -393,9 +395,18 @@ function StandardCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl }: PdfShared) {
           </View>
         ) : null}
 
-        {(workPreferences.canRelocate || workPreferences.locations.length > 0) && (
+        {(workPreferences.canRelocate ||
+          workPreferences.jobTypes.length > 0 ||
+          workPreferences.locations.length > 0) && (
           <View style={standard.section}>
             <Text style={standard.sectionTitle}>Work Preferences / تفضيلات العمل</Text>
+            {!!workPreferences.jobTypes.length && (
+              <Text style={standard.body}>
+                {`Open to: ${workPreferences.jobTypes
+                  .map((id) => jobTypeLabel(id as OpenJobType, 'en'))
+                  .join(' · ')}`}
+              </Text>
+            )}
             <Text style={standard.body}>
               {`Relocation: ${workPreferences.canRelocate ? 'Yes' : 'No'}`}
             </Text>
@@ -573,9 +584,16 @@ function ModernCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl, photoUrl }: PdfS
             {birthDate ? <Text style={modern.sideText}>{`تاريخ الميلاد: ${birthDate}`}</Text> : null}
           </View>
 
-          {(workPreferences.canRelocate || workPreferences.locations.length > 0) && (
+          {(workPreferences.canRelocate ||
+            workPreferences.jobTypes.length > 0 ||
+            workPreferences.locations.length > 0) && (
             <View style={modern.sideSection}>
               <Text style={modern.sideTitle}>العمل والراتب</Text>
+              {!!workPreferences.jobTypes.length && (
+                <Text style={modern.sideText}>
+                  {workPreferences.jobTypes.map((id) => jobTypeLabel(id as OpenJobType)).join(' · ')}
+                </Text>
+              )}
               <Text style={modern.sideText}>
                 {`انتقال: ${workPreferences.canRelocate ? 'نعم' : 'لا'}`}
               </Text>

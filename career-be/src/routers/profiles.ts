@@ -153,6 +153,7 @@ profilesRouter.put('/me/work-preferences', async (c) => {
     .json<{
       canRelocate?: boolean
       relocateNotes?: string | null
+      jobTypes?: Array<'full_time' | 'part_time' | 'temp_full_time' | string>
       locations?: Array<{
         kind?: string
         countryName?: string | null

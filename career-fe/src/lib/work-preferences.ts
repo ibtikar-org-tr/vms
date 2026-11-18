@@ -1,3 +1,11 @@
+export type OpenJobType = 'full_time' | 'part_time' | 'temp_full_time'
+
+export const JOB_TYPE_OPTIONS: Array<{ id: OpenJobType; labelAr: string; labelEn: string }> = [
+  { id: 'full_time', labelAr: 'دوام كامل', labelEn: 'Full-time' },
+  { id: 'part_time', labelAr: 'دوام جزئي', labelEn: 'Part-time' },
+  { id: 'temp_full_time', labelAr: 'دوام كامل مؤقت', labelEn: 'Temporary full-time' },
+]
+
 export type WorkLocationPref = {
   kind: 'remote' | 'country'
   countryName: string | null
@@ -9,6 +17,7 @@ export type WorkLocationPref = {
 export type WorkPreferences = {
   canRelocate: boolean
   relocateNotes: string
+  jobTypes: OpenJobType[]
   locations: WorkLocationPref[]
 }
 
@@ -16,6 +25,7 @@ export function emptyWorkPreferences(): WorkPreferences {
   return {
     canRelocate: false,
     relocateNotes: '',
+    jobTypes: [],
     locations: [
       {
         kind: 'remote',
@@ -26,6 +36,27 @@ export function emptyWorkPreferences(): WorkPreferences {
       },
     ],
   }
+}
+
+function normalizeJobTypes(raw: unknown): OpenJobType[] {
+  const allowed = new Set(JOB_TYPE_OPTIONS.map((o) => o.id))
+  const values = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string'
+      ? raw.split(/[,|]/)
+      : []
+  const seen = new Set<OpenJobType>()
+  for (const item of values) {
+    const key = String(item || '').trim() as OpenJobType
+    if (allowed.has(key)) seen.add(key)
+  }
+  return JOB_TYPE_OPTIONS.map((o) => o.id).filter((id) => seen.has(id))
+}
+
+export function jobTypeLabel(id: OpenJobType, lang: 'ar' | 'en' = 'ar') {
+  const match = JOB_TYPE_OPTIONS.find((o) => o.id === id)
+  if (!match) return id
+  return lang === 'en' ? match.labelEn : match.labelAr
 }
 
 export function normalizeWorkPreferences(raw: any): WorkPreferences {
@@ -68,6 +99,7 @@ export function normalizeWorkPreferences(raw: any): WorkPreferences {
   return {
     canRelocate: Boolean(raw.canRelocate ?? raw.can_relocate),
     relocateNotes: String(raw.relocateNotes ?? raw.relocate_notes ?? ''),
+    jobTypes: normalizeJobTypes(raw.jobTypes ?? raw.open_job_types),
     locations: ordered,
   }
 }
