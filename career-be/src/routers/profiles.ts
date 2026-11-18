@@ -10,12 +10,14 @@ import {
   ensureCareerProfile,
   getDocument,
   getPublishedProfile,
+  getWorkPreferences,
   listDocuments,
   listProfileLanguages,
   listProjects,
   listWorkExperiences,
   mergeLanguagePreferences,
   replaceProfileLanguages,
+  replaceWorkPreferences,
   searchPublishedProfiles,
   updateCareerProfile,
   updateWorkExperience,
@@ -99,6 +101,7 @@ profilesRouter.get('/me', async (c) => {
     c.req.header('Authorization'),
   )
   const languages = mergeLanguagePreferences(vmsProfile?.languages, languageRows)
+  const workPreferences = await getWorkPreferences(c.env, member.membership_number)
 
   return c.json({
     profile,
@@ -107,6 +110,7 @@ profilesRouter.get('/me', async (c) => {
     documents: documents.map(({ r2_key: _r2, ...rest }) => rest),
     memberSkills,
     languages,
+    workPreferences,
     vmsProfile,
   })
 })
@@ -114,7 +118,13 @@ profilesRouter.get('/me', async (c) => {
 profilesRouter.patch('/me', async (c) => {
   const member = c.get('member')
   const body = await c.req
-    .json<{ headline?: string | null; summary?: string | null; is_published?: boolean }>()
+    .json<{
+      headline?: string | null
+      summary?: string | null
+      is_published?: boolean
+      can_relocate?: boolean
+      relocate_notes?: string | null
+    }>()
     .catch(() => ({}))
 
   const profile = await updateCareerProfile(c.env, member.membership_number, body)
@@ -135,6 +145,26 @@ profilesRouter.put('/me/languages', async (c) => {
     Array.isArray(body.languages) ? body.languages : [],
   )
   return c.json({ languages })
+})
+
+profilesRouter.put('/me/work-preferences', async (c) => {
+  const member = c.get('member')
+  const body = await c.req
+    .json<{
+      canRelocate?: boolean
+      relocateNotes?: string | null
+      locations?: Array<{
+        kind?: string
+        countryName?: string | null
+        salaryMin?: number | null
+        salaryMax?: number | null
+        currency?: string | null
+      }>
+    }>()
+    .catch(() => ({}))
+
+  const workPreferences = await replaceWorkPreferences(c.env, member.membership_number, body)
+  return c.json({ workPreferences })
 })
 
 profilesRouter.post('/me/work-experiences', async (c) => {
@@ -391,6 +421,7 @@ profilesRouter.get('/:membershipNumber', async (c) => {
   const languageRows = await listProfileLanguages(c.env, membershipNumber)
   const vmsProfile = await fetchVmsPartnerProfile(c.env, membershipNumber)
   const languages = mergeLanguagePreferences(vmsProfile?.languages, languageRows)
+  const workPreferences = await getWorkPreferences(c.env, membershipNumber)
 
   return c.json({
     profile,
@@ -398,6 +429,7 @@ profilesRouter.get('/:membershipNumber', async (c) => {
     projects,
     documents: documents.map(({ r2_key: _r2, ...rest }) => rest),
     languages,
+    workPreferences,
     vmsProfile,
   })
 })

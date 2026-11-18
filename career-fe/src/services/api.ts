@@ -45,11 +45,27 @@ export const authApi = {
 
 export const profilesApi = {
   me: async () => (await api.get('/profiles/me')).data,
-  updateMe: async (payload: { headline?: string | null; summary?: string | null; is_published?: boolean }) =>
-    (await api.patch('/profiles/me', payload)).data,
+  updateMe: async (payload: {
+    headline?: string | null
+    summary?: string | null
+    is_published?: boolean
+    can_relocate?: boolean
+    relocate_notes?: string | null
+  }) => (await api.patch('/profiles/me', payload)).data,
   updateLanguages: async (
     languages: Array<{ language: string; proficiency?: number | null; openToTranslate?: boolean }>,
   ) => (await api.put('/profiles/me/languages', { languages })).data,
+  updateWorkPreferences: async (payload: {
+    canRelocate?: boolean
+    relocateNotes?: string | null
+    locations?: Array<{
+      kind: 'remote' | 'country'
+      countryName?: string | null
+      salaryMin?: number | null
+      salaryMax?: number | null
+      currency?: string | null
+    }>
+  }) => (await api.put('/profiles/me/work-preferences', payload)).data,
   memberSkills: async () => (await api.get('/profiles/me/skills')).data,
   addWork: async (payload: Record<string, unknown>) =>
     (await api.post('/profiles/me/work-experiences', payload)).data,

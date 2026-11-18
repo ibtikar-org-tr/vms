@@ -8,6 +8,7 @@ import {
   Languages,
   Mail,
   MapPin,
+  MapPinned,
   Phone,
   Sparkles,
   UserRound,
@@ -21,6 +22,11 @@ import {
   sexLabel,
   splitCsv,
 } from '../lib/profile-utils'
+import {
+  formatSalaryRange,
+  locationLabel,
+  normalizeWorkPreferences,
+} from '../lib/work-preferences'
 import { CvExportMenu } from './CvExportMenu'
 
 export type CvSkill = { skillId?: string; name: string }
@@ -85,6 +91,17 @@ export type CvDocumentData = {
     proficiency?: number | null
     openToTranslate?: boolean
   }>
+  workPreferences?: {
+    canRelocate?: boolean
+    relocateNotes?: string | null
+    locations?: Array<{
+      kind: 'remote' | 'country' | string
+      countryName?: string | null
+      salaryMin?: number | null
+      salaryMax?: number | null
+      currency?: string
+    }>
+  }
 }
 
 type Props = {
@@ -117,6 +134,7 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
   )
   const birthDate = formatBirthDate(vms?.dateOfBirth)
   const sex = sexLabel(vms?.sex)
+  const workPreferences = normalizeWorkPreferences(data.workPreferences)
   const educationBits = [vms?.educationLevel, vms?.fieldOfStudy].filter(Boolean).join(' · ')
   const initials = name
     .split(/\s+/)
@@ -304,6 +322,48 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
               <p className="whitespace-pre-wrap leading-7 text-slate-700">{data.profile.summary}</p>
             </section>
           ) : null}
+
+          {(workPreferences.canRelocate || workPreferences.locations.length > 0) && (
+            <section>
+              <h2 className="cv-section-title">
+                <MapPinned className="h-3.5 w-3.5" />
+                تفضيلات العمل
+              </h2>
+              <p className="text-sm text-slate-700">
+                الانتقال للعمل:{' '}
+                <span className="font-semibold">
+                  {workPreferences.canRelocate ? 'نعم' : 'لا'}
+                </span>
+              </p>
+              {workPreferences.canRelocate && workPreferences.relocateNotes ? (
+                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">
+                  {workPreferences.relocateNotes}
+                </p>
+              ) : null}
+              {!!workPreferences.locations.length && (
+                <ul className="mt-3 space-y-2">
+                  {workPreferences.locations.map((loc) => {
+                    const salary = formatSalaryRange(loc.salaryMin, loc.salaryMax, loc.currency)
+                    return (
+                      <li
+                        key={`${loc.kind}-${loc.countryName || 'remote'}`}
+                        className="rounded-xl border border-line px-3 py-2 text-sm"
+                      >
+                        <span className="font-semibold text-slate-900">{locationLabel(loc)}</span>
+                        {salary ? (
+                          <span className="mt-0.5 block text-xs text-brand" dir="ltr">
+                            {salary} / month
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 block text-xs text-slate-400">راتب غير محدد</span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
 
           <section>
             <h2 className="cv-section-title">

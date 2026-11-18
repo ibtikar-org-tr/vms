@@ -20,6 +20,11 @@ import {
   splitCsv,
 } from './profile-utils'
 import { careerAssetUrl, publicCvUrl } from './cv-url'
+import {
+  formatSalaryRange,
+  locationLabel,
+  normalizeWorkPreferences,
+} from './work-preferences'
 
 export type CvPdfStyle = 'standard' | 'modern'
 
@@ -354,6 +359,7 @@ function StandardCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl }: PdfShared) {
   const educationLine = [vms?.fieldOfStudy, vms?.educationLevel, vms?.school]
     .filter(Boolean)
     .join(' · ')
+  const workPreferences = normalizeWorkPreferences(data.workPreferences)
 
   return (
     <Document title={`CV — ${name}`} author={name} subject="Curriculum Vitae" language="ar">
@@ -386,6 +392,26 @@ function StandardCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl }: PdfShared) {
             <Text style={standard.body}>{data.profile.summary}</Text>
           </View>
         ) : null}
+
+        {(workPreferences.canRelocate || workPreferences.locations.length > 0) && (
+          <View style={standard.section}>
+            <Text style={standard.sectionTitle}>Work Preferences / تفضيلات العمل</Text>
+            <Text style={standard.body}>
+              {`Relocation: ${workPreferences.canRelocate ? 'Yes' : 'No'}`}
+            </Text>
+            {workPreferences.canRelocate && workPreferences.relocateNotes ? (
+              <Text style={standard.body}>{workPreferences.relocateNotes}</Text>
+            ) : null}
+            {workPreferences.locations.map((loc) => {
+              const salary = formatSalaryRange(loc.salaryMin, loc.salaryMax, loc.currency)
+              return (
+                <Text key={`${loc.kind}-${loc.countryName || 'remote'}`} style={standard.body}>
+                  {`${locationLabel(loc)}${salary ? ` — ${salary}/mo` : ''}`}
+                </Text>
+              )
+            })}
+          </View>
+        )}
 
         {!!data.workExperiences?.length && (
           <View style={standard.section}>
@@ -522,6 +548,7 @@ function ModernCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl, photoUrl }: PdfS
     .slice(0, 2)
     .map((part) => part[0])
     .join('')
+  const workPreferences = normalizeWorkPreferences(data.workPreferences)
 
   return (
     <Document title={`CV — ${name}`} author={name} subject="Modern Curriculum Vitae" language="ar">
@@ -545,6 +572,23 @@ function ModernCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl, photoUrl }: PdfS
             {sex !== '—' ? <Text style={modern.sideText}>{sex}</Text> : null}
             {birthDate ? <Text style={modern.sideText}>{`تاريخ الميلاد: ${birthDate}`}</Text> : null}
           </View>
+
+          {(workPreferences.canRelocate || workPreferences.locations.length > 0) && (
+            <View style={modern.sideSection}>
+              <Text style={modern.sideTitle}>العمل والراتب</Text>
+              <Text style={modern.sideText}>
+                {`انتقال: ${workPreferences.canRelocate ? 'نعم' : 'لا'}`}
+              </Text>
+              {workPreferences.locations.map((loc) => {
+                const salary = formatSalaryRange(loc.salaryMin, loc.salaryMax, loc.currency)
+                return (
+                  <Text key={`${loc.kind}-${loc.countryName || 'remote'}`} style={modern.sideText}>
+                    {`${locationLabel(loc)}${salary ? ` · ${salary}` : ''}`}
+                  </Text>
+                )
+              })}
+            </View>
+          )}
 
           {!!skills.length && (
             <View style={modern.sideSection}>

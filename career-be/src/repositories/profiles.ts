@@ -6,8 +6,37 @@ export type CareerProfileRow = {
   headline: string | null
   summary: string | null
   is_published: number
+  can_relocate: number
+  relocate_notes: string | null
   created_at: string
   updated_at: string
+}
+
+export type WorkLocationRow = {
+  id: string
+  membership_number: string
+  kind: 'remote' | 'country' | string
+  country_name: string | null
+  salary_min: number | null
+  salary_max: number | null
+  currency: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type WorkLocationDto = {
+  kind: 'remote' | 'country'
+  countryName: string | null
+  salaryMin: number | null
+  salaryMax: number | null
+  currency: string
+}
+
+export type WorkPreferencesDto = {
+  canRelocate: boolean
+  relocateNotes: string | null
+  locations: WorkLocationDto[]
 }
 
 export type WorkExperienceRow = {
@@ -56,12 +85,15 @@ export type DocumentRow = {
   created_at: string
 }
 
+const PROFILE_SELECT = `membership_number, headline, summary, is_published,
+  COALESCE(can_relocate, 0) AS can_relocate, relocate_notes, created_at, updated_at`
+
 export async function ensureCareerProfile(
   env: Environment,
   membershipNumber: string,
 ): Promise<CareerProfileRow> {
   const existing = await env.D1_DB.prepare(
-    `SELECT membership_number, headline, summary, is_published, created_at, updated_at
+    `SELECT ${PROFILE_SELECT}
      FROM career_profiles WHERE membership_number = ? LIMIT 1`,
   )
     .bind(membershipNumber)
@@ -82,6 +114,8 @@ export async function ensureCareerProfile(
     headline: null,
     summary: null,
     is_published: 0,
+    can_relocate: 0,
+    relocate_notes: null,
     created_at: stamp,
     updated_at: stamp,
   }
@@ -90,13 +124,19 @@ export async function ensureCareerProfile(
 export async function updateCareerProfile(
   env: Environment,
   membershipNumber: string,
-  patch: { headline?: string | null; summary?: string | null; is_published?: boolean },
+  patch: {
+    headline?: string | null
+    summary?: string | null
+    is_published?: boolean
+    can_relocate?: boolean
+    relocate_notes?: string | null
+  },
 ): Promise<CareerProfileRow> {
   await ensureCareerProfile(env, membershipNumber)
   const stamp = nowIso()
 
   const current = await env.D1_DB.prepare(
-    `SELECT membership_number, headline, summary, is_published, created_at, updated_at
+    `SELECT ${PROFILE_SELECT}
      FROM career_profiles WHERE membership_number = ?`,
   )
     .bind(membershipNumber)
@@ -110,13 +150,19 @@ export async function updateCareerProfile(
   const summary = patch.summary !== undefined ? patch.summary : current.summary
   const isPublished =
     patch.is_published !== undefined ? (patch.is_published ? 1 : 0) : current.is_published
+  const canRelocate =
+    patch.can_relocate !== undefined ? (patch.can_relocate ? 1 : 0) : current.can_relocate
+  const relocateNotes =
+    patch.relocate_notes !== undefined
+      ? patch.relocate_notes?.trim() || null
+      : current.relocate_notes
 
   await env.D1_DB.prepare(
     `UPDATE career_profiles
-     SET headline = ?, summary = ?, is_published = ?, updated_at = ?
+     SET headline = ?, summary = ?, is_published = ?, can_relocate = ?, relocate_notes = ?, updated_at = ?
      WHERE membership_number = ?`,
   )
-    .bind(headline, summary, isPublished, stamp, membershipNumber)
+    .bind(headline, summary, isPublished, canRelocate, relocateNotes, stamp, membershipNumber)
     .run()
 
   return {
@@ -124,6 +170,8 @@ export async function updateCareerProfile(
     headline,
     summary,
     is_published: isPublished,
+    can_relocate: canRelocate,
+    relocate_notes: relocateNotes,
     updated_at: stamp,
   }
 }
@@ -661,4 +709,147 @@ export function mergeLanguagePreferences(
   }
 
   return merged
+}
+
+function toIntOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, Math.round(n))
+}
+
+export async function listWorkLocations(
+  env: Environment,
+  membershipNumber: string,
+): Promise<WorkLocationRow[]> {
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM work_locations
+     WHERE membership_number = ?
+     ORDER BY CASE WHEN kind = 'remote' THEN 0 ELSE 1 END, sort_order ASC, country_name COLLATE NOCASE ASC`,
+  )
+    .bind(membershipNumber)
+    .all<WorkLocationRow>()
+  return result.results ?? []
+}
+
+export function workLocationsToDto(rows: WorkLocationRow[]): WorkLocationDto[] {
+  return rows.map((row) => ({
+    kind: row.kind === 'remote' ? 'remote' : 'country',
+    countryName: row.kind === 'remote' ? null : row.country_name,
+    salaryMin: row.salary_min,
+    salaryMax: row.salary_max,
+    currency: row.currency || 'USD',
+  }))
+}
+
+export async function getWorkPreferences(
+  env: Environment,
+  membershipNumber: string,
+): Promise<WorkPreferencesDto> {
+  const profile = await ensureCareerProfile(env, membershipNumber)
+  const locations = workLocationsToDto(await listWorkLocations(env, membershipNumber))
+  return {
+    canRelocate: profile.can_relocate === 1,
+    relocateNotes: profile.relocate_notes,
+    locations,
+  }
+}
+
+export async function replaceWorkPreferences(
+  env: Environment,
+  membershipNumber: string,
+  input: {
+    canRelocate?: boolean
+    relocateNotes?: string | null
+    locations?: Array<{
+      kind?: string
+      countryName?: string | null
+      salaryMin?: number | null
+      salaryMax?: number | null
+      currency?: string | null
+    }>
+  },
+): Promise<WorkPreferencesDto> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+
+  if (input.canRelocate !== undefined || input.relocateNotes !== undefined) {
+    await updateCareerProfile(env, membershipNumber, {
+      can_relocate: input.canRelocate,
+      relocate_notes: input.relocateNotes,
+    })
+  }
+
+  if (Array.isArray(input.locations)) {
+    const normalized: WorkLocationDto[] = []
+    let hasRemote = false
+
+    for (const item of input.locations) {
+      const kind = item.kind === 'remote' ? 'remote' : 'country'
+      if (kind === 'remote') {
+        if (hasRemote) continue
+        hasRemote = true
+        normalized.push({
+          kind: 'remote',
+          countryName: null,
+          salaryMin: toIntOrNull(item.salaryMin),
+          salaryMax: toIntOrNull(item.salaryMax),
+          currency: (item.currency || 'USD').trim().toUpperCase().slice(0, 8) || 'USD',
+        })
+        continue
+      }
+
+      const countryName = String(item.countryName || '').trim()
+      if (!countryName) continue
+      if (
+        normalized.some(
+          (loc) => loc.kind === 'country' && loc.countryName?.toLowerCase() === countryName.toLowerCase(),
+        )
+      ) {
+        continue
+      }
+      normalized.push({
+        kind: 'country',
+        countryName,
+        salaryMin: toIntOrNull(item.salaryMin),
+        salaryMax: toIntOrNull(item.salaryMax),
+        currency: (item.currency || 'USD').trim().toUpperCase().slice(0, 8) || 'USD',
+      })
+    }
+
+    // Remote always first
+    normalized.sort((a, b) => {
+      if (a.kind === 'remote' && b.kind !== 'remote') return -1
+      if (a.kind !== 'remote' && b.kind === 'remote') return 1
+      return (a.countryName || '').localeCompare(b.countryName || '', 'ar')
+    })
+
+    await env.D1_DB.prepare(`DELETE FROM work_locations WHERE membership_number = ?`)
+      .bind(membershipNumber)
+      .run()
+
+    let order = 0
+    for (const loc of normalized) {
+      await env.D1_DB.prepare(
+        `INSERT INTO work_locations
+         (id, membership_number, kind, country_name, salary_min, salary_max, currency, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          createId(),
+          membershipNumber,
+          loc.kind,
+          loc.countryName,
+          loc.salaryMin,
+          loc.salaryMax,
+          loc.currency,
+          order++,
+          stamp,
+          stamp,
+        )
+        .run()
+    }
+  }
+
+  return getWorkPreferences(env, membershipNumber)
 }

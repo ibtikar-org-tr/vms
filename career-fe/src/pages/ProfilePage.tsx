@@ -6,8 +6,11 @@ import {
   GraduationCap,
   Heart,
   Languages,
+  MapPinned,
   Pencil,
+  Plus,
   Save,
+  Trash2,
   User,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -21,6 +24,12 @@ import {
   splitCsv,
 } from '../lib/profile-utils'
 import { getVmsProfileUrl } from '../lib/vms-sso'
+import {
+  emptyWorkPreferences,
+  normalizeWorkPreferences,
+  type WorkLocationPref,
+  type WorkPreferences,
+} from '../lib/work-preferences'
 import { authDownloadHeaders, profilesApi } from '../services/api'
 
 type Tab = 'preview' | 'edit'
@@ -35,6 +44,8 @@ export default function ProfilePage() {
   const [data, setData] = useState<any>(null)
   const [summary, setSummary] = useState('')
   const [languagePrefs, setLanguagePrefs] = useState<LanguagePref[]>([])
+  const [workPrefs, setWorkPrefs] = useState<WorkPreferences>(emptyWorkPreferences())
+  const [newCountry, setNewCountry] = useState('')
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<Tab>('preview')
   const [workForm, setWorkForm] = useState({
@@ -80,6 +91,7 @@ export default function ProfilePage() {
           openToTranslate: false,
         }))
     setLanguagePrefs(fromApi.filter((item) => item.language))
+    setWorkPrefs(normalizeWorkPreferences(payload.workPreferences))
   }
 
   useEffect(() => {
@@ -105,6 +117,11 @@ export default function ProfilePage() {
     try {
       await profilesApi.updateMe({ summary })
       await profilesApi.updateLanguages(languagePrefs)
+      await profilesApi.updateWorkPreferences({
+        canRelocate: workPrefs.canRelocate,
+        relocateNotes: workPrefs.relocateNotes,
+        locations: workPrefs.locations,
+      })
       toast.success('تم حفظ السيرة')
       await load()
     } finally {
@@ -115,6 +132,11 @@ export default function ProfilePage() {
   const togglePublish = async () => {
     await profilesApi.updateMe({ summary, is_published: !data?.profile?.is_published })
     await profilesApi.updateLanguages(languagePrefs)
+    await profilesApi.updateWorkPreferences({
+      canRelocate: workPrefs.canRelocate,
+      relocateNotes: workPrefs.relocateNotes,
+      locations: workPrefs.locations,
+    })
     toast.success(data?.profile?.is_published ? 'تم إلغاء النشر' : 'تم نشر السيرة')
     await load()
   }
@@ -123,6 +145,50 @@ export default function ProfilePage() {
     setLanguagePrefs((prev) =>
       prev.map((item) => (item.language === language ? { ...item, ...patch } : item)),
     )
+  }
+
+  const updateLocation = (index: number, patch: Partial<WorkLocationPref>) => {
+    setWorkPrefs((prev) => ({
+      ...prev,
+      locations: prev.locations.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+    }))
+  }
+
+  const addCountryLocation = () => {
+    const name = newCountry.trim()
+    if (!name) return
+    setWorkPrefs((prev) => {
+      if (
+        prev.locations.some(
+          (loc) =>
+            loc.kind === 'country' && loc.countryName?.toLowerCase() === name.toLowerCase(),
+        )
+      ) {
+        return prev
+      }
+      return {
+        ...prev,
+        locations: [
+          ...prev.locations,
+          {
+            kind: 'country',
+            countryName: name,
+            salaryMin: null,
+            salaryMax: null,
+            currency: 'USD',
+          },
+        ],
+      }
+    })
+    setNewCountry('')
+  }
+
+  const removeLocation = (index: number) => {
+    setWorkPrefs((prev) => {
+      const target = prev.locations[index]
+      if (!target || target.kind === 'remote') return prev
+      return { ...prev, locations: prev.locations.filter((_, i) => i !== index) }
+    })
   }
 
   const addWork = async (event: FormEvent) => {
@@ -191,6 +257,7 @@ export default function ProfilePage() {
     ...data,
     profile: { ...data.profile, summary },
     languages: languagePrefs,
+    workPreferences: workPrefs,
   }
 
   return (
@@ -461,6 +528,143 @@ export default function ProfilePage() {
                     لا توجد لغات مضافة بعد. أضفها من منصة الأعضاء ثم أعد تحميل الصفحة.
                   </span>
                 )}
+              </div>
+            </div>
+          </section>
+
+          <section className="panel p-4 sm:p-7">
+            <h2 className="section-title">
+              <MapPinned className="h-5 w-5 text-brand" />
+              تفضيلات العمل والراتب
+            </h2>
+
+            <label className="flex items-start gap-3 rounded-xl border border-line bg-slate-50/80 p-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={workPrefs.canRelocate}
+                onChange={(e) =>
+                  setWorkPrefs((prev) => ({ ...prev, canRelocate: e.target.checked }))
+                }
+              />
+              <span>
+                <span className="block font-semibold text-slate-900">يمكنني الانتقال للعمل</span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  فعّل إذا كنت مستعداً للانتقال الجغرافي لوظيفة بدوام كامل
+                </span>
+              </span>
+            </label>
+
+            {workPrefs.canRelocate ? (
+              <div className="mt-3">
+                <label className="label">تفاصيل الانتقال (اختياري)</label>
+                <textarea
+                  className="field min-h-20"
+                  value={workPrefs.relocateNotes}
+                  onChange={(e) =>
+                    setWorkPrefs((prev) => ({ ...prev, relocateNotes: e.target.value }))
+                  }
+                  placeholder="مثال: مستعد للانتقال داخل تركيا أو إلى دول الخليج خلال 3 أشهر"
+                />
+              </div>
+            ) : null}
+
+            <div className="mt-5">
+              <p className="label">أماكن العمل المتوقعة والراتب الشهري (دوام كامل)</p>
+              <p className="mb-3 text-xs text-slate-500">
+                «عن بُعد» دائماً في أعلى القائمة. أضف دولاً مع نطاق الراتب المتوقع لكل خيار.
+              </p>
+              <ul className="space-y-3">
+                {workPrefs.locations.map((loc, index) => (
+                  <li key={`${loc.kind}-${loc.countryName || 'remote'}`} className="rounded-xl border border-line p-3 sm:p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="font-bold text-slate-900">
+                        {loc.kind === 'remote' ? 'عن بُعد (Remote)' : loc.countryName}
+                      </p>
+                      {loc.kind === 'country' ? (
+                        <button
+                          type="button"
+                          className="btn-danger py-1.5 text-xs"
+                          onClick={() => removeLocation(index)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          حذف
+                        </button>
+                      ) : (
+                        <span className="rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-ink">
+                          أولاً في القائمة
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className="label">الحد الأدنى شهرياً</label>
+                        <input
+                          className="field"
+                          type="number"
+                          min={0}
+                          dir="ltr"
+                          value={loc.salaryMin ?? ''}
+                          onChange={(e) =>
+                            updateLocation(index, {
+                              salaryMin: e.target.value === '' ? null : Number(e.target.value),
+                            })
+                          }
+                          placeholder="مثال: 2000"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">الحد الأعلى شهرياً</label>
+                        <input
+                          className="field"
+                          type="number"
+                          min={0}
+                          dir="ltr"
+                          value={loc.salaryMax ?? ''}
+                          onChange={(e) =>
+                            updateLocation(index, {
+                              salaryMax: e.target.value === '' ? null : Number(e.target.value),
+                            })
+                          }
+                          placeholder="مثال: 3500"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">العملة</label>
+                        <input
+                          className="field"
+                          dir="ltr"
+                          value={loc.currency}
+                          onChange={(e) =>
+                            updateLocation(index, {
+                              currency: e.target.value.toUpperCase().slice(0, 8),
+                            })
+                          }
+                          placeholder="USD"
+                        />
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  className="field max-w-xs"
+                  value={newCountry}
+                  onChange={(e) => setNewCountry(e.target.value)}
+                  placeholder="اسم الدولة (مثال: تركيا، ألمانيا…)"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addCountryLocation()
+                    }
+                  }}
+                />
+                <button type="button" className="btn-ghost" onClick={addCountryLocation}>
+                  <Plus className="h-4 w-4" />
+                  إضافة دولة
+                </button>
               </div>
             </div>
           </section>

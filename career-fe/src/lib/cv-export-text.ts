@@ -9,6 +9,11 @@ import {
   splitCsv,
 } from './profile-utils'
 import { publicCvUrl } from './cv-url'
+import {
+  formatSalaryRange,
+  locationLabel,
+  normalizeWorkPreferences,
+} from './work-preferences'
 
 function languagesOf(data: CvDocumentData) {
   if (data.languages?.length) return data.languages
@@ -67,6 +72,23 @@ export function buildCvMarkdown(data: CvDocumentData): string {
     lines.push('')
     lines.push(data.profile.summary.trim())
     lines.push('')
+  }
+
+  {
+    const workPreferences = normalizeWorkPreferences(data.workPreferences)
+    if (workPreferences.canRelocate || workPreferences.locations.length) {
+      lines.push('## Work Preferences / تفضيلات العمل')
+      lines.push('')
+      lines.push(`- Relocation: ${workPreferences.canRelocate ? 'Yes' : 'No'}`)
+      if (workPreferences.canRelocate && workPreferences.relocateNotes) {
+        lines.push(`- Notes: ${workPreferences.relocateNotes}`)
+      }
+      for (const loc of workPreferences.locations) {
+        const salary = formatSalaryRange(loc.salaryMin, loc.salaryMax, loc.currency)
+        lines.push(`- ${locationLabel(loc)}${salary ? `: ${salary}/mo` : ''}`)
+      }
+      lines.push('')
+    }
   }
 
   if (data.workExperiences?.length) {
@@ -197,6 +219,23 @@ export function buildCvPlainText(data: CvDocumentData): string {
     lines.push('-'.repeat(32))
     lines.push(data.profile.summary.trim())
     lines.push('')
+  }
+
+  {
+    const workPreferences = normalizeWorkPreferences(data.workPreferences)
+    if (workPreferences.canRelocate || workPreferences.locations.length) {
+      lines.push('WORK PREFERENCES / تفضيلات العمل')
+      lines.push('-'.repeat(32))
+      lines.push(`Relocation: ${workPreferences.canRelocate ? 'Yes' : 'No'}`)
+      if (workPreferences.canRelocate && workPreferences.relocateNotes) {
+        lines.push(workPreferences.relocateNotes)
+      }
+      for (const loc of workPreferences.locations) {
+        const salary = formatSalaryRange(loc.salaryMin, loc.salaryMax, loc.currency)
+        lines.push(`- ${locationLabel(loc)}${salary ? `: ${salary}/mo` : ''}`)
+      }
+      lines.push('')
+    }
   }
 
   if (data.workExperiences?.length) {
