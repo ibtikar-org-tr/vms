@@ -5,7 +5,22 @@ import { useAuth } from '../contexts/AuthContext'
 import { authApi } from '../services/api'
 import { startVmsSsoLogin } from '../lib/vms-sso'
 
-const inFlightCodes = new Set<string>()
+type ExchangeResult = Awaited<ReturnType<typeof authApi.exchangeVmsCode>>
+
+/** Deduplicate one-time code exchange across React Strict Mode remounts. */
+const exchangeByCode = new Map<string, Promise<ExchangeResult>>()
+
+function exchangeVmsCodeOnce(code: string): Promise<ExchangeResult> {
+  const existing = exchangeByCode.get(code)
+  if (existing) return existing
+
+  const pending = authApi.exchangeVmsCode(code).catch((error) => {
+    exchangeByCode.delete(code)
+    throw error
+  })
+  exchangeByCode.set(code, pending)
+  return pending
+}
 
 function safeNext(raw: string | null): string {
   if (!raw?.startsWith('/') || raw.startsWith('//')) return '/'
@@ -25,20 +40,17 @@ export default function AuthCallback() {
       setError('رمز الدخول غير موجود. أعد المحاولة من صفحة تسجيل الدخول.')
       return
     }
-    if (inFlightCodes.has(code)) return
-    inFlightCodes.add(code)
 
     let cancelled = false
     ;(async () => {
       try {
-        const response = await authApi.exchangeVmsCode(code)
+        const response = await exchangeVmsCodeOnce(code)
         if (cancelled) return
         await establish(response.access_token, { user: response.user })
         toast.success('تم تسجيل الدخول بنجاح')
         navigate(next, { replace: true })
       } catch (err: any) {
         if (cancelled) return
-        inFlightCodes.delete(code)
         const message = err?.response?.data?.message || 'تعذّر إكمال تسجيل الدخول'
         setError(message)
         toast.error(message)

@@ -30,7 +30,7 @@ export function LoginPage() {
   }, [location.state, searchParams])
 
   const completeExternalHandoff = async () => {
-    if (!externalRedirectUri) {
+    if (!externalRedirectUri || isHandingOff) {
       return false
     }
 
