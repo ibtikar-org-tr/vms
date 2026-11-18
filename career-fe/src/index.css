@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sand: #efe8d7;
+  --carbon: #1f1f1f;
+  --rich-gold: #dcb557;
+  --deep-green: #214937;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Tajawal', system-ui, sans-serif;
+  color: var(--carbon);
+  direction: rtl;
+  background-color: var(--sand);
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: 'Tajawal', system-ui, sans-serif;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-gray-200 bg-white shadow-lg;
+  }
+
+  .field {
+    @apply w-full rounded-lg border-2 border-gray-200 bg-white px-3 py-2.5 text-sm outline-none transition-all;
+    color: var(--carbon);
+  }
+
+  .field:focus {
+    border-color: var(--rich-gold);
+    box-shadow: 0 0 0 3px rgba(220, 181, 87, 0.35);
+  }
+
+  .field-readonly {
+    @apply w-full cursor-default rounded-lg border-2 border-gray-200 px-3 py-2.5 text-sm text-gray-700;
+    background-color: color-mix(in srgb, var(--sand) 60%, white);
+  }
+
+  .label {
+    @apply mb-2 block text-sm font-medium;
+    color: var(--carbon);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition;
+    background-color: var(--rich-gold);
+    color: var(--carbon);
+  }
+
+  .btn-primary:hover {
+    background-color: #eab308;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold transition;
+    color: var(--carbon);
+  }
+
+  .btn-ghost:hover {
+    border-color: var(--rich-gold);
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border-2 border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition;
+  }
+
+  .btn-danger:hover {
+    @apply bg-red-50;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium;
+    background-color: var(--sand);
+    color: var(--carbon);
+  }
+
+  .section-title {
+    @apply mb-4 flex items-center gap-2 text-lg font-semibold sm:mb-6 sm:text-2xl;
+    color: var(--carbon);
+  }
+}

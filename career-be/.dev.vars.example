@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local `wrangler dev` (gitignored).
+# Values must match VMS backend JWT_SECRET / INTERNAL_SECRET.
+JWT_SECRET=
+VMS_INTERNAL_SECRET=

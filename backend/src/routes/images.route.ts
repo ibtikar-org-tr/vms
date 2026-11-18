@@ -1,7 +1,9 @@
 import { Context } from 'hono'
+import { updateUserInfo } from '../repositories/user-info.repository'
 import { getClubById, updateClubById } from '../repositories/vms-clubs.repository'
 import { getEventById, updateEventById } from '../repositories/vms-events.repository'
 import type { AppBindings } from '../types/bindings'
+import type { AppEnv } from '../types/hono'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB per file
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
@@ -202,6 +204,52 @@ export async function uploadClubBanner(c: Context<{ Bindings: AppBindings }>) {
   } catch (error) {
     console.error('Club banner upload error:', error)
     return c.json({ error: 'Failed to upload club banner.' }, 500)
+  }
+}
+
+export async function uploadProfilePicture(c: Context<AppEnv>) {
+  const bucket = c.env.MY_BUCKET
+  const membershipNumber = c.get('authUser')?.membershipNumber?.trim()
+
+  if (!bucket) {
+    return c.json({ error: 'R2 bucket not configured' }, 500)
+  }
+
+  if (!membershipNumber) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  try {
+    const formData = await c.req.formData()
+    const fileEntry = formData.get('image')
+
+    if (!fileEntry || !(fileEntry instanceof File)) {
+      return c.json({ error: 'No image file provided.' }, 400)
+    }
+
+    if (fileEntry.size > MAX_FILE_SIZE) {
+      return c.json({ error: 'Image exceeds maximum size of 5MB.' }, 400)
+    }
+
+    if (!ALLOWED_MIME_TYPES.includes(fileEntry.type)) {
+      return c.json({ error: 'Unsupported image type. Allowed: JPEG, PNG, WebP, GIF.' }, 400)
+    }
+
+    const key = `profiles/${membershipNumber}/avatar.jpg`
+    await bucket.delete(key)
+    await bucket.put(key, await fileEntry.arrayBuffer(), {
+      httpMetadata: { contentType: fileEntry.type || 'image/jpeg' },
+    })
+
+    const requestUrl = new URL(c.req.url)
+    const imageUrl = `${requestUrl.origin}/ms/membership-app/api/event-images/${key}`
+
+    await updateUserInfo(c.env.MEMBERS_DB, membershipNumber, { profilePictureUrl: imageUrl })
+
+    return c.json({ profilePictureUrl: imageUrl })
+  } catch (error) {
+    console.error('Profile picture upload error:', error)
+    return c.json({ error: 'Failed to upload profile picture.' }, 500)
   }
 }
 

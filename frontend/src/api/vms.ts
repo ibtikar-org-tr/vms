@@ -1241,6 +1241,34 @@ export async function uploadImages(files: File[]): Promise<{ images: string[] }>
   return { images: Object.values(data.imageUrls) }
 }
 
+export async function uploadProfilePicture(file: File) {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const response = await apiFetch('/profile/picture', {
+    method: 'PUT',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const fallbackMessage = `Upload failed (${response.status})`
+    let message = fallbackMessage
+
+    try {
+      const body = (await response.json()) as { error?: unknown }
+      if (typeof body.error === 'string' && body.error.trim()) {
+        message = body.error
+      }
+    } catch {
+      // Ignore JSON parsing errors and keep fallback message.
+    }
+
+    throw new Error(message)
+  }
+
+  return (await response.json()) as { profilePictureUrl: string }
+}
+
 export async function uploadEventBanner(eventId: string, file: File) {
   const formData = new FormData()
   formData.append('image', file)

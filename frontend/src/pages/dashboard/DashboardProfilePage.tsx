@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import { fetchProfile, resendEmailVerification, updateProfile } from '../../api/vms'
+import { fetchProfile, resendEmailVerification, updateProfile, uploadProfilePicture } from '../../api/vms'
 import { ChangePasswordCard } from '../../components/dashboard/ChangePasswordCard'
 import type { MemberProfile } from '../../types/profile'
 import type { RegistrationFormData } from '../../types/registration'
@@ -75,6 +75,8 @@ export function DashboardProfilePage() {
   const [saveError, setSaveError] = useState('')
   const [verificationMessage, setVerificationMessage] = useState('')
   const [isResendingVerification, setIsResendingVerification] = useState(false)
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false)
+  const [pictureError, setPictureError] = useState('')
   const [formData, setFormData] = useState<RegistrationFormData | null>(null)
 
   useEffect(() => {
@@ -316,8 +318,45 @@ export function DashboardProfilePage() {
     <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl">
-            <User className="h-6 w-6 text-white" />
+          <div className="relative">
+            {profile.profilePictureUrl ? (
+              <img
+                src={profile.profilePictureUrl}
+                alt=""
+                className="h-16 w-16 rounded-xl object-cover ring-2 ring-blue-100"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600">
+                <User className="h-6 w-6 text-white" />
+              </div>
+            )}
+            <label className="mt-2 block cursor-pointer text-center text-xs font-medium text-blue-700 hover:text-blue-800">
+              {isUploadingPicture ? 'جارٍ الرفع…' : 'تغيير الصورة'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                disabled={isUploadingPicture}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (!file) return
+                  setPictureError('')
+                  setIsUploadingPicture(true)
+                  void uploadProfilePicture(file)
+                    .then((result) => {
+                      setProfile((current) =>
+                        current ? { ...current, profilePictureUrl: result.profilePictureUrl } : current,
+                      )
+                    })
+                    .catch((error: unknown) => {
+                      setPictureError(error instanceof Error ? error.message : 'تعذر رفع الصورة')
+                    })
+                    .finally(() => setIsUploadingPicture(false))
+                }}
+              />
+            </label>
+            {pictureError ? <p className="mt-1 text-xs text-red-600">{pictureError}</p> : null}
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">الملف الشخصي</h2>

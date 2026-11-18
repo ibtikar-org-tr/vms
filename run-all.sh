@@ -86,16 +86,22 @@ launch_app() {
 start_all() {
   launch_app "vms-frontend" "frontend" "npm run dev" 5930
   launch_app "vms-backend" "backend" "npm run dev:local" 5931
+  launch_app "career-be" "career-be" "npm run dev" 9690
+  launch_app "career-fe" "career-fe" "npm run dev" 9692
 
   echo "[vms] all apps launched in background"
   echo "[vms] frontend: http://localhost:5930"
   echo "[vms] backend:  http://localhost:5931"
+  echo "[vms] career-be: http://localhost:9690"
+  echo "[vms] career-fe: http://localhost:9692"
   echo "[vms] log directory: $LOG_DIR"
 }
 
 stop_all() {
   stop_app "vms-frontend" 5930
   stop_app "vms-backend" 5931
+  stop_app "career-be" 9690
+  stop_app "career-fe" 9692
   echo "[vms] all apps stopped"
 }
 
