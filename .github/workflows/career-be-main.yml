@@ -52,9 +52,9 @@ jobs:
             --arg membersDbName "${{ vars.MEMBERS_DB_NAME }}" \
             --arg vmsDbId "${{ vars.VMS_DB_ID }}" \
             --arg vmsDbName "${{ vars.VMS_DB_NAME }}" \
-            --arg bucketName "${{ vars.CAREER_BUCKET_NAME }}" \
+            --arg bucketName "ibtikar-career-bucket" \
             --arg appName "ibtikar-career" \
-            --arg vmsApiBase "${{ vars.VMS_API_BASE }}" \
+            --arg vmsApiBase "${{ vars.VITE_MEMBER_MS }}/api" \
             --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
             "$jq_filter" \
             wrangler.jsonc > wrangler.local.jsonc
@@ -62,14 +62,14 @@ jobs:
       - name: Deploy to Cloudflare Workers
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler deploy --config wrangler.local.jsonc --name ${{ vars.CAREER_BE_NAME }}
+        run: wrangler deploy --config wrangler.local.jsonc --name ibtikar-career-be
 
       - name: Set secrets in Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET --config wrangler.local.jsonc --name ${{ vars.CAREER_BE_NAME }}
-          echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put VMS_INTERNAL_SECRET --config wrangler.local.jsonc --name ${{ vars.CAREER_BE_NAME }}
+          echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET --config wrangler.local.jsonc --name ibtikar-career-be
+          echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put VMS_INTERNAL_SECRET --config wrangler.local.jsonc --name ibtikar-career-be
 
       - name: Migrate Career D1 Database
         env:

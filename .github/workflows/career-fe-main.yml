@@ -30,8 +30,8 @@ jobs:
 
       - name: Build project
         env:
-          VITE_API_TARGET: ${{ vars.VITE_CAREER_API_TARGET }}
-          VITE_VMS_LOGIN_URL: ${{ vars.VITE_VMS_LOGIN_URL }}
+          VITE_API_TARGET: ${{ vars.VITE_SITE_URL }}/ms/career
+          VITE_VMS_LOGIN_URL: ${{ vars.FRONTEND_BASE_URL }}/login
         run: npm run build
 
       - name: Install Wrangler
@@ -47,4 +47,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: wrangler deploy --config wrangler.local.jsonc --name ${{ vars.CAREER_FE_NAME }}
+        run: wrangler deploy --config wrangler.local.jsonc --name ibtikar-career-fe
