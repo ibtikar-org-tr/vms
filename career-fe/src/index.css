@@ -3,10 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --sand: #efe8d7;
-  --carbon: #1f1f1f;
-  --rich-gold: #dcb557;
-  --deep-green: #214937;
+  --ink: #0f172a;
+  --muted: #475569;
+  --soft: #f8fafc;
+  --line: #e2e8f0;
+  --brand: #0f766e;
+  --brand-dark: #0d9488;
+  --brand-light: #ccfbf1;
+  --accent: #0075de;
+  --surface: #ffffff;
 }
 
 * {
@@ -17,9 +22,12 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: 'Tajawal', system-ui, sans-serif;
-  color: var(--carbon);
+  color: var(--ink);
   direction: rtl;
-  background-color: var(--sand);
+  background:
+    radial-gradient(ellipse 80% 50% at 100% -10%, rgba(15, 118, 110, 0.08), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(0, 117, 222, 0.05), transparent 50%),
+    var(--soft);
 }
 
 h1,
@@ -31,68 +39,62 @@ h3,
 
 @layer components {
   .panel {
-    @apply rounded-2xl border border-gray-200 bg-white shadow-lg;
+    @apply rounded-2xl border border-line bg-white shadow-sheet;
   }
 
   .field {
-    @apply w-full rounded-lg border-2 border-gray-200 bg-white px-3 py-2.5 text-sm outline-none transition-all;
-    color: var(--carbon);
+    @apply w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none transition;
+    color: var(--ink);
   }
 
   .field:focus {
-    border-color: var(--rich-gold);
-    box-shadow: 0 0 0 3px rgba(220, 181, 87, 0.35);
+    border-color: color-mix(in srgb, var(--brand) 55%, white);
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
   }
 
   .field-readonly {
-    @apply w-full cursor-default rounded-lg border-2 border-gray-200 px-3 py-2.5 text-sm text-gray-700;
-    background-color: color-mix(in srgb, var(--sand) 60%, white);
+    @apply w-full cursor-default rounded-xl border border-line px-3 py-2.5 text-sm text-slate-700;
+    background-color: #f1f5f9;
   }
 
   .label {
-    @apply mb-2 block text-sm font-medium;
-    color: var(--carbon);
+    @apply mb-2 block text-sm font-medium text-slate-700;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition;
-    background-color: var(--rich-gold);
-    color: var(--carbon);
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition;
+    background-color: var(--brand);
   }
 
   .btn-primary:hover {
-    background-color: #eab308;
+    background-color: #0d5f59;
+  }
+
+  .btn-primary:disabled {
+    @apply cursor-not-allowed opacity-60;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold transition;
-    color: var(--carbon);
-  }
-
-  .btn-ghost:hover {
-    border-color: var(--rich-gold);
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-300 hover:bg-slate-50;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border-2 border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition;
-  }
-
-  .btn-danger:hover {
-    @apply bg-red-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50;
   }
 
   .chip {
-    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium;
-    background-color: var(--sand);
-    color: var(--carbon);
+    @apply inline-flex items-center rounded-full border border-teal-100 bg-brand-light px-3 py-1 text-xs font-medium text-brand-ink;
   }
 
   .section-title {
-    @apply mb-4 flex items-center gap-2 text-lg font-semibold sm:mb-6 sm:text-2xl;
-    color: var(--carbon);
+    @apply mb-4 flex items-center gap-2 text-lg font-bold text-slate-900 sm:mb-5 sm:text-xl;
+  }
+
+  .cv-section-title {
+    @apply mb-3 flex items-center gap-2 border-b border-line pb-2 text-sm font-bold tracking-wide text-brand;
   }
 }

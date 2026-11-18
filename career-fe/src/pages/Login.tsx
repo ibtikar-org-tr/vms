@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
+import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { startVmsSsoLogin } from '../lib/vms-sso'
 
 export default function Login() {
@@ -6,15 +7,22 @@ export default function Login() {
   const next = params.get('next') || '/profile'
 
   return (
-    <section className="panel mx-auto max-w-lg p-8 text-center">
-      <h1 className="text-3xl font-bold text-carbon">تسجيل الدخول</h1>
-      <p className="mt-3 text-gray-700">
-        أنشئ أو حدّث سيرتك عبر عضويتك في منصة أعضاء إبتكار. سيتم تحويلك للمنصة ثم إعادتك هنا بعد
-        الدخول.
-      </p>
-      <button type="button" className="btn-primary mt-6" onClick={() => startVmsSsoLogin(next)}>
-        المتابعة عبر منصة الأعضاء
-      </button>
+    <section className="mx-auto max-w-md overflow-hidden rounded-3xl border border-line bg-white shadow-sheet">
+      <div className="h-1.5 bg-gradient-to-l from-brand via-teal-500 to-accent" />
+      <div className="px-8 py-10 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light text-brand">
+          <ShieldCheck className="h-6 w-6" />
+        </div>
+        <h1 className="mt-4 text-2xl font-extrabold text-slate-900 sm:text-3xl">تسجيل الدخول</h1>
+        <p className="mt-3 text-sm leading-7 text-slate-600">
+          أنشئ أو حدّث سيرتك عبر عضويتك في منصة أعضاء إبتكار. سيتم تحويلك للمنصة ثم إعادتك هنا بعد
+          الدخول.
+        </p>
+        <button type="button" className="btn-primary mt-7 w-full" onClick={() => startVmsSsoLogin(next)}>
+          المتابعة عبر منصة الأعضاء
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+      </div>
     </section>
   )
 }

@@ -60,7 +60,7 @@ export function SkillPicker({
   return (
     <div className="space-y-3">
       <label className="label">{label}</label>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-slate-500">
         اختر من مهاراتك في منصة الأعضاء، أو اكتب مهارة جديدة لإضافتها إلى ملفك وربطها هنا.
       </p>
 
@@ -69,14 +69,14 @@ export function SkillPicker({
           <button
             key={keyOf(skill)}
             type="button"
-            className="chip border border-rich-gold/40"
+            className="chip transition hover:bg-red-50 hover:text-red-700"
             onClick={() => remove(skill)}
             title="إزالة"
           >
             {skill.name} ×
           </button>
         ))}
-        {!selected.length && <span className="text-sm text-gray-500">لم تُختر مهارات بعد.</span>}
+        {!selected.length && <span className="text-sm text-slate-400">لم تُختر مهارات بعد.</span>}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -99,12 +99,12 @@ export function SkillPicker({
       </div>
 
       {!!filtered.length && (
-        <div className="flex max-h-36 flex-wrap gap-2 overflow-y-auto rounded-xl border border-gray-200 bg-sand/40 p-3">
+        <div className="flex max-h-36 flex-wrap gap-2 overflow-y-auto rounded-xl border border-line bg-slate-50 p-3">
           {filtered.map((skill) => (
             <button
               key={keyOf(skill)}
               type="button"
-              className="chip hover:border hover:border-rich-gold"
+              className="inline-flex items-center rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-teal-200 hover:bg-brand-light hover:text-brand-ink"
               onClick={() => addExisting(skill)}
             >
               + {skill.name}

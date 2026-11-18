@@ -1,42 +1,64 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+const navClass = ({ isActive }: { isActive: boolean }) =>
+  [
+    'rounded-lg px-3 py-1.5 text-sm font-semibold transition',
+    isActive
+      ? 'bg-brand-light text-brand-ink'
+      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+  ].join(' ')
+
 export function Layout() {
   const { session, logout } = useAuth()
 
   return (
-    <div className="min-h-screen bg-sand" dir="rtl" lang="ar">
-      <header className="border-b border-black/5 bg-sand/90 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
-          <Link to="/" className="text-xl font-bold text-carbon sm:text-2xl">
-            المسار المهني · إبتكار
+    <div className="min-h-screen" dir="rtl" lang="ar">
+      <header className="sticky top-0 z-20 border-b border-line/80 bg-white/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3.5">
+          <Link to="/" className="group flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-sm font-extrabold text-white shadow-sm transition group-hover:bg-[#0d5f59]">
+              إ
+            </span>
+            <span className="leading-tight">
+              <span className="block text-base font-extrabold text-slate-900 sm:text-lg">
+                المسار المهني
+              </span>
+              <span className="block text-[11px] font-medium text-slate-500">منصة أعضاء إبتكار</span>
+            </span>
           </Link>
-          <nav className="flex flex-wrap items-center gap-2 text-sm font-semibold text-carbon sm:gap-3">
+
+          <nav className="flex flex-wrap items-center gap-1 sm:gap-2">
             {session && (
               <>
-                <NavLink to="/profile" className="hover:text-deep-green">
+                <NavLink to="/profile" className={navClass}>
                   سيرتي
                 </NavLink>
-                <NavLink to="/talent" className="hover:text-deep-green">
+                <NavLink to="/talent" className={navClass}>
                   تصفح السير
                 </NavLink>
               </>
             )}
             {session ? (
-              <button type="button" className="btn-ghost" onClick={logout}>
+              <button type="button" className="btn-ghost py-1.5 text-xs sm:text-sm" onClick={logout}>
                 خروج
               </button>
             ) : (
-              <Link to="/login" className="btn-primary">
+              <Link to="/login" className="btn-primary py-2 text-xs sm:text-sm">
                 دخول
               </Link>
             )}
           </nav>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl px-2 py-6 sm:px-4 sm:py-8">
+
+      <main className="mx-auto w-full max-w-5xl px-3 py-6 sm:px-4 sm:py-8">
         <Outlet />
       </main>
+
+      <footer className="border-t border-line/70 py-6 text-center text-xs text-slate-400">
+        تجمّع إبتكار · المسار المهني
+      </footer>
     </div>
   )
 }
