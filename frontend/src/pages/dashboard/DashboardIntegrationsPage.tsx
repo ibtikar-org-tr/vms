@@ -18,16 +18,32 @@ export function DashboardIntegrationsPage() {
     setOpeningId(app.id)
     setError(null)
 
+    // Open synchronously on click so the popup isn't blocked after the async handoff.
+    const popup = window.open('about:blank', '_blank')
+    if (popup) {
+      popup.opener = null
+      popup.document.write('<p style="font-family:sans-serif;padding:24px;direction:rtl">جاري فتح التطبيق…</p>')
+    }
+
     try {
       const redirectUri = getAppAuthCallbackUrl(app.url)
       const handoff = await createExternalHandoff({
         redirectUri,
         client: app.client,
       })
-      window.location.assign(buildExternalHandoffRedirectUrl(handoff.redirectUri, handoff.code))
+      const target = buildExternalHandoffRedirectUrl(handoff.redirectUri, handoff.code)
+      if (popup && !popup.closed) {
+        popup.location.assign(target)
+      } else {
+        window.open(target, '_blank', 'noopener,noreferrer')
+      }
     } catch (err) {
-      setOpeningId(null)
+      if (popup && !popup.closed) {
+        popup.close()
+      }
       setError(err instanceof Error ? err.message : `تعذّر فتح ${app.nameAr}`)
+    } finally {
+      setOpeningId(null)
     }
   }
 
