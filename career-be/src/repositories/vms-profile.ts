@@ -1,4 +1,5 @@
 import type { Environment } from '../types/env'
+import { fetchVmsApi } from '../utils/vms-fetch'
 
 export type VmsProfileSnapshot = {
   membershipNumber: string
@@ -33,13 +34,15 @@ export async function fetchVmsSelfProfile(
   membershipNumber: string,
   authorizationHeader: string | undefined,
 ): Promise<VmsProfileSnapshot | null> {
-  const apiBase = env.VMS_API_BASE?.trim().replace(/\/+$/, '')
-  if (!apiBase || !authorizationHeader?.startsWith('Bearer ')) {
+  if (!authorizationHeader?.startsWith('Bearer ')) {
+    return null
+  }
+  if (!env.MEMBERSHIP_MS_SERVICE && !env.VMS_API_BASE?.trim()) {
     return null
   }
 
   try {
-    const response = await fetch(`${apiBase}/profile/${encodeURIComponent(membershipNumber)}`, {
+    const response = await fetchVmsApi(env, `/profile/${encodeURIComponent(membershipNumber)}`, {
       method: 'GET',
       headers: {
         Authorization: authorizationHeader,
@@ -62,15 +65,18 @@ export async function fetchVmsPartnerProfile(
   env: Environment,
   membershipNumber: string,
 ): Promise<VmsProfileSnapshot | null> {
-  const apiBase = env.VMS_API_BASE?.trim().replace(/\/+$/, '')
   const secret = env.VMS_INTERNAL_SECRET?.trim()
-  if (!apiBase || !secret) {
+  if (!secret) {
+    return null
+  }
+  if (!env.MEMBERSHIP_MS_SERVICE && !env.VMS_API_BASE?.trim()) {
     return null
   }
 
   try {
-    const response = await fetch(
-      `${apiBase}/internal/partner/member-profile/${encodeURIComponent(membershipNumber)}`,
+    const response = await fetchVmsApi(
+      env,
+      `/internal/partner/member-profile/${encodeURIComponent(membershipNumber)}`,
       {
         method: 'GET',
         headers: {

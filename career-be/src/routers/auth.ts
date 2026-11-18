@@ -3,6 +3,7 @@ import { memberAuthMiddleware } from '../middleware/auth'
 import { ensureCareerProfile } from '../repositories/profiles'
 import { fetchVmsSelfProfile } from '../repositories/vms-profile'
 import type { AppBindings } from '../types/env'
+import { fetchVmsApi } from '../utils/vms-fetch'
 
 const authRouter = new Hono<AppBindings>()
 
@@ -20,16 +21,19 @@ authRouter.post('/vms/exchange', async (c) => {
     return c.json({ message: 'code is required' }, 400)
   }
 
-  const apiBase = c.env.VMS_API_BASE?.trim().replace(/\/+$/, '')
   const internalSecret = c.env.VMS_INTERNAL_SECRET?.trim()
-  if (!apiBase || !internalSecret) {
-    console.error('VMS_API_BASE / VMS_INTERNAL_SECRET not configured')
+  if (!internalSecret) {
+    console.error('VMS_INTERNAL_SECRET is not configured')
+    return c.json({ message: 'VMS exchange not configured' }, 500)
+  }
+  if (!c.env.MEMBERSHIP_MS_SERVICE && !c.env.VMS_API_BASE?.trim()) {
+    console.error('MEMBERSHIP_MS_SERVICE / VMS_API_BASE not configured')
     return c.json({ message: 'VMS exchange not configured' }, 500)
   }
 
   let exchangePayload: VmsExchangeResponse
   try {
-    const response = await fetch(`${apiBase}/external-exchange`, {
+    const response = await fetchVmsApi(c.env, '/external-exchange', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,7 +45,13 @@ authRouter.post('/vms/exchange', async (c) => {
     if (!response.ok) {
       const text = await response.text().catch(() => '')
       console.error('VMS external-exchange failed', response.status, text)
-      return c.json({ message: 'Invalid or expired code' }, 401)
+      if (response.status === 401) {
+        return c.json({ message: 'VMS rejected internal auth (check INTERNAL_SECRET)' }, 502)
+      }
+      if (response.status === 400) {
+        return c.json({ message: 'Invalid or expired code' }, 401)
+      }
+      return c.json({ message: 'Could not exchange code with VMS' }, 502)
     }
 
     exchangePayload = (await response.json()) as VmsExchangeResponse

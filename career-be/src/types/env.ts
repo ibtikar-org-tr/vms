@@ -5,8 +5,11 @@ export interface Environment {
   /** Shared with VMS — global skills taxonomy */
   VMS_DB: D1Database
   CAREER_BUCKET: R2Bucket
+  /** Service binding to membership-app-backend (preferred for same-zone calls). */
+  MEMBERSHIP_MS_SERVICE?: Fetcher
   APP_NAME: string
   JWT_SECRET?: string
+  /** Fallback public/local membership API base, e.g. …/ms/membership-app/api */
   VMS_API_BASE?: string
   VMS_INTERNAL_SECRET?: string
 }

@@ -42,6 +42,7 @@ jobs:
           | .r2_buckets[0].bucket_name = $bucketName
           | .vars.APP_NAME = $appName
           | .vars.VMS_API_BASE = $vmsApiBase
+          | .services = [{binding: "MEMBERSHIP_MS_SERVICE", service: $membershipMsName, remote: true}]
           | .account_id = $accountId
           | del(.vars.JWT_SECRET, .vars.VMS_INTERNAL_SECRET)'
 
@@ -55,6 +56,7 @@ jobs:
             --arg bucketName "ibtikar-career-bucket" \
             --arg appName "ibtikar-career" \
             --arg vmsApiBase "${{ vars.VITE_MEMBER_MS }}/api" \
+            --arg membershipMsName "${{ vars.THIS_APP_NAME_BE }}" \
             --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
             "$jq_filter" \
             wrangler.jsonc > wrangler.local.jsonc

@@ -32,12 +32,13 @@ export default function AuthCallback() {
     ;(async () => {
       try {
         const response = await authApi.exchangeVmsCode(code)
+        if (cancelled) return
         await establish(response.access_token, { user: response.user })
         toast.success('تم تسجيل الدخول بنجاح')
         navigate(next, { replace: true })
       } catch (err: any) {
-        inFlightCodes.delete(code)
         if (cancelled) return
+        inFlightCodes.delete(code)
         const message = err?.response?.data?.message || 'تعذّر إكمال تسجيل الدخول'
         setError(message)
         toast.error(message)
