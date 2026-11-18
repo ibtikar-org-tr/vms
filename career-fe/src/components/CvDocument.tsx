@@ -1,8 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import {
   Briefcase,
   Download,
-  FileDown,
   FolderKanban,
   GraduationCap,
   Languages,
@@ -11,13 +10,13 @@ import {
   Phone,
   Sparkles,
 } from 'lucide-react'
-import toast from 'react-hot-toast'
 import {
   displayNameOf,
   formatDateRange,
   latestRoleOf,
   splitCsv,
 } from '../lib/profile-utils'
+import { CvExportMenu } from './CvExportMenu'
 
 export type CvSkill = { skillId?: string; name: string }
 
@@ -91,7 +90,6 @@ function EmptyHint({ children }: { children: ReactNode }) {
 }
 
 export function CvDocument({ data, onDownloadDocument, compact }: Props) {
-  const [pdfBusy, setPdfBusy] = useState(false)
   const vms = data.vmsProfile
   const name = displayNameOf(data)
   const role = latestRoleOf(data.workExperiences)
@@ -114,20 +112,6 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     .map((part) => part[0])
     .join('')
 
-  const onDownloadPdf = async () => {
-    setPdfBusy(true)
-    try {
-      const { downloadCvPdf } = await import('../lib/cv-pdf')
-      await downloadCvPdf(data)
-      toast.success('تم تنزيل السيرة PDF')
-    } catch (error) {
-      console.error(error)
-      toast.error('تعذّر إنشاء ملف PDF')
-    } finally {
-      setPdfBusy(false)
-    }
-  }
-
   return (
     <article
       className={`overflow-hidden rounded-2xl border border-line bg-white shadow-sheet ${
@@ -142,19 +126,11 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           <div>
             <p className="text-xs font-bold text-slate-800">المسار المهني</p>
             <p className="text-[11px] text-slate-500">
-              تنزيل بصيغة CV قياسية (A4) مع رمز QR للسيرة
+              PDF قياسي أو حديث · Markdown · TXT
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn-primary py-2 text-xs sm:text-sm"
-          disabled={pdfBusy}
-          onClick={() => void onDownloadPdf()}
-        >
-          <FileDown className="h-4 w-4" />
-          {pdfBusy ? 'جاري تجهيز PDF…' : 'تنزيل PDF'}
-        </button>
+        <CvExportMenu data={data} />
       </div>
 
       <div className={`grid gap-0 lg:grid-cols-[240px_1fr] ${compact ? '' : 'lg:min-h-[640px]'}`}>
