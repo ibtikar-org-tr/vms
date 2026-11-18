@@ -8,12 +8,12 @@ import {
   Languages,
   MapPinned,
   Pencil,
-  Plus,
   Save,
   Trash2,
   User,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { CountrySelect } from '../components/CountrySelect'
 import { CvDocument } from '../components/CvDocument'
 import { SkillPicker, type SkillOption } from '../components/SkillPicker'
 import {
@@ -47,7 +47,6 @@ export default function ProfilePage() {
   const [summary, setSummary] = useState('')
   const [languagePrefs, setLanguagePrefs] = useState<LanguagePref[]>([])
   const [workPrefs, setWorkPrefs] = useState<WorkPreferences>(emptyWorkPreferences())
-  const [newCountry, setNewCountry] = useState('')
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<Tab>('preview')
   const [workForm, setWorkForm] = useState({
@@ -158,14 +157,15 @@ export default function ProfilePage() {
     }))
   }
 
-  const addCountryLocation = () => {
-    const name = newCountry.trim()
-    if (!name) return
+  const addCountryLocation = (name: string) => {
+    const countryName = name.trim()
+    if (!countryName) return
     setWorkPrefs((prev) => {
       if (
         prev.locations.some(
           (loc) =>
-            loc.kind === 'country' && loc.countryName?.toLowerCase() === name.toLowerCase(),
+            loc.kind === 'country' &&
+            loc.countryName?.toLowerCase() === countryName.toLowerCase(),
         )
       ) {
         return prev
@@ -176,7 +176,7 @@ export default function ProfilePage() {
           ...prev.locations,
           {
             kind: 'country',
-            countryName: name,
+            countryName,
             salaryMin: null,
             salaryMax: null,
             currency: 'USD',
@@ -184,7 +184,6 @@ export default function ProfilePage() {
         ],
       }
     })
-    setNewCountry('')
   }
 
   const removeLocation = (index: number) => {
@@ -685,23 +684,15 @@ export default function ProfilePage() {
                 ))}
               </ul>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <input
-                  className="field max-w-xs"
-                  value={newCountry}
-                  onChange={(e) => setNewCountry(e.target.value)}
-                  placeholder="اسم الدولة (مثال: تركيا، ألمانيا…)"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addCountryLocation()
-                    }
-                  }}
+              <div className="mt-3 max-w-md">
+                <CountrySelect
+                  value=""
+                  excludeNames={workPrefs.locations
+                    .filter((loc) => loc.kind === 'country')
+                    .map((loc) => loc.countryName || '')}
+                  onChange={(name) => addCountryLocation(name)}
+                  placeholder="ابحث واختر دولة للإضافة"
                 />
-                <button type="button" className="btn-ghost" onClick={addCountryLocation}>
-                  <Plus className="h-4 w-4" />
-                  إضافة دولة
-                </button>
               </div>
             </div>
           </section>
