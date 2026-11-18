@@ -21,7 +21,6 @@ function sexLabel(sex?: string | null) {
 
 export default function ProfilePage() {
   const [data, setData] = useState<any>(null)
-  const [headline, setHeadline] = useState('')
   const [summary, setSummary] = useState('')
   const [saving, setSaving] = useState(false)
   const [workForm, setWorkForm] = useState({
@@ -51,7 +50,6 @@ export default function ProfilePage() {
   const load = async () => {
     const payload = await profilesApi.me()
     setData(payload)
-    setHeadline(payload.profile?.headline || '')
     setSummary(payload.profile?.summary || '')
   }
 
@@ -77,7 +75,7 @@ export default function ProfilePage() {
     event.preventDefault()
     setSaving(true)
     try {
-      await profilesApi.updateMe({ headline, summary })
+      await profilesApi.updateMe({ summary })
       toast.success('تم حفظ السيرة')
       await load()
     } finally {
@@ -86,7 +84,7 @@ export default function ProfilePage() {
   }
 
   const togglePublish = async () => {
-    await profilesApi.updateMe({ headline, summary, is_published: !data?.profile?.is_published })
+    await profilesApi.updateMe({ summary, is_published: !data?.profile?.is_published })
     toast.success(data?.profile?.is_published ? 'تم إلغاء النشر' : 'تم نشر السيرة')
     await load()
   }
@@ -196,15 +194,6 @@ export default function ProfilePage() {
           <div>
             <label className="label">الاسم الكامل</label>
             <input className="field-readonly" readOnly value={displayName} />
-          </div>
-          <div>
-            <label className="label">المسمى الوظيفي *</label>
-            <input
-              className="field"
-              value={headline}
-              onChange={(e) => setHeadline(e.target.value)}
-              placeholder="مثال: مهندس برمجيات"
-            />
           </div>
           <div>
             <label className="label">البريد الإلكتروني</label>

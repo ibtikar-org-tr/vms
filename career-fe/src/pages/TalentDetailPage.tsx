@@ -36,7 +36,11 @@ export default function TalentDetailPage() {
             <h1 className="text-3xl font-bold text-carbon">
               {vms?.arName || vms?.enName || membershipNumber}
             </h1>
-            <p className="text-rich-gold">{data.profile.headline}</p>
+            <p className="text-rich-gold">
+              {data.workExperiences?.find((w: any) => w.is_current)?.title ||
+                data.workExperiences?.[0]?.title ||
+                '—'}
+            </p>
             <p className="text-sm text-gray-600">
               {[vms?.educationLevel, vms?.fieldOfStudy, vms?.school].filter(Boolean).join(' · ')}
             </p>

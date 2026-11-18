@@ -314,8 +314,11 @@ profilesRouter.get('/discover', async (c) => {
   const enriched = []
   for (const profile of profiles) {
     const vmsProfile = await fetchVmsPartnerProfile(c.env, profile.membership_number)
+    const work = await listWorkExperiences(c.env, profile.membership_number)
+    const latestRole = work.find((item) => item.is_current)?.title || work[0]?.title || null
     enriched.push({
       profile,
+      latestRole,
       vmsProfile: vmsProfile
         ? {
             membershipNumber: vmsProfile.membershipNumber,

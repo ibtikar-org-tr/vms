@@ -55,7 +55,7 @@ export default function TalentPage() {
                 <h2 className="font-semibold">
                   {item.vmsProfile?.arName || item.vmsProfile?.enName || item.profile.membership_number}
                 </h2>
-                <p className="text-sm text-rich-gold">{item.profile.headline || 'بدون مسمى'}</p>
+                <p className="text-sm text-rich-gold">{item.latestRole || '—'}</p>
               </div>
             </div>
             <p className="mt-3 line-clamp-3 text-sm text-gray-700">{item.profile.summary}</p>
