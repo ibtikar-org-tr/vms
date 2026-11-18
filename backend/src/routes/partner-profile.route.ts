@@ -38,6 +38,7 @@ partnerProfileRoute.get('/internal/partner/member-profile/:membershipNumber', as
         arName: profile.arName,
         phoneNumber: profile.phoneNumber,
         sex: profile.sex,
+        dateOfBirth: profile.dateOfBirth,
         educationLevel: profile.educationLevel,
         school: profile.school,
         fieldOfStudy: profile.fieldOfStudy,
@@ -47,8 +48,9 @@ partnerProfileRoute.get('/internal/partner/member-profile/:membershipNumber', as
         skills: skillFields.skills,
         interests: skillFields.interests,
         profilePictureUrl: profile.profilePictureUrl,
-        city: profile.city,
         country: profile.country,
+        region: profile.region,
+        city: profile.city,
       },
     })
   } catch (error) {

@@ -1,8 +1,11 @@
 import type { CvDocumentData } from '../components/CvDocument'
 import {
   displayNameOf,
+  formatBirthDate,
   formatDateRange,
+  formatLocation,
   latestRoleOf,
+  sexLabel,
   splitCsv,
 } from './profile-utils'
 import { publicCvUrl } from './cv-url'
@@ -33,7 +36,13 @@ export function buildCvMarkdown(data: CvDocumentData): string {
   const skills = splitCsv(vms?.skills)
   const interests = splitCsv(vms?.interests)
   const languages = languagesOf(data)
-  const location = [vms?.city, vms?.country].filter(Boolean).join(' · ')
+  const location = formatLocation({
+    country: vms?.country,
+    region: vms?.region,
+    city: vms?.city,
+  })
+  const birthDate = formatBirthDate(vms?.dateOfBirth)
+  const sex = sexLabel(vms?.sex)
   const cvUrl = data.profile.membership_number
     ? publicCvUrl(data.profile.membership_number)
     : ''
@@ -42,7 +51,13 @@ export function buildCvMarkdown(data: CvDocumentData): string {
   lines.push(`# ${name}`)
   if (role) lines.push(`**${role}**`)
   lines.push('')
-  const contact = [vms?.email, vms?.phoneNumber, location].filter(Boolean)
+  const contact = [
+    vms?.email,
+    vms?.phoneNumber,
+    location,
+    sex !== '—' ? sex : null,
+    birthDate ? `DOB: ${birthDate}` : null,
+  ].filter(Boolean)
   if (contact.length) lines.push(contact.join(' · '))
   if (cvUrl) lines.push(`[Online CV](${cvUrl})`)
   lines.push('')
@@ -151,7 +166,13 @@ export function buildCvPlainText(data: CvDocumentData): string {
   const skills = splitCsv(vms?.skills)
   const interests = splitCsv(vms?.interests)
   const languages = languagesOf(data)
-  const location = [vms?.city, vms?.country].filter(Boolean).join(' · ')
+  const location = formatLocation({
+    country: vms?.country,
+    region: vms?.region,
+    city: vms?.city,
+  })
+  const birthDate = formatBirthDate(vms?.dateOfBirth)
+  const sex = sexLabel(vms?.sex)
   const cvUrl = data.profile.membership_number
     ? publicCvUrl(data.profile.membership_number)
     : ''
@@ -160,7 +181,13 @@ export function buildCvPlainText(data: CvDocumentData): string {
   lines.push(name.toUpperCase())
   if (role) lines.push(role)
   lines.push('='.repeat(Math.min(48, Math.max(12, name.length))))
-  const contact = [vms?.email, vms?.phoneNumber, location].filter(Boolean)
+  const contact = [
+    vms?.email,
+    vms?.phoneNumber,
+    location,
+    sex !== '—' ? sex : null,
+    birthDate ? `DOB: ${birthDate}` : null,
+  ].filter(Boolean)
   if (contact.length) lines.push(contact.join(' | '))
   if (cvUrl) lines.push(cvUrl)
   lines.push('')

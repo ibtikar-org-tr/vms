@@ -8,6 +8,7 @@ export type VmsProfileSnapshot = {
   arName: string | null
   phoneNumber: string | null
   sex: string | null
+  dateOfBirth: string | null
   educationLevel: string | null
   school: string | null
   fieldOfStudy: string | null
@@ -17,14 +18,17 @@ export type VmsProfileSnapshot = {
   skills: string | null
   interests: string | null
   profilePictureUrl: string | null
-  city: string | null
   country: string | null
+  region: string | null
+  city: string | null
 }
 
 type VmsProfileJson = {
   profile?: Partial<VmsProfileSnapshot> & {
     membershipNumber?: string
     email?: string
+    dateOfBirth?: string | null
+    region?: string | null
   }
 }
 
@@ -108,6 +112,7 @@ function mapProfile(data: unknown, fallbackMembership: string): VmsProfileSnapsh
     arName: profile.arName ?? null,
     phoneNumber: profile.phoneNumber ?? null,
     sex: profile.sex ?? null,
+    dateOfBirth: profile.dateOfBirth?.trim() || null,
     educationLevel: profile.educationLevel ?? null,
     school: profile.school ?? null,
     fieldOfStudy: profile.fieldOfStudy ?? null,
@@ -117,7 +122,8 @@ function mapProfile(data: unknown, fallbackMembership: string): VmsProfileSnapsh
     skills: profile.skills ?? null,
     interests: profile.interests ?? null,
     profilePictureUrl: profile.profilePictureUrl ?? null,
-    city: profile.city ?? null,
     country: profile.country ?? null,
+    region: profile.region ?? null,
+    city: profile.city ?? null,
   }
 }

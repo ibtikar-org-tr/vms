@@ -12,8 +12,11 @@ import QRCode from 'qrcode'
 import type { CvDocumentData } from '../components/CvDocument'
 import {
   displayNameOf,
+  formatBirthDate,
   formatDateRange,
+  formatLocation,
   latestRoleOf,
+  sexLabel,
   splitCsv,
 } from './profile-utils'
 import { careerAssetUrl, publicCvUrl } from './cv-url'
@@ -332,8 +335,22 @@ function StandardCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl }: PdfShared) {
   const skills = splitCsv(vms?.skills)
   const interests = splitCsv(vms?.interests)
   const languages = languagesOf(data)
-  const location = [vms?.city, vms?.country].filter(Boolean).join(' · ')
-  const contact = [vms?.email, vms?.phoneNumber, location].filter(Boolean).join('  |  ')
+  const location = formatLocation({
+    country: vms?.country,
+    region: vms?.region,
+    city: vms?.city,
+  })
+  const birthDate = formatBirthDate(vms?.dateOfBirth)
+  const sex = sexLabel(vms?.sex)
+  const contact = [
+    vms?.email,
+    vms?.phoneNumber,
+    location,
+    sex !== '—' ? sex : null,
+    birthDate ? `DOB ${birthDate}` : null,
+  ]
+    .filter(Boolean)
+    .join('  |  ')
   const educationLine = [vms?.fieldOfStudy, vms?.educationLevel, vms?.school]
     .filter(Boolean)
     .join(' · ')
@@ -491,7 +508,13 @@ function ModernCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl, photoUrl }: PdfS
   const skills = splitCsv(vms?.skills)
   const interests = splitCsv(vms?.interests)
   const languages = languagesOf(data)
-  const location = [vms?.city, vms?.country].filter(Boolean).join(' · ')
+  const location = formatLocation({
+    country: vms?.country,
+    region: vms?.region,
+    city: vms?.city,
+  })
+  const birthDate = formatBirthDate(vms?.dateOfBirth)
+  const sex = sexLabel(vms?.sex)
   const contact = [vms?.email, vms?.phoneNumber, location].filter(Boolean).join('  ·  ')
   const initials = name
     .split(/\s+/)
@@ -519,6 +542,8 @@ function ModernCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl, photoUrl }: PdfS
             {vms?.email ? <Text style={modern.sideText}>{vms.email}</Text> : null}
             {vms?.phoneNumber ? <Text style={modern.sideText}>{vms.phoneNumber}</Text> : null}
             {location ? <Text style={modern.sideText}>{location}</Text> : null}
+            {sex !== '—' ? <Text style={modern.sideText}>{sex}</Text> : null}
+            {birthDate ? <Text style={modern.sideText}>{`تاريخ الميلاد: ${birthDate}`}</Text> : null}
           </View>
 
           {!!skills.length && (

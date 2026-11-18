@@ -351,8 +351,11 @@ profilesRouter.get('/discover', async (c) => {
             fieldOfStudy: vmsProfile.fieldOfStudy,
             skills: vmsProfile.skills,
             profilePictureUrl: vmsProfile.profilePictureUrl,
-            city: vmsProfile.city,
+            sex: vmsProfile.sex,
+            dateOfBirth: vmsProfile.dateOfBirth,
             country: vmsProfile.country,
+            region: vmsProfile.region,
+            city: vmsProfile.city,
           }
         : null,
     })

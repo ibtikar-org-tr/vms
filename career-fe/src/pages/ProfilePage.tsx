@@ -13,7 +13,13 @@ import {
 import toast from 'react-hot-toast'
 import { CvDocument } from '../components/CvDocument'
 import { SkillPicker, type SkillOption } from '../components/SkillPicker'
-import { displayNameOf, sexLabel, splitCsv } from '../lib/profile-utils'
+import {
+  displayNameOf,
+  formatBirthDate,
+  formatLocation,
+  sexLabel,
+  splitCsv,
+} from '../lib/profile-utils'
 import { getVmsProfileUrl } from '../lib/vms-sso'
 import { authDownloadHeaders, profilesApi } from '../services/api'
 
@@ -293,16 +299,29 @@ export default function ProfilePage() {
                 <input className="field-readonly" readOnly value={vms?.phoneNumber || '—'} dir="ltr" />
               </div>
               <div>
-                <label className="label">المدينة / الدولة</label>
+                <label className="label">الدولة / المحافظة / المدينة</label>
                 <input
                   className="field-readonly"
                   readOnly
-                  value={[vms?.city, vms?.country].filter(Boolean).join(' · ') || '—'}
+                  value={formatLocation({
+                    country: vms?.country,
+                    region: vms?.region,
+                    city: vms?.city,
+                  }) || '—'}
                 />
               </div>
               <div>
                 <label className="label">الجنس</label>
                 <input className="field-readonly" readOnly value={sexLabel(vms?.sex)} />
+              </div>
+              <div>
+                <label className="label">تاريخ الميلاد</label>
+                <input
+                  className="field-readonly"
+                  readOnly
+                  value={formatBirthDate(vms?.dateOfBirth) || '—'}
+                  dir="ltr"
+                />
               </div>
               <div className="md:col-span-2">
                 <label className="label">نبذة مهنية</label>

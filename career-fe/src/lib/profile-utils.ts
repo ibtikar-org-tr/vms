@@ -12,6 +12,26 @@ export function sexLabel(sex?: string | null) {
   return '—'
 }
 
+export function formatBirthDate(value?: string | null) {
+  if (!value?.trim()) return null
+  const raw = value.trim()
+  // Prefer YYYY-MM-DD display; fall back to original string.
+  const iso = raw.slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split('-')
+    return `${d}/${m}/${y}`
+  }
+  return raw
+}
+
+export function formatLocation(parts: {
+  country?: string | null
+  region?: string | null
+  city?: string | null
+}, separator = ' · ') {
+  return [parts.country, parts.region, parts.city].filter(Boolean).join(separator) || null
+}
+
 export function formatDateRange(
   start?: string | null,
   end?: string | null,

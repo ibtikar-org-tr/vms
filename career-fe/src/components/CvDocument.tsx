@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import {
   Briefcase,
+  Calendar,
   Download,
   FolderKanban,
   GraduationCap,
@@ -9,11 +10,15 @@ import {
   MapPin,
   Phone,
   Sparkles,
+  UserRound,
 } from 'lucide-react'
 import {
   displayNameOf,
+  formatBirthDate,
   formatDateRange,
+  formatLocation,
   latestRoleOf,
+  sexLabel,
   splitCsv,
 } from '../lib/profile-utils'
 import { CvExportMenu } from './CvExportMenu'
@@ -31,8 +36,11 @@ export type CvDocumentData = {
     enName?: string | null
     email?: string | null
     phoneNumber?: string | null
-    city?: string | null
+    sex?: string | null
+    dateOfBirth?: string | null
     country?: string | null
+    region?: string | null
+    city?: string | null
     profilePictureUrl?: string | null
     educationLevel?: string | null
     fieldOfStudy?: string | null
@@ -103,7 +111,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           proficiency: null as number | null,
           openToTranslate: false,
         }))
-  const location = [vms?.city, vms?.country].filter(Boolean).join('، ')
+  const location = formatLocation(
+    { country: vms?.country, region: vms?.region, city: vms?.city },
+    '، ',
+  )
+  const birthDate = formatBirthDate(vms?.dateOfBirth)
+  const sex = sexLabel(vms?.sex)
   const educationBits = [vms?.educationLevel, vms?.fieldOfStudy].filter(Boolean).join(' · ')
   const initials = name
     .split(/\s+/)
@@ -156,9 +169,9 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </div>
 
           <div className="mt-6 space-y-4 text-sm">
-            {(vms?.email || vms?.phoneNumber || location) && (
+            {(vms?.email || vms?.phoneNumber || location || birthDate || (sex && sex !== '—')) && (
               <div>
-                <p className="cv-section-title">تواصل</p>
+                <p className="cv-section-title">تواصل ومعلومات شخصية</p>
                 <ul className="space-y-2.5 text-slate-600">
                   {vms?.email ? (
                     <li className="flex items-start gap-2 break-all">
@@ -176,6 +189,18 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                     <li className="flex items-start gap-2">
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
                       <span>{location}</span>
+                    </li>
+                  ) : null}
+                  {sex && sex !== '—' ? (
+                    <li className="flex items-start gap-2">
+                      <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                      <span>{sex}</span>
+                    </li>
+                  ) : null}
+                  {birthDate ? (
+                    <li className="flex items-start gap-2">
+                      <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                      <span dir="ltr">{birthDate}</span>
                     </li>
                   ) : null}
                 </ul>
