@@ -47,6 +47,7 @@ jobs:
           | .vars.SMTP_USER = $smtpUser
           | .vars.FRONTEND_BASE_URL = $frontendBaseUrl
           | .vars.CORS_ALLOW_ORIGINS = $corsAllowOrigins
+          | .vars.EXTERNAL_AUTH_REDIRECT_ORIGINS = (if $externalAuthOrigins == "" then .vars.EXTERNAL_AUTH_REDIRECT_ORIGINS else $externalAuthOrigins end)
           | .vars.AUTHDEEP_API_BASE = (if $authdeepApiBase == "" then .vars.AUTHDEEP_API_BASE else $authdeepApiBase end)
           | .vars.AUTHDEEP_TENANT_ID = (if $authdeepTenantId == "" then .vars.AUTHDEEP_TENANT_ID else $authdeepTenantId end)
           | .vars.AUTHDEEP_MAIL_FROM = (if $authdeepMailFrom == "" then .vars.AUTHDEEP_MAIL_FROM else $authdeepMailFrom end)
@@ -76,6 +77,7 @@ jobs:
             --arg authdeepMailFrom "${{ vars.AUTHDEEP_MAIL_FROM }}" \
             --arg frontendBaseUrl "${{ vars.FRONTEND_BASE_URL }}" \
             --arg corsAllowOrigins "${{ vars.CORS_ALLOW_ORIGINS }}" \
+            --arg externalAuthOrigins "${{ vars.EXTERNAL_AUTH_REDIRECT_ORIGINS }}" \
             --arg telegramMsName "${{ vars.TELEGRAM_MS_NAME }}" \
             --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
             --arg vectorizeIndex "${{ vars.VECTORIZE_INDEX_NAME }}" \
