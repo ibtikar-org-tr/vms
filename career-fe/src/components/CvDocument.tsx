@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Briefcase,
   Download,
+  FileDown,
   FolderKanban,
   GraduationCap,
   Languages,
@@ -10,6 +11,7 @@ import {
   Phone,
   Sparkles,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import {
   displayNameOf,
   formatDateRange,
@@ -89,6 +91,7 @@ function EmptyHint({ children }: { children: ReactNode }) {
 }
 
 export function CvDocument({ data, onDownloadDocument, compact }: Props) {
+  const [pdfBusy, setPdfBusy] = useState(false)
   const vms = data.vmsProfile
   const name = displayNameOf(data)
   const role = latestRoleOf(data.workExperiences)
@@ -111,6 +114,20 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     .map((part) => part[0])
     .join('')
 
+  const onDownloadPdf = async () => {
+    setPdfBusy(true)
+    try {
+      const { downloadCvPdf } = await import('../lib/cv-pdf')
+      await downloadCvPdf(data)
+      toast.success('تم تنزيل السيرة PDF')
+    } catch (error) {
+      console.error(error)
+      toast.error('تعذّر إنشاء ملف PDF')
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   return (
     <article
       className={`overflow-hidden rounded-2xl border border-line bg-white shadow-sheet ${
@@ -118,6 +135,21 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
       }`}
     >
       <div className="h-1.5 bg-gradient-to-l from-brand via-teal-500 to-accent" />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-slate-50/70 px-4 py-3 sm:px-6">
+        <p className="text-xs font-medium text-slate-500">
+          تنزيل بصيغة CV قياسية (A4) مناسبة للمراجعة والتقديم
+        </p>
+        <button
+          type="button"
+          className="btn-primary py-2 text-xs sm:text-sm"
+          disabled={pdfBusy}
+          onClick={() => void onDownloadPdf()}
+        >
+          <FileDown className="h-4 w-4" />
+          {pdfBusy ? 'جاري تجهيز PDF…' : 'تنزيل PDF'}
+        </button>
+      </div>
 
       <div className={`grid gap-0 lg:grid-cols-[240px_1fr] ${compact ? '' : 'lg:min-h-[640px]'}`}>
         {/* Sidebar */}
