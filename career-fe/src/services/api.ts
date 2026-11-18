@@ -47,6 +47,9 @@ export const profilesApi = {
   me: async () => (await api.get('/profiles/me')).data,
   updateMe: async (payload: { headline?: string | null; summary?: string | null; is_published?: boolean }) =>
     (await api.patch('/profiles/me', payload)).data,
+  updateLanguages: async (
+    languages: Array<{ language: string; proficiency?: number | null; openToTranslate?: boolean }>,
+  ) => (await api.put('/profiles/me/languages', { languages })).data,
   memberSkills: async () => (await api.get('/profiles/me/skills')).data,
   addWork: async (payload: Record<string, unknown>) =>
     (await api.post('/profiles/me/work-experiences', payload)).data,

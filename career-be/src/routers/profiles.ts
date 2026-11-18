@@ -11,8 +11,11 @@ import {
   getDocument,
   getPublishedProfile,
   listDocuments,
+  listProfileLanguages,
   listProjects,
   listWorkExperiences,
+  mergeLanguagePreferences,
+  replaceProfileLanguages,
   searchPublishedProfiles,
   updateCareerProfile,
   updateWorkExperience,
@@ -89,11 +92,13 @@ profilesRouter.get('/me', async (c) => {
   )
   const documents = await listDocuments(c.env, member.membership_number)
   const memberSkills = await listMemberSkills(c.env, member.membership_number).catch(() => [])
+  const languageRows = await listProfileLanguages(c.env, member.membership_number)
   const vmsProfile = await fetchVmsSelfProfile(
     c.env,
     member.membership_number,
     c.req.header('Authorization'),
   )
+  const languages = mergeLanguagePreferences(vmsProfile?.languages, languageRows)
 
   return c.json({
     profile,
@@ -101,6 +106,7 @@ profilesRouter.get('/me', async (c) => {
     projects,
     documents: documents.map(({ r2_key: _r2, ...rest }) => rest),
     memberSkills,
+    languages,
     vmsProfile,
   })
 })
@@ -113,6 +119,22 @@ profilesRouter.patch('/me', async (c) => {
 
   const profile = await updateCareerProfile(c.env, member.membership_number, body)
   return c.json({ profile })
+})
+
+profilesRouter.put('/me/languages', async (c) => {
+  const member = c.get('member')
+  const body = await c.req
+    .json<{
+      languages?: Array<{ language: string; proficiency?: number | null; openToTranslate?: boolean }>
+    }>()
+    .catch(() => ({}))
+
+  const languages = await replaceProfileLanguages(
+    c.env,
+    member.membership_number,
+    Array.isArray(body.languages) ? body.languages : [],
+  )
+  return c.json({ languages })
 })
 
 profilesRouter.post('/me/work-experiences', async (c) => {
@@ -363,13 +385,16 @@ profilesRouter.get('/:membershipNumber', async (c) => {
     await listProjects(c.env, membershipNumber),
   )
   const documents = await listDocuments(c.env, membershipNumber)
+  const languageRows = await listProfileLanguages(c.env, membershipNumber)
   const vmsProfile = await fetchVmsPartnerProfile(c.env, membershipNumber)
+  const languages = mergeLanguagePreferences(vmsProfile?.languages, languageRows)
 
   return c.json({
     profile,
     workExperiences,
     projects,
     documents: documents.map(({ r2_key: _r2, ...rest }) => rest),
+    languages,
     vmsProfile,
   })
 })

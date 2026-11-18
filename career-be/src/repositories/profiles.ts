@@ -522,3 +522,143 @@ export async function hasAppliedToCompanyJob(
     .first<{ id: string }>()
   return Boolean(row)
 }
+
+export type ProfileLanguageRow = {
+  id: string
+  membership_number: string
+  language_name: string
+  proficiency: number | null
+  open_to_translate: number
+  created_at: string
+  updated_at: string
+}
+
+export type ProfileLanguageDto = {
+  language: string
+  proficiency: number | null
+  openToTranslate: boolean
+}
+
+export async function listProfileLanguages(
+  env: Environment,
+  membershipNumber: string,
+): Promise<ProfileLanguageRow[]> {
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM profile_languages
+     WHERE membership_number = ?
+     ORDER BY language_name COLLATE NOCASE ASC`,
+  )
+    .bind(membershipNumber)
+    .all<ProfileLanguageRow>()
+  return result.results ?? []
+}
+
+function clampProficiency(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return null
+  return Math.min(10, Math.max(1, Math.round(n)))
+}
+
+/** Replace saved language prefs for names present in `items`. Drops prefs for languages no longer listed. */
+export async function replaceProfileLanguages(
+  env: Environment,
+  membershipNumber: string,
+  items: Array<{ language: string; proficiency?: number | null; openToTranslate?: boolean }>,
+): Promise<ProfileLanguageDto[]> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+
+  const normalized = items
+    .map((item) => ({
+      language: String(item.language || '').trim(),
+      proficiency: clampProficiency(item.proficiency),
+      openToTranslate: Boolean(item.openToTranslate),
+    }))
+    .filter((item) => item.language.length > 0)
+
+  // Deduplicate by case-insensitive name (keep last)
+  const byKey = new Map<string, (typeof normalized)[number]>()
+  for (const item of normalized) {
+    byKey.set(item.language.toLowerCase(), item)
+  }
+  const unique = [...byKey.values()]
+
+  await env.D1_DB.prepare(`DELETE FROM profile_languages WHERE membership_number = ?`)
+    .bind(membershipNumber)
+    .run()
+
+  for (const item of unique) {
+    await env.D1_DB.prepare(
+      `INSERT INTO profile_languages
+       (id, membership_number, language_name, proficiency, open_to_translate, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        createId(),
+        membershipNumber,
+        item.language,
+        item.proficiency,
+        item.openToTranslate ? 1 : 0,
+        stamp,
+        stamp,
+      )
+      .run()
+  }
+
+  return unique.map((item) => ({
+    language: item.language,
+    proficiency: item.proficiency,
+    openToTranslate: item.openToTranslate,
+  }))
+}
+
+export function mergeLanguagePreferences(
+  vmsLanguagesCsv: string | null | undefined,
+  rows: ProfileLanguageRow[],
+): ProfileLanguageDto[] {
+  const fromVms = (vmsLanguagesCsv || '')
+    .split(/[,،\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  const prefs = new Map(
+    rows.map((row) => [
+      row.language_name.toLowerCase(),
+      {
+        language: row.language_name,
+        proficiency: row.proficiency,
+        openToTranslate: row.open_to_translate === 1,
+      } satisfies ProfileLanguageDto,
+    ]),
+  )
+
+  const seen = new Set<string>()
+  const merged: ProfileLanguageDto[] = []
+
+  for (const name of fromVms) {
+    const key = name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const pref = prefs.get(key)
+    merged.push(
+      pref
+        ? { ...pref, language: name }
+        : { language: name, proficiency: null, openToTranslate: false },
+    )
+  }
+
+  // Keep orphan prefs for languages removed from VMS so the member can still edit/clear them
+  for (const row of rows) {
+    const key = row.language_name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push({
+      language: row.language_name,
+      proficiency: row.proficiency,
+      openToTranslate: row.open_to_translate === 1,
+    })
+  }
+
+  return merged
+}

@@ -19,9 +19,16 @@ import { authDownloadHeaders, profilesApi } from '../services/api'
 
 type Tab = 'preview' | 'edit'
 
+type LanguagePref = {
+  language: string
+  proficiency: number | null
+  openToTranslate: boolean
+}
+
 export default function ProfilePage() {
   const [data, setData] = useState<any>(null)
   const [summary, setSummary] = useState('')
+  const [languagePrefs, setLanguagePrefs] = useState<LanguagePref[]>([])
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<Tab>('preview')
   const [workForm, setWorkForm] = useState({
@@ -52,6 +59,21 @@ export default function ProfilePage() {
     const payload = await profilesApi.me()
     setData(payload)
     setSummary(payload.profile?.summary || '')
+    const fromApi: LanguagePref[] = Array.isArray(payload.languages)
+      ? payload.languages.map((item: any) => ({
+          language: String(item.language || '').trim(),
+          proficiency:
+            item.proficiency == null || item.proficiency === ''
+              ? null
+              : Number(item.proficiency),
+          openToTranslate: Boolean(item.openToTranslate),
+        }))
+      : splitCsv(payload.vmsProfile?.languages).map((language) => ({
+          language,
+          proficiency: null,
+          openToTranslate: false,
+        }))
+    setLanguagePrefs(fromApi.filter((item) => item.language))
   }
 
   useEffect(() => {
@@ -60,7 +82,6 @@ export default function ProfilePage() {
 
   const skills = useMemo(() => splitCsv(data?.vmsProfile?.skills), [data])
   const interests = useMemo(() => splitCsv(data?.vmsProfile?.interests), [data])
-  const languages = useMemo(() => splitCsv(data?.vmsProfile?.languages), [data])
   const availableSkills: SkillOption[] = useMemo(() => {
     const fromMember: SkillOption[] = (data?.memberSkills || []).map((s: any) => ({
       skillId: s.skillId,
@@ -77,6 +98,7 @@ export default function ProfilePage() {
     setSaving(true)
     try {
       await profilesApi.updateMe({ summary })
+      await profilesApi.updateLanguages(languagePrefs)
       toast.success('تم حفظ السيرة')
       await load()
     } finally {
@@ -86,8 +108,15 @@ export default function ProfilePage() {
 
   const togglePublish = async () => {
     await profilesApi.updateMe({ summary, is_published: !data?.profile?.is_published })
+    await profilesApi.updateLanguages(languagePrefs)
     toast.success(data?.profile?.is_published ? 'تم إلغاء النشر' : 'تم نشر السيرة')
     await load()
+  }
+
+  const updateLanguage = (language: string, patch: Partial<LanguagePref>) => {
+    setLanguagePrefs((prev) =>
+      prev.map((item) => (item.language === language ? { ...item, ...patch } : item)),
+    )
   }
 
   const addWork = async (event: FormEvent) => {
@@ -155,6 +184,7 @@ export default function ProfilePage() {
   const previewData = {
     ...data,
     profile: { ...data.profile, summary },
+    languages: languagePrefs,
   }
 
   return (
@@ -355,17 +385,63 @@ export default function ProfilePage() {
                   <Languages className="h-4 w-4 text-brand" />
                   اللغات
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {languages.length ? (
-                    languages.map((item) => (
-                      <span key={item} className="chip">
-                        {item}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-sm text-slate-400">لا توجد لغات مضافة بعد.</span>
-                  )}
-                </div>
+                <p className="mb-3 text-xs text-slate-500">
+                  أسماء اللغات من منصة الأعضاء. حدّد مستوى الإتقان (1–10) وهل ترغب بالعمل مترجماً لكل لغة.
+                </p>
+                {languagePrefs.length ? (
+                  <ul className="space-y-3">
+                    {languagePrefs.map((item) => (
+                      <li
+                        key={item.language}
+                        className="rounded-xl border border-line bg-slate-50/80 p-3 sm:p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-bold text-slate-900">{item.language}</p>
+                          <span className="text-xs font-semibold text-brand" dir="ltr">
+                            {item.proficiency != null ? `${item.proficiency}/10` : 'غير محدد'}
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                            مستوى الإتقان (1–10)
+                          </label>
+                          <select
+                            className="field max-w-[12rem]"
+                            value={item.proficiency ?? ''}
+                            onChange={(e) =>
+                              updateLanguage(item.language, {
+                                proficiency: e.target.value === '' ? null : Number(e.target.value),
+                              })
+                            }
+                          >
+                            <option value="">غير محدد</option>
+                            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={item.openToTranslate}
+                            onChange={(e) =>
+                              updateLanguage(item.language, {
+                                openToTranslate: e.target.checked,
+                              })
+                            }
+                          />
+                          أرغب بالعمل مترجماً بهذه اللغة
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-sm text-slate-400">
+                    لا توجد لغات مضافة بعد. أضفها من منصة الأعضاء ثم أعد تحميل الصفحة.
+                  </span>
+                )}
               </div>
             </div>
           </section>
