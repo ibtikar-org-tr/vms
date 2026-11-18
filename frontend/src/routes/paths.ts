@@ -22,4 +22,5 @@ export const paths = {
   profile: '/profile',
   agenda: '/agenda',
   assembly: '/assembly',
+  integrations: '/integrations',
 } as const
