@@ -582,6 +582,7 @@ export function createEvent(payload: {
   cancellationDeadlineHours?: number
   allowGuestRegistration?: boolean
   allowMultipleTickets?: boolean
+  requireApplicantContact?: boolean
 }) {
   return postJson<{ event: VmsEvent }, typeof payload>('/events', payload)
 }
@@ -724,6 +725,7 @@ export function updateEvent(
     cancellationDeadlineHours: number
     allowGuestRegistration: boolean
     allowMultipleTickets: boolean
+    requireApplicantContact: boolean
     registrationSuccessMessage: string | null
   }>,
 ) {

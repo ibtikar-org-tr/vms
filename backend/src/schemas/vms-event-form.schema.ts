@@ -16,9 +16,9 @@ export const replaceEventFormFieldsSchema = z.object({
 })
 
 export const createEventFormSubmissionSchema = z.object({
-  applicantName: requiredTrimmedString.max(160),
-  applicantEmail: z.string().trim().toLowerCase().email(),
-  applicantPhone: requiredTrimmedString.max(40),
+  applicantName: z.string().trim().max(160).optional().default(''),
+  applicantEmail: z.string().trim().toLowerCase().max(200).optional().default(''),
+  applicantPhone: z.string().trim().max(40).optional().default(''),
   answers: z.record(z.string(), z.string().max(4000)).optional(),
 })
 

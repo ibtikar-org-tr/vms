@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import type { FormEvent } from 'react'
 import { ArrowRight, ClipboardList, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Ticket, Trash2, Users, X } from 'lucide-react'
+import { EventQrCard } from '../../components/events/EventQrCard'
 import {
   addEventAdmin,
   createEventTicket,
@@ -235,6 +236,7 @@ export function DashboardEventEditPage() {
     const displayAttendeeNumbers = formData.get('displayAttendeeNumbers') === 'on'
     const allowGuestRegistration = formData.get('allowGuestRegistration') === 'on'
     const allowMultipleTickets = formData.get('allowMultipleTickets') === 'on'
+    const requireApplicantContact = formData.get('optionalApplicantContact') !== 'on'
     const cancellationDeadlineHoursRaw = Number(formData.get('cancellationDeadlineHours') ?? eventItem.cancellationDeadlineHours ?? 48)
     const cancellationDeadlineHours = Number.isFinite(cancellationDeadlineHoursRaw)
       ? Math.max(0, Math.min(24 * 365, Math.trunc(cancellationDeadlineHoursRaw)))
@@ -282,6 +284,7 @@ export function DashboardEventEditPage() {
         displayAttendeeNumbers,
         allowGuestRegistration,
         allowMultipleTickets,
+        requireApplicantContact,
         cancellationDeadlineHours,
         ...(skills ? { skills } : {}),
         ...(locationType === 'online'
@@ -595,6 +598,8 @@ export function DashboardEventEditPage() {
         </div>
       </div>
 
+      <EventQrCard eventId={eventItem.id} eventName={eventItem.name} status={eventItem.status} />
+
       <article className="rounded-2xl border border-cyan-200/60 bg-linear-to-br from-white to-cyan-50/30 p-5 shadow-sm ring-1 ring-cyan-900/5 sm:p-6">
         <form onSubmit={handleSave} className="grid gap-4 md:grid-cols-4">
           <label className="space-y-1 md:col-span-2">
@@ -684,6 +689,20 @@ export function DashboardEventEditPage() {
               <span className="block text-sm font-medium text-slate-800">السماح بتسجيل غير الأعضاء</span>
               <span className="block text-xs leading-6 text-slate-500">
                 عند تفعيل هذا الخيار، يمكن للزوار التسجيل بالاسم والبريد ورقم الهاتف دون إنشاء حساب. إذا أنشأوا حساباً لاحقاً بنفس البريد، يُربط تسجيلهم بعضويتهم.
+              </span>
+            </span>
+          </label>
+          <label className="md:col-span-2 flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
+            <input
+              type="checkbox"
+              name="optionalApplicantContact"
+              defaultChecked={eventItem.requireApplicantContact === false}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+            />
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-slate-800">جعل الاسم والبريد والهاتف اختيارية في النموذج</span>
+              <span className="block text-xs leading-6 text-slate-500">
+                مناسب لنماذج التقييم والاستبيان. يمكن للزائر الإجابة دون كتابة بياناته. تسجيل التذكرة كزائر ما زال يحتاج بيانات التواصل.
               </span>
             </span>
           </label>
@@ -955,7 +974,7 @@ export function DashboardEventEditPage() {
           </span>
         </div>
         <p className="mb-4 text-sm leading-6 text-slate-600">
-          أضف أي عدد من الأسئلة. يظهر النموذج في صفحة الفعالية للأعضاء والزوار، ويُجمع الاسم والبريد ورقم الهاتف تلقائياً مع الإجابات.
+          أضف أي عدد من الأسئلة. يظهر النموذج في صفحة الفعالية للأعضاء والزوار. يمكنك جعل الاسم والبريد والهاتف اختيارية من إعدادات الفعالية أعلاه، وهذا يناسب نماذج التقييم.
         </p>
         <EventFormFieldsEditor
           fields={formFieldDrafts}

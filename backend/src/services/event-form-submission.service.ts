@@ -8,6 +8,7 @@ import {
   type EventFormAnswer,
   type EventFormFieldRecord,
 } from '../repositories/vms-event-forms.repository'
+import { getEventById } from '../repositories/vms-events.repository'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const URL_PATTERN = /^https?:\/\/\S+$/i
@@ -68,15 +69,40 @@ export async function submitEventForm(
     payload: CreateEventFormSubmissionInput
   },
 ) {
+  const event = await getEventById(db, input.eventId)
+  if (!event) {
+    return { ok: false as const, status: 404 as const, error: 'Event not found.' }
+  }
+
   const fields = await listEventFormFields(db, input.eventId)
   if (fields.length === 0) {
     return { ok: false as const, status: 400 as const, error: 'لا يوجد نموذج تقديم لهذه الفعالية.' }
   }
 
+  const name = input.payload.applicantName.trim()
   const email = input.payload.applicantEmail.trim().toLowerCase()
-  const existingByEmail = await getEventFormSubmissionByEmail(db, input.eventId, email)
-  if (existingByEmail) {
-    return { ok: false as const, status: 409 as const, error: 'تم إرسال طلب بهذا البريد مسبقاً.' }
+  const phone = input.payload.applicantPhone.trim()
+  const requireContact = event.requireApplicantContact !== false
+
+  if (requireContact) {
+    if (!name) {
+      return { ok: false as const, status: 400 as const, error: 'يرجى تعبئة الاسم الكامل.' }
+    }
+    if (!email || !EMAIL_PATTERN.test(email)) {
+      return { ok: false as const, status: 400 as const, error: 'يرجى إدخال بريد إلكتروني صالح.' }
+    }
+    if (!phone) {
+      return { ok: false as const, status: 400 as const, error: 'يرجى تعبئة رقم الهاتف.' }
+    }
+  } else if (email && !EMAIL_PATTERN.test(email)) {
+    return { ok: false as const, status: 400 as const, error: 'البريد الإلكتروني غير صالح.' }
+  }
+
+  if (email) {
+    const existingByEmail = await getEventFormSubmissionByEmail(db, input.eventId, email)
+    if (existingByEmail) {
+      return { ok: false as const, status: 409 as const, error: 'تم إرسال طلب بهذا البريد مسبقاً.' }
+    }
   }
 
   if (input.membershipNumber) {
@@ -95,9 +121,9 @@ export async function submitEventForm(
     const submission = await createEventFormSubmission(db, {
       eventId: input.eventId,
       membershipNumber: input.membershipNumber,
-      applicantName: input.payload.applicantName.trim(),
+      applicantName: name,
       applicantEmail: email,
-      applicantPhone: input.payload.applicantPhone.trim(),
+      applicantPhone: phone,
       answers: built.answers,
     })
 

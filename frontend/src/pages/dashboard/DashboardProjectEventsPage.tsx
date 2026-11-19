@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import type { FormEvent } from 'react'
-import { createEvent, fetchEvents, fetchProjectById, fetchProjectMembers } from '../../api/vms'
+import { createEvent, fetchAssemblyAccess, fetchEvents, fetchProjectById, fetchProjectMembers } from '../../api/vms'
 import type { VmsEvent, VmsProject, VmsProjectMember } from '../../types/vms'
 import { getStoredUser } from '../../utils/auth'
 import { EventsCatalog } from '../../components/dashboard/events/EventsCatalog'
@@ -22,6 +22,9 @@ export function DashboardProjectEventsPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false)
+  const [isAssemblyLeadership, setIsAssemblyLeadership] = useState(
+    () => user?.role?.trim().toLowerCase() === 'admin',
+  )
 
   useEffect(() => {
     if (!projectID) {
@@ -68,6 +71,26 @@ export function DashboardProjectEventsPage() {
     }
   }, [projectID])
 
+  useEffect(() => {
+    if (!user) {
+      setIsAssemblyLeadership(false)
+      return
+    }
+
+    let cancelled = false
+    void fetchAssemblyAccess()
+      .then((payload) => {
+        if (!cancelled) {
+          setIsAssemblyLeadership(payload.isAssemblyLeadership === true)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
   const managerMembershipNumbers = useMemo(
     () => new Set(projectMembers.filter((member) => member.role === 'manager').map((member) => member.membershipNumber)),
     [projectMembers],
@@ -79,8 +102,12 @@ export function DashboardProjectEventsPage() {
     }
 
     const membershipNumber = user.membershipNumber
-    return project.owner === membershipNumber || managerMembershipNumbers.has(membershipNumber)
-  }, [project, managerMembershipNumbers, user])
+    return (
+      project.owner === membershipNumber ||
+      managerMembershipNumbers.has(membershipNumber) ||
+      isAssemblyLeadership
+    )
+  }, [project, managerMembershipNumbers, user, isAssemblyLeadership])
 
   useEffect(() => {
     if (!canCreateEvents) {
@@ -99,7 +126,7 @@ export function DashboardProjectEventsPage() {
     }
 
     if (!canCreateEvents) {
-      setCreateError('إنشاء الفعالية متاح فقط لمالك المشروع ومديري المشروع.')
+      setCreateError('إنشاء الفعالية متاح لمالك المشروع ومديريه ورئيس مجلس الإدارة.')
       return
     }
 
@@ -206,7 +233,7 @@ export function DashboardProjectEventsPage() {
         </p>
       ) : (
         <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          إنشاء الفعاليات متاح فقط لمالك المشروع ومديري المشروع.
+          إنشاء الفعاليات متاح لمالك المشروع ومديريه ورئيس مجلس الإدارة.
         </p>
       )}
 

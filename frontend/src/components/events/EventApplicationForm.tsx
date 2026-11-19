@@ -41,12 +41,22 @@ type EventApplicationFormProps = {
   loginRedirect: string
   deferSubmit?: boolean
   disabled?: boolean
+  requireApplicantContact?: boolean
   onSubmitted?: () => void
 }
 
 export const EventApplicationForm = forwardRef<EventApplicationFormHandle, EventApplicationFormProps>(
   function EventApplicationForm(
-    { eventId, fields, successMessage, loginRedirect, deferSubmit = false, disabled = false, onSubmitted },
+    {
+      eventId,
+      fields,
+      successMessage,
+      loginRedirect,
+      deferSubmit = false,
+      disabled = false,
+      requireApplicantContact = true,
+      onSubmitted,
+    },
     ref,
   ) {
     const user = useMemo(() => getStoredUser(), [])
@@ -105,14 +115,19 @@ export const EventApplicationForm = forwardRef<EventApplicationFormHandle, Event
         return false
       }
 
-      if (!applicantName.trim()) {
-        setError('يرجى تعبئة الاسم الكامل.')
-        return false
-      }
-
-      if (!applicantPhone.trim()) {
-        setError('يرجى تعبئة رقم الهاتف.')
-        return false
+      if (requireApplicantContact) {
+        if (!applicantName.trim()) {
+          setError('يرجى تعبئة الاسم الكامل.')
+          return false
+        }
+        if (!applicantEmail.trim()) {
+          setError('يرجى إدخال البريد الإلكتروني.')
+          return false
+        }
+        if (!applicantPhone.trim()) {
+          setError('يرجى تعبئة رقم الهاتف.')
+          return false
+        }
       }
 
       for (const field of fields) {
@@ -153,7 +168,7 @@ export const EventApplicationForm = forwardRef<EventApplicationFormHandle, Event
         email: (submission?.applicantEmail ?? applicantEmail).trim(),
         phone: (submission?.applicantPhone ?? applicantPhone).trim(),
       }),
-    }), [applicantEmail, applicantName, applicantPhone, answers, eventId, fields, submission, user])
+    }), [applicantEmail, applicantName, applicantPhone, answers, eventId, fields, requireApplicantContact, submission, user])
 
     if (fields.length === 0) {
       return null
@@ -167,7 +182,11 @@ export const EventApplicationForm = forwardRef<EventApplicationFormHandle, Event
             <h2 className="text-base font-semibold text-emerald-950">تم استلام طلبك</h2>
           </div>
           <p className="mt-3 text-sm leading-7 text-emerald-900">
-            شكراً {submission.applicantName}. وصلك تأكيد مبدئي على {submission.applicantEmail}.
+            {submission.applicantName || submission.applicantEmail
+              ? `شكراً ${submission.applicantName || 'لك'}${
+                  submission.applicantEmail ? `. وصلك تأكيد مبدئي على ${submission.applicantEmail}` : '.'
+                }`
+              : 'شكراً لك. تم استلام إجاباتك.'}
           </p>
           {!isEventRichTextEmpty(successMessage) ? (
             <EventRichText value={successMessage} className="mt-3 border-t border-emerald-200/80 pt-3 text-sm text-emerald-950" />
@@ -180,14 +199,30 @@ export const EventApplicationForm = forwardRef<EventApplicationFormHandle, Event
       <div className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
-            <TextField id="applicant-name" label="الاسم الكامل" value={applicantName} onChange={setApplicantName} required />
+            <TextField
+              id="applicant-name"
+              label="الاسم الكامل"
+              value={applicantName}
+              onChange={setApplicantName}
+              required={requireApplicantContact}
+            />
           </div>
           <div className="md:col-span-2">
-            <EmailField id="applicant-email" label="البريد الإلكتروني" value={applicantEmail} onChange={setApplicantEmail} required />
+            <EmailField
+              id="applicant-email"
+              label="البريد الإلكتروني"
+              value={applicantEmail}
+              onChange={setApplicantEmail}
+              required={requireApplicantContact}
+            />
           </div>
           <div className="md:col-span-2">
-            <PhoneNumberField value={applicantPhone} onChange={setApplicantPhone} required />
-            <p className="mt-1 text-xs text-slate-500">سيتم التواصل عبر هذا الرقم (واتساب). مثال: 05051239898</p>
+            <PhoneNumberField value={applicantPhone} onChange={setApplicantPhone} required={requireApplicantContact} />
+            <p className="mt-1 text-xs text-slate-500">
+              {requireApplicantContact
+                ? 'سيتم التواصل عبر هذا الرقم (واتساب). مثال: 05051239898'
+                : 'اختياري. يمكنك ترك الاسم والبريد والهاتف فارغة في نماذج التقييم.'}
+            </p>
           </div>
         </div>
         <EventRegistrationPrivacyNote />
