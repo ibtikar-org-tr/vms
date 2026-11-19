@@ -6,6 +6,7 @@ export const createEventAnnouncementSchema = z
     body: z.string().trim().min(8).max(8000),
     sendEmail: z.boolean().optional(),
     sendTelegram: z.boolean().optional(),
+    imageUrl: z.string().trim().url().max(800).nullable().optional(),
   })
   .refine((payload) => payload.sendEmail !== false || payload.sendTelegram !== false, {
     message: 'اختر تيليغرام أو البريد أو كليهما.',

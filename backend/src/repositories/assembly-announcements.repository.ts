@@ -23,6 +23,7 @@ export interface AssemblyAnnouncementRecord {
   lastError: string | null
   retryChannel: AssemblyAnnouncementChannel | null
   retryStartedAt: string | null
+  imageUrl: string | null
 }
 
 export interface AssemblyAnnouncementFailureRecord {
@@ -57,6 +58,7 @@ interface AnnouncementRow {
   last_error: string | null
   retry_channel?: string | null
   retry_started_at?: string | null
+  image_url?: string | null
 }
 
 interface FailureRow {
@@ -92,6 +94,7 @@ function mapAnnouncement(row: AnnouncementRow): AssemblyAnnouncementRecord {
     lastError: row.last_error,
     retryChannel: row.retry_channel === 'telegram' ? 'telegram' : row.retry_channel === 'email' ? 'email' : null,
     retryStartedAt: row.retry_started_at ?? null,
+    imageUrl: row.image_url?.trim() || null,
   }
 }
 
@@ -120,13 +123,14 @@ export async function createAssemblyAnnouncement(
     sendTelegram: boolean
     emailTotal: number
     telegramTotal: number
+    imageUrl?: string | null
   },
 ) {
   await db
     .prepare(
       `INSERT INTO assembly_announcements (
-         id, created_by, subject, body, send_email, send_telegram, status, email_total, telegram_total
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         id, created_by, subject, body, send_email, send_telegram, status, email_total, telegram_total, image_url
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       input.id,
@@ -138,6 +142,7 @@ export async function createAssemblyAnnouncement(
       'queued',
       input.emailTotal,
       input.telegramTotal,
+      input.imageUrl?.trim() || null,
     )
     .run()
 

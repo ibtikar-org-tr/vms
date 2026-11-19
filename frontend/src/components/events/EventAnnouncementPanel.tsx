@@ -7,6 +7,7 @@ import {
   fetchEventAnnouncements,
   retryEventAnnouncement,
 } from '../../api/vms'
+import { AnnouncementImageField, AnnouncementLivePreview } from '../announcements/AnnouncementLivePreview'
 import type { EventAnnouncement, EventAnnouncementAudience, EventAnnouncementFailure } from '../../types/vms'
 
 function announcementStatusLabel(status: EventAnnouncement['status']) {
@@ -51,6 +52,7 @@ function messageCopyText(item: Pick<EventAnnouncement, 'subject' | 'body'>) {
 export function EventAnnouncementPanel({ eventId, eventName }: { eventId: string; eventName: string }) {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [sendEmail, setSendEmail] = useState(true)
   const [sendTelegram, setSendTelegram] = useState(true)
   const [confirmed, setConfirmed] = useState(false)
@@ -86,6 +88,7 @@ export function EventAnnouncementPanel({ eventId, eventName }: { eventId: string
   function fillComposer(item: EventAnnouncement) {
     setSubject(item.subject)
     setBody(item.body)
+    setImageUrl(item.imageUrl?.trim() || null)
     setSendError(null)
     setSendSuccess('تم تعبئة النموذج من الرسالة السابقة. يمكنك تعديلها ثم الإرسال.')
   }
@@ -189,6 +192,7 @@ export function EventAnnouncementPanel({ eventId, eventName }: { eventId: string
         body: body.trim(),
         sendEmail,
         sendTelegram,
+        imageUrl,
       })
       let announcement = created.announcement
       setProgress(announcement)
@@ -320,6 +324,7 @@ export function EventAnnouncementPanel({ eventId, eventName }: { eventId: string
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm leading-7 outline-none focus:border-cyan-600"
             />
           </label>
+          <AnnouncementImageField imageUrl={imageUrl} onChange={setImageUrl} disabled={isSending} />
           <div className="flex flex-wrap gap-4 text-sm text-slate-700">
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" checked={sendTelegram} onChange={(event) => setSendTelegram(event.target.checked)} />
@@ -373,6 +378,13 @@ export function EventAnnouncementPanel({ eventId, eventName }: { eventId: string
         </form>
 
         <div className="space-y-4">
+          <AnnouncementLivePreview
+            kind="event"
+            subject={subject}
+            body={body}
+            imageUrl={imageUrl}
+            eventName={eventName}
+          />
           {lastSent ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-2">
@@ -387,6 +399,9 @@ export function EventAnnouncementPanel({ eventId, eventName }: { eventId: string
                 </button>
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-900">{lastSent.subject}</p>
+              {lastSent.imageUrl ? (
+                <img src={lastSent.imageUrl} alt="" className="mt-2 max-h-32 w-full rounded-lg object-cover" />
+              ) : null}
               <p className="mt-1 whitespace-pre-wrap text-sm leading-7 text-slate-700">{lastSent.body}</p>
               <button
                 type="button"
@@ -444,6 +459,9 @@ export function EventAnnouncementPanel({ eventId, eventName }: { eventId: string
                 announcements.map((item) => (
                   <div key={item.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                     <p className="text-sm font-semibold text-slate-900">{item.subject}</p>
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt="" className="mt-2 max-h-24 w-full rounded object-cover" />
+                    ) : null}
                     <p className="mt-1 whitespace-pre-wrap text-xs leading-6 text-slate-600">{item.body}</p>
                     <p className="mt-1 text-xs text-slate-500">
                       {announcementStatusLabel(item.status)} · بريد {item.emailSent}/{item.emailTotal || '—'} · تيليغرام{' '}

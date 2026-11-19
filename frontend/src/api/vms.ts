@@ -228,6 +228,7 @@ export function createAssemblyAnnouncement(payload: {
   body: string
   sendEmail: boolean
   sendTelegram: boolean
+  imageUrl?: string | null
 }) {
   return postJson<
     {
@@ -276,6 +277,7 @@ export function createEventAnnouncement(
     body: string
     sendEmail: boolean
     sendTelegram: boolean
+    imageUrl?: string | null
   },
 ) {
   return postJson<

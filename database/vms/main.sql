@@ -332,7 +332,8 @@ CREATE TABLE IF NOT EXISTS assembly_announcements (
     telegram_total INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     retry_channel TEXT,
-    retry_started_at TEXT
+    retry_started_at TEXT,
+    image_url TEXT
 );
 
 CREATE TRIGGER IF NOT EXISTS update_assembly_announcement_updated_at AFTER UPDATE ON assembly_announcements
@@ -381,7 +382,8 @@ CREATE TABLE IF NOT EXISTS event_announcements (
     telegram_total INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     retry_channel TEXT,
-    retry_started_at TEXT
+    retry_started_at TEXT,
+    image_url TEXT
 );
 
 CREATE TRIGGER IF NOT EXISTS update_event_announcement_updated_at AFTER UPDATE ON event_announcements
