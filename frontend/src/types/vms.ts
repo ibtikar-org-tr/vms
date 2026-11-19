@@ -306,6 +306,18 @@ export interface AssemblyAnnouncementFailure {
   error: string | null
 }
 
+export interface EventAnnouncement extends AssemblyAnnouncement {
+  eventId: string
+}
+
+export type EventAnnouncementFailure = AssemblyAnnouncementFailure
+
+export interface EventAnnouncementAudience {
+  people: number
+  email: number
+  telegram: number
+}
+
 export interface VmsProjectNote {
   id: string
   createdAt: string

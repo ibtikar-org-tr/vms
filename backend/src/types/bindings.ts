@@ -128,6 +128,7 @@ export interface QueueMessageBatchLike<T = unknown> {
 
 export interface AssemblyAnnouncementQueueMessage {
   announcementId: string
+  kind?: 'assembly' | 'event'
 }
 
 export interface AppBindings {
