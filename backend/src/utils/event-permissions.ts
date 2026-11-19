@@ -1,5 +1,6 @@
 import type { D1DatabaseLike } from '../types/bindings'
 import { isEventAdmin } from '../repositories/vms-event-admins.repository'
+import { isBoardLeadership } from './assembly-leadership'
 import { canManageProject } from './project-access'
 
 const MAX_PROJECT_ANCESTOR_DEPTH = 20
@@ -25,6 +26,10 @@ export async function canManageEvent(
   }
 
   if (await isEventAdmin(db, event.id, membershipNumber)) {
+    return true
+  }
+
+  if (await isBoardLeadership(db, membershipNumber)) {
     return true
   }
 

@@ -70,6 +70,7 @@ export interface VmsEvent {
   cancellationDeadlineHours: number
   allowGuestRegistration: boolean
   allowMultipleTickets?: boolean
+  requireApplicantContact?: boolean
   registrationSuccessMessage?: string | null
   canManage?: boolean
 }

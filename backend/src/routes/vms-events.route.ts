@@ -18,7 +18,8 @@ import {
   updateEventSchema,
 } from '../schemas/vms-event.schema'
 import type { AppEnv } from '../types/hono'
-import { getActorMembershipNumber } from '../utils/actor'
+import { getActorMembershipNumber, getActorUser } from '../utils/actor'
+import { isAssemblyLeadership } from '../utils/assembly-leadership'
 import { canManageEvent } from '../utils/event-permissions'
 import { canManageProject } from '../utils/project-access'
 import { jsonValidationHook } from '../utils/zod-json-error'
@@ -233,8 +234,9 @@ vmsEventsRoute.post('/events', zValidator('json', createEventSchema), async (c) 
       return c.json({ error: 'Project not found.' }, 404)
     }
 
-    if (!authorization.isAuthorized) {
-      return c.json({ error: 'Only project owner or managers can create events for this project.' }, 403)
+    const canCreateAsLeadership = await isAssemblyLeadership(c.env.VMS_DB, getActorUser(c))
+    if (!authorization.isAuthorized && !canCreateAsLeadership) {
+      return c.json({ error: 'Only project owner, managers, or مجلس الإدارة can create events for this project.' }, 403)
     }
 
     const eventId = crypto.randomUUID()

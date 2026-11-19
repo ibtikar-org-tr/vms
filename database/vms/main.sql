@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS events (
     cancellation_deadline_hours INTEGER NOT NULL DEFAULT 48, -- hours before start_time when self-cancellation closes; 0 = disabled
     allow_guest_registration INTEGER NOT NULL DEFAULT 0, -- 1 = unauthenticated visitors may register with name/email/phone
     allow_multiple_tickets INTEGER NOT NULL DEFAULT 0, -- 1 = a person may hold more than one ticket type, 0 = one ticket only
+    require_applicant_contact INTEGER NOT NULL DEFAULT 1, -- 1 = name/email/phone required on the event form; 0 = optional (evaluation/rating)
     registration_success_message TEXT -- optional rich text shown to the registrant after a successful apply
 );
 
@@ -209,7 +210,8 @@ CREATE INDEX IF NOT EXISTS idx_event_form_submissions_event
     ON event_form_submissions (event_id, created_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_event_form_submissions_event_email
-    ON event_form_submissions (event_id, applicant_email);
+    ON event_form_submissions (event_id, applicant_email)
+    WHERE applicant_email IS NOT NULL AND applicant_email != '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_event_form_submissions_event_member
     ON event_form_submissions (event_id, membership_number)
