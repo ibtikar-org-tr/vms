@@ -280,6 +280,7 @@ export interface AssemblyAnnouncement {
   createdBy: string
   subject: string
   body: string
+  imageUrl?: string | null
   sendEmail: boolean
   sendTelegram: boolean
   status: 'queued' | 'sending' | 'sent' | 'partial' | 'failed'

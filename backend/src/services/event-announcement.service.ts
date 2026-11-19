@@ -149,6 +149,8 @@ async function sendTelegramBatch(
       body: announcement.body,
       eventUrl,
     }),
+    photo: announcement.imageUrl || undefined,
+    boxes: [{ text: 'صفحة الفعالية', link: eventUrl }],
   })
 
   const payload = telegramNotifyPayload(result)
@@ -258,6 +260,7 @@ async function sendEmailBatch(
           subject: announcement.subject,
           body: announcement.body,
           eventUrl,
+          imageUrl: announcement.imageUrl,
         }),
       })
       current =
@@ -455,7 +458,12 @@ async function sendRetryTelegramBatch(
 
   if (withNumber.length > 0) {
     const batch = withNumber.map((item) => item.membershipNumber!.trim())
-    const result = await sendBackendTelegramNotification(bindings, { targets: batch, message })
+    const result = await sendBackendTelegramNotification(bindings, {
+      targets: batch,
+      message,
+      photo: announcement.imageUrl || undefined,
+      boxes: [{ text: 'صفحة الفعالية', link: eventUrl }],
+    })
     const payload = telegramNotifyPayload(result)
     const successfulIds = new Set(
       (payload.results?.successful ?? [])
@@ -568,6 +576,7 @@ async function sendRetryEmailBatch(
           subject: announcement.subject,
           body: announcement.body,
           eventUrl,
+          imageUrl: announcement.imageUrl,
         }),
       })
       await deleteEventAnnouncementFailure(bindings.VMS_DB, item.id)

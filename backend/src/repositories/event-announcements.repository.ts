@@ -24,6 +24,7 @@ export interface EventAnnouncementRecord {
   lastError: string | null
   retryChannel: EventAnnouncementChannel | null
   retryStartedAt: string | null
+  imageUrl: string | null
 }
 
 export interface EventAnnouncementFailureRecord {
@@ -59,6 +60,7 @@ interface AnnouncementRow {
   last_error: string | null
   retry_channel?: string | null
   retry_started_at?: string | null
+  image_url?: string | null
 }
 
 interface FailureRow {
@@ -95,6 +97,7 @@ function mapAnnouncement(row: AnnouncementRow): EventAnnouncementRecord {
     lastError: row.last_error,
     retryChannel: row.retry_channel === 'telegram' ? 'telegram' : row.retry_channel === 'email' ? 'email' : null,
     retryStartedAt: row.retry_started_at ?? null,
+    imageUrl: row.image_url?.trim() || null,
   }
 }
 
@@ -124,13 +127,14 @@ export async function createEventAnnouncement(
     sendTelegram: boolean
     emailTotal: number
     telegramTotal: number
+    imageUrl?: string | null
   },
 ) {
   await db
     .prepare(
       `INSERT INTO event_announcements (
-         id, event_id, created_by, subject, body, send_email, send_telegram, status, email_total, telegram_total
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         id, event_id, created_by, subject, body, send_email, send_telegram, status, email_total, telegram_total, image_url
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       input.id,
@@ -143,6 +147,7 @@ export async function createEventAnnouncement(
       'queued',
       input.emailTotal,
       input.telegramTotal,
+      input.imageUrl?.trim() || null,
     )
     .run()
 

@@ -5,6 +5,17 @@ export interface TelegramNotificationPayload {
   targets?: string[]
   message: string
   boxes?: Array<{ text: string, link: string }>
+  photo?: string
+}
+
+const TELEGRAM_CAPTION_MAX = 1024
+
+export function clipTelegramCaption(text: string, max = TELEGRAM_CAPTION_MAX) {
+  const trimmed = text.trim()
+  if (trimmed.length <= max) {
+    return trimmed
+  }
+  return `${trimmed.slice(0, Math.max(0, max - 1))}…`
 }
 
 export interface TelegramNotificationResult {
@@ -51,19 +62,24 @@ export async function sendBackendTelegramNotification(
   // Determine endpoint and payload based on whether we're sending to multiple targets or single target
   let requestBody: any;
   
+  const photo = payload.photo?.trim() || undefined
+  const message = photo ? clipTelegramCaption(payload.message) : payload.message
+
   if (payload.targets && payload.targets.length > 0) {
     // Send to multiple membership numbers
     requestBody = {
       member_ids: payload.targets,
-      message: payload.message,
+      message,
       boxes: payload.boxes,
+      ...(photo ? { photo } : {}),
     }
   } else if (payload.target) {
     // Send to single target (existing behavior)
     requestBody = {
       member_id: payload.target,
-      message: payload.message,
+      message,
       boxes: payload.boxes,
+      ...(photo ? { photo } : {}),
     }
   } else {
     return {

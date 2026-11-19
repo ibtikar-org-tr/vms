@@ -11,6 +11,7 @@ import {
   retryAssemblyAnnouncement,
 } from '../../api/vms'
 import type { AssemblyAnnouncement, AssemblyAnnouncementFailure, AssemblyMember } from '../../types/vms'
+import { AnnouncementImageField, AnnouncementLivePreview } from '../../components/announcements/AnnouncementLivePreview'
 import { getStoredUser, isPlatformAdmin } from '../../utils/auth'
 
 type TabKey = 'members' | 'broadcast'
@@ -100,6 +101,7 @@ export function DashboardAssemblyPage() {
 
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [sendEmail, setSendEmail] = useState(true)
   const [sendTelegram, setSendTelegram] = useState(true)
   const [confirmed, setConfirmed] = useState(false)
@@ -295,6 +297,7 @@ export function DashboardAssemblyPage() {
         body: body.trim(),
         sendEmail,
         sendTelegram,
+        imageUrl,
       })
       let announcement = created.announcement
       setProgress(announcement)
@@ -601,6 +604,7 @@ export function DashboardAssemblyPage() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm leading-7 outline-none focus:border-cyan-600"
               />
             </label>
+            <AnnouncementImageField imageUrl={imageUrl} onChange={setImageUrl} disabled={isSending} />
             <div className="flex flex-wrap gap-4 text-sm text-slate-700">
               <label className="inline-flex items-center gap-2">
                 <input type="checkbox" checked={sendTelegram} onChange={(event) => setSendTelegram(event.target.checked)} />
@@ -654,22 +658,7 @@ export function DashboardAssemblyPage() {
           </form>
 
           <div className="space-y-4">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-              <div className="bg-linear-to-l from-cyan-800 to-teal-700 px-5 py-4 text-white">
-                <p className="text-[11px] font-bold tracking-wide text-cyan-100">تجمّع إبتكار</p>
-                <h3 className="mt-1 text-lg font-extrabold">{subject.trim() || 'عنوان الرسالة'}</h3>
-                <p className="mt-1 text-xs text-cyan-100">رسالة من مجلس الإدارة إلى أعضاء التجمّع</p>
-              </div>
-              <div className="space-y-3 bg-white px-5 py-4 text-sm leading-7 text-slate-700">
-                <p>السلام عليكم عضو تجمّع إبتكار،</p>
-                <p className="whitespace-pre-wrap">{body.trim() || 'سيظهر نص الرسالة هنا مع التوقيع.'}</p>
-                <div className="border-t border-slate-100 pt-3 text-center text-xs text-slate-500">
-                  <p className="font-extrabold text-teal-700">مجلس الإدارة</p>
-                  <p className="font-semibold text-slate-700">تجمّع إبتكار</p>
-                  <p>vms.ibtikar.tr</p>
-                </div>
-              </div>
-            </div>
+            <AnnouncementLivePreview kind="assembly" subject={subject} body={body} imageUrl={imageUrl} />
             {failures.length > 0 ? (
               <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -837,6 +826,9 @@ export function DashboardAssemblyPage() {
                   announcements.slice(0, 8).map((item) => (
                     <div key={item.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                       <p className="text-sm font-semibold text-slate-900">{item.subject}</p>
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt="" className="mt-2 max-h-24 w-full rounded object-cover" />
+                      ) : null}
                       <p className="mt-1 whitespace-pre-wrap text-xs leading-6 text-slate-600">{item.body}</p>
                       <p className="mt-1 text-xs text-slate-500">
                         {announcementStatusLabel(item.status)} · بريد {item.emailSent}/{item.emailTotal || '—'} · تيليغرام{' '}
@@ -855,6 +847,7 @@ export function DashboardAssemblyPage() {
                           onClick={() => {
                             setSubject(item.subject)
                             setBody(item.body)
+                            setImageUrl(item.imageUrl?.trim() || null)
                             setSendSuccess('تم تعبئة النموذج من الرسالة السابقة. يمكنك تعديلها ثم الإرسال.')
                             setProgress(item)
                             void fetchAssemblyAnnouncement(item.id)

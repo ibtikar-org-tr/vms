@@ -65,11 +65,16 @@ export function buildAssemblyAnnouncementEmailHtml(input: {
   subject: string
   body: string
   siteUrl: string
+  imageUrl?: string | null
 }) {
   const subject = escapeHtml(input.subject.trim())
   const name = escapeHtml(input.displayName)
   const siteUrl = escapeHtml(input.siteUrl)
   const bodyHtml = toHtmlParagraphs(input.body)
+  const imageUrl = input.imageUrl?.trim()
+  const imageHtml = imageUrl
+    ? `<tr><td style="padding: 0;"><img src="${escapeHtml(imageUrl)}" alt="" style="display: block; width: 100%; max-height: 360px; object-fit: cover;" /></td></tr>`
+    : ''
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -90,6 +95,7 @@ export function buildAssemblyAnnouncementEmailHtml(input: {
               <p style="margin: 12px 0 0; font-size: 13px; color: #e0f2fe;">رسالة من مجلس الإدارة إلى أعضاء التجمّع</p>
             </td>
           </tr>
+          ${imageHtml}
           <tr>
             <td style="padding: 28px 28px 8px;">
               <p style="margin: 0 0 18px; font-size: 15px; line-height: 1.9; color: #0f172a;">السلام عليكم ${name}،</p>
