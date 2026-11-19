@@ -138,3 +138,14 @@ export async function deleteUserSkill(db: D1DatabaseLike, membershipNumber: stri
 export async function deleteAllUserSkillsByMembershipNumber(db: D1DatabaseLike, membershipNumber: string): Promise<void> {
   await db.prepare(`DELETE FROM user_skills WHERE membership_number = ?`).bind(membershipNumber).run()
 }
+
+export async function deleteUserSkillsByType(
+  db: D1DatabaseLike,
+  membershipNumber: string,
+  type: 'skill' | 'interest',
+): Promise<void> {
+  await db
+    .prepare(`DELETE FROM user_skills WHERE membership_number = ? AND type = ?`)
+    .bind(membershipNumber, type)
+    .run()
+}

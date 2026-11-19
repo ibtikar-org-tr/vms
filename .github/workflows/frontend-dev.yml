@@ -33,6 +33,8 @@ jobs:
           VITE_MEMBER_MS: ${{ vars.VITE_MEMBER_MS }}
           VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
           VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+          VITE_KITCHEN_URL: ${{ vars.VITE_KITCHEN_URL }}
+          VITE_CAREER_URL: ${{ vars.VITE_CAREER_URL }}
         run: npm run build
 
       - name: Install Wrangler

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { CheckCircle, ClipboardList, Clock, Download, Search, Trash2, Users } from 'lucide-react'
+import { EventAnnouncementPanel } from '../../components/events/EventAnnouncementPanel'
 import {
   approveRegistration,
   deleteEventRegistration,
@@ -318,6 +319,8 @@ export function DashboardEventAdminPage() {
           </div>
         </div>
       </div>
+
+      <EventAnnouncementPanel eventId={eventItem.id} eventName={eventItem.name} />
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
           <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">

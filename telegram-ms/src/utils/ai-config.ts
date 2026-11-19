@@ -75,7 +75,7 @@ You are the AI assistant for the Ibtikar Assembly Telegram Bot (بوت تجمّ�
 - Skills can be tagged on projects, tasks, events, positions, and clubs
 
 **Known Ibtikar Initiatives (managed as projects on the platform)**
-1. TEKNOFEST Arabic Platform — forms teams for Teknofest Festival projects (@teknofest_ar)
+1. TEKNOFEST Arabic Platform — forms teams for TEKNOFEST Festival projects (@teknofest_ar)
 2. Ibtikar Mines — guides Arab students to useful technical programs (@ibtikar.mines)
 3. Freezcamps — interactive course experiences (lms.ibtikar.org.tr)
 4. Student Clubs — field-focused gatherings (AI, Web Dev, Cybersecurity, Robotics, etc.)

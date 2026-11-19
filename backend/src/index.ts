@@ -4,6 +4,7 @@ import { authMiddleware } from './middleware/auth.middleware'
 import { authRoute, securedAuthRoute } from './routes/auth.route'
 import { meRoute } from './routes/me.route'
 import { profileRoute } from './routes/profile.route'
+import { partnerProfileRoute } from './routes/partner-profile.route'
 import { registrationRoute } from './routes/registration.route'
 import { signupRoute } from './routes/signup.route'
 import { createTelegramSignupLink, TelegramAlreadyLinkedError } from './services/signup-link.service'
@@ -14,6 +15,7 @@ import { vmsEventRegistrationsRoute } from './routes/vms-event-registrations.rou
 import { vmsEventTicketsRoute } from './routes/vms-event-tickets.route'
 import { vmsPublicEventsRoute } from './routes/vms-public-events.route'
 import { vmsEventsRoute } from './routes/vms-events.route'
+import { vmsEventAnnouncementsRoute } from './routes/vms-event-announcements.route'
 import { vmsClubsRoute } from './routes/vms-clubs.route'
 import { vmsLeaderboardRoute } from './routes/vms-leaderboard.route'
 import { vmsPointTransactionsRoute } from './routes/vms-point-transactions.route'
@@ -25,7 +27,7 @@ import { vmsAgendaRoute } from './routes/vms-agenda.route'
 import { vmsTasksRoute } from './routes/vms-tasks.route'
 import { handleProjectNoteWebSocket, vmsProjectNotesRoute } from './routes/vms-project-notes.route'
 import { assemblyRoute } from './routes/assembly.route'
-import { uploadClubBanner, uploadEventBanner, uploadImages, serveImage } from './routes/images.route'
+import { uploadClubBanner, uploadEventBanner, uploadImages, uploadProfilePicture, serveImage } from './routes/images.route'
 import { handleCron } from './cron'
 import { ProjectNoteRoom } from './durable-objects/project-note-room'
 import { handleAssemblyAnnouncementQueue } from './services/assembly-announcement-queue.service'
@@ -162,12 +164,15 @@ publicApi.route('/', registrationRoute)
 publicApi.route('/', signupRoute)
 publicApi.route('/', statsRoute)
 publicApi.route('/', authRoute)
+publicApi.route('/', partnerProfileRoute)
 publicApi.route('/', vmsPublicEventsRoute)
 
 const securedApi = new Hono<AppEnv>()
 securedApi.use('*', authMiddleware)
 securedApi.route('/', securedAuthRoute)
 securedApi.route('/', meRoute)
+// Register before /profile/:membershipNumber so "picture" is not treated as an id.
+securedApi.put('/profile/picture', uploadProfilePicture)
 securedApi.route('/', profileRoute)
 securedApi.route('/', telegramNotificationRoute)
 securedApi.route('/', vmsProjectsRoute)
@@ -176,6 +181,7 @@ securedApi.route('/', vmsTasksRoute)
 securedApi.route('/', vmsAgendaRoute)
 securedApi.route('/', vmsProjectMembersRoute)
 securedApi.route('/', vmsEventsRoute)
+securedApi.route('/', vmsEventAnnouncementsRoute)
 securedApi.route('/', vmsEventFormsRoute)
 securedApi.route('/', vmsClubsRoute)
 securedApi.route('/', vmsEventTicketsRoute)

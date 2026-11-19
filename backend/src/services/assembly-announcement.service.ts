@@ -50,7 +50,7 @@ function errorMessage(error: unknown, fallback = 'تعذر إرسال أحد ر�
   return fallback
 }
 
-function telegramNotifyPayload(result: { error?: string; responseData?: unknown }): TelegramNotifyResponse {
+export function telegramNotifyPayload(result: { error?: string; responseData?: unknown }): TelegramNotifyResponse {
   const raw = result.responseData
   if (!raw || typeof raw !== 'object') {
     return { error: result.error }

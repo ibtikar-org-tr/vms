@@ -26,6 +26,10 @@ interface UserProfileRow {
   profilePictureUrl: string | null
   biography: string | null
   languages: string | null
+  /** Comma-separated skill names hydrated from user_skills */
+  skills: string | null
+  /** Comma-separated interest names hydrated from user_skills */
+  interests: string | null
 }
 
 export interface UpdateUserInfoParams {
@@ -290,6 +294,8 @@ export async function getUserProfileByMembershipNumber(
   return {
     ...row,
     emailVerified: row.emailVerified === 1,
+    skills: null,
+    interests: null,
   }
 }
 

@@ -1,0 +1,10 @@
+node_modules
+.wrangler
+.dev.vars
+dist
+*.log
+.DS_Store
+
+# Local demo/seed data (do not commit)
+scripts/seed*
+**/seed*.sql

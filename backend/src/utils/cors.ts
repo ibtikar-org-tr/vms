@@ -11,10 +11,15 @@ const LOCAL_DEV_ORIGINS = [
   'http://127.0.0.1:5930',
   'http://localhost:8081',
   'http://127.0.0.1:8081',
+  'http://localhost:9682',
+  'http://127.0.0.1:9682',
+  'http://localhost:9692',
+  'http://127.0.0.1:9692',
+  'http://localhost:5925',
+  'http://127.0.0.1:5925',
 ]
 
-function isLocalWorkerRequest(c: Context<{ Bindings: AppBindings }>): boolean {
-  const hostname = new URL(c.req.url).hostname
+function isLocalHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1'
 }
 
@@ -25,29 +30,42 @@ function parseOriginList(value: string | undefined): string[] {
 
   return value
     .split(',')
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
     .filter(Boolean)
 }
 
-function buildAllowedOrigins(c: Context<{ Bindings: AppBindings }>): Set<string> {
+/** Shared allowlist for CORS and external SSO redirect_uri. */
+export function listAllowedBrowserOrigins(
+  env: Pick<AppBindings, 'CORS_ALLOW_ORIGINS' | 'FRONTEND_BASE_URL'>,
+  requestHostname?: string,
+): string[] {
   const allowed = new Set<string>()
 
-  for (const origin of parseOriginList(c.env.CORS_ALLOW_ORIGINS)) {
+  for (const origin of parseOriginList(env.CORS_ALLOW_ORIGINS)) {
     allowed.add(origin)
   }
 
-  const frontendBaseUrl = c.env.FRONTEND_BASE_URL?.trim()
+  const frontendBaseUrl = env.FRONTEND_BASE_URL?.trim().replace(/\/+$/, '')
   if (frontendBaseUrl) {
-    allowed.add(frontendBaseUrl)
+    try {
+      allowed.add(new URL(frontendBaseUrl).origin)
+    } catch {
+      allowed.add(frontendBaseUrl)
+    }
   }
 
-  if (isLocalWorkerRequest(c)) {
+  if (requestHostname && isLocalHostname(requestHostname)) {
     for (const origin of LOCAL_DEV_ORIGINS) {
       allowed.add(origin)
     }
   }
 
-  return allowed
+  return [...allowed]
+}
+
+function buildAllowedOrigins(c: Context<{ Bindings: AppBindings }>): Set<string> {
+  const hostname = new URL(c.req.url).hostname
+  return new Set(listAllowedBrowserOrigins(c.env, hostname))
 }
 
 export function membershipAppCors() {

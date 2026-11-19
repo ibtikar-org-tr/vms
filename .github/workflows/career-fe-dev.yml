@@ -1,0 +1,50 @@
+name: (dev) [career-fe] Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'career-fe/**'
+      - '.github/workflows/career-fe-dev.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: ./career-fe
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install project dependencies
+        run: npm install
+
+      - name: Build project
+        env:
+          VITE_API_TARGET: ${{ vars.VITE_SITE_URL }}/ms/career
+          VITE_VMS_LOGIN_URL: ${{ vars.FRONTEND_BASE_URL }}/login
+        run: npm run build
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Pin Cloudflare account for Wrangler
+        run: |
+          jq --arg accountId "${{ vars.CLOUDFLARE_ACCOUNT_ID }}" \
+            '.account_id = $accountId' \
+            wrangler.jsonc > wrangler.local.jsonc
+
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler deploy --config wrangler.local.jsonc --name ibtikar-career-fe-dev

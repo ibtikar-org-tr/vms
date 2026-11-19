@@ -23,6 +23,9 @@ import type {
   AssemblyMember,
   AssemblyAnnouncement,
   AssemblyAnnouncementFailure,
+  EventAnnouncement,
+  EventAnnouncementAudience,
+  EventAnnouncementFailure,
 } from '../types/vms'
 import type {
   ForgotPasswordResponse,
@@ -133,6 +136,13 @@ export async function login(payload: { identifier: string; password: string }): 
 
 export function logout() {
   return logoutRequest()
+}
+
+export function createExternalHandoff(payload: { redirectUri: string; client?: string }) {
+  return apiPostJson<
+    { code: string; redirectUri: string; expiresAt: string },
+    { redirectUri: string; client?: string }
+  >('/external-handoff', payload)
 }
 
 export function forgotPassword(payload: { type: 'email' | 'phone' | 'membership_number'; value: string }) {
@@ -250,6 +260,55 @@ export function retryAssemblyAnnouncement(id: string, channel: 'email' | 'telegr
     { announcement: AssemblyAnnouncement; queued: boolean; needsContinue: boolean },
     { channel: 'email' | 'telegram' }
   >(`/assembly/announcements/${encodeURIComponent(id)}/retry`, { channel })
+}
+
+export function fetchEventAnnouncements(eventId: string) {
+  return fetchJson<{ announcements: EventAnnouncement[]; audience: EventAnnouncementAudience }>(
+    `/events/${encodeURIComponent(eventId)}/announcements`,
+    { cache: false },
+  )
+}
+
+export function createEventAnnouncement(
+  eventId: string,
+  payload: {
+    subject: string
+    body: string
+    sendEmail: boolean
+    sendTelegram: boolean
+  },
+) {
+  return postJson<
+    {
+      announcement: EventAnnouncement
+      queued: boolean
+      needsContinue: boolean
+      audience: EventAnnouncementAudience
+    },
+    typeof payload
+  >(`/events/${encodeURIComponent(eventId)}/announcements`, payload)
+}
+
+export function fetchEventAnnouncement(eventId: string, announcementId: string) {
+  return fetchJson<{
+    announcement: EventAnnouncement
+    failures: EventAnnouncementFailure[]
+    needsContinue: boolean
+  }>(`/events/${encodeURIComponent(eventId)}/announcements/${encodeURIComponent(announcementId)}`, { cache: false })
+}
+
+export function continueEventAnnouncement(eventId: string, announcementId: string) {
+  return postJson<
+    { announcement: EventAnnouncement; queued: boolean; needsContinue: boolean },
+    Record<string, never>
+  >(`/events/${encodeURIComponent(eventId)}/announcements/${encodeURIComponent(announcementId)}/continue`, {})
+}
+
+export function retryEventAnnouncement(eventId: string, announcementId: string, channel: 'email' | 'telegram') {
+  return postJson<
+    { announcement: EventAnnouncement; queued: boolean; needsContinue: boolean },
+    { channel: 'email' | 'telegram' }
+  >(`/events/${encodeURIComponent(eventId)}/announcements/${encodeURIComponent(announcementId)}/retry`, { channel })
 }
 
 export function fetchProfile(membershipNumber: string) {
@@ -1232,6 +1291,34 @@ export async function uploadImages(files: File[]): Promise<{ images: string[] }>
 
   const data = (await response.json()) as { success: boolean; imageUrls: Record<string, string> }
   return { images: Object.values(data.imageUrls) }
+}
+
+export async function uploadProfilePicture(file: File) {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const response = await apiFetch('/profile/picture', {
+    method: 'PUT',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const fallbackMessage = `Upload failed (${response.status})`
+    let message = fallbackMessage
+
+    try {
+      const body = (await response.json()) as { error?: unknown }
+      if (typeof body.error === 'string' && body.error.trim()) {
+        message = body.error
+      }
+    } catch {
+      // Ignore JSON parsing errors and keep fallback message.
+    }
+
+    throw new Error(message)
+  }
+
+  return (await response.json()) as { profilePictureUrl: string }
 }
 
 export async function uploadEventBanner(eventId: string, file: File) {

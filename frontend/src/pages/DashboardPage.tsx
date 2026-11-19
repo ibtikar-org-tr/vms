@@ -25,6 +25,7 @@ import {
   Menu,
   X,
   Megaphone,
+  Puzzle,
 } from 'lucide-react'
 
 interface SidebarItem {
@@ -43,6 +44,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { to: paths.events, label: 'الفعاليات', helper: 'اللقاءات والورش القادمة', icon: CalendarDays },
   { to: paths.clubs, label: 'الأندية', helper: 'استكشاف أندية المشاريع', icon: Shapes },
   { to: paths.volunteering, label: 'التطوع', helper: 'الفرص التطوعية المفتوحة', icon: HeartHandshake },
+  { to: paths.integrations, label: 'التكاملات', helper: 'التطبيقات المرتبطة بالمنصة', icon: Puzzle },
   { to: paths.profile, label: 'الملف الشخصي', helper: 'بياناتك الشخصية', icon: UserCircle },
 ]
 

@@ -1,0 +1,201 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #0f172a;
+  --muted: #475569;
+  --soft: #f8fafc;
+  --line: #e2e8f0;
+  --brand: #0f766e;
+  --brand-dark: #0d9488;
+  --brand-light: #ccfbf1;
+  --brand-ink: #134e4a;
+  --accent: #0075de;
+  --surface: #ffffff;
+  --shadow-sheet: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Tajawal', system-ui, sans-serif;
+  color: var(--ink);
+  direction: rtl;
+  background:
+    radial-gradient(ellipse 80% 50% at 100% -10%, rgba(15, 118, 110, 0.08), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(0, 117, 222, 0.05), transparent 50%),
+    var(--soft);
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: 'Tajawal', system-ui, sans-serif;
+}
+
+@layer components {
+  .panel {
+    border-radius: 1rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-sheet);
+  }
+
+  .field {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .field:focus {
+    border-color: color-mix(in srgb, var(--brand) 55%, white);
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+  }
+
+  .field-readonly {
+    width: 100%;
+    cursor: default;
+    border-radius: 0.75rem;
+    border: 1px solid var(--line);
+    background: #f1f5f9;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    color: #334155;
+  }
+
+  .label {
+    margin-bottom: 0.5rem;
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #334155;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+    background-color: var(--brand);
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+  }
+
+  .btn-primary:hover {
+    background-color: #0d5f59;
+  }
+
+  .btn-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #1e293b;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn-ghost:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+  }
+
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid #fecaca;
+    background: var(--surface);
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #dc2626;
+    transition: background-color 0.15s ease;
+  }
+
+  .btn-danger:hover {
+    background: #fef2f2;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    border: 1px solid #99f6e4;
+    background: var(--brand-light);
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--brand-ink);
+  }
+
+  .section-title {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  @media (min-width: 640px) {
+    .section-title {
+      margin-bottom: 1.25rem;
+      font-size: 1.25rem;
+    }
+  }
+
+  .cv-section-title {
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--brand);
+  }
+}

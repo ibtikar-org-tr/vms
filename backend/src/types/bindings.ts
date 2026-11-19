@@ -128,6 +128,7 @@ export interface QueueMessageBatchLike<T = unknown> {
 
 export interface AssemblyAnnouncementQueueMessage {
   announcementId: string
+  kind?: 'assembly' | 'event'
 }
 
 export interface AppBindings {
@@ -152,7 +153,7 @@ export interface AppBindings {
   AUTHDEEP_MAIL_FROM?: string
   TELEGRAM_MS: string
   FRONTEND_BASE_URL: string
-  /** Comma-separated list of allowed browser origins for CORS. */
+  /** Comma-separated browser origins for CORS and external SSO redirect_uri (Kitchen/Career FE, etc.). */
   CORS_ALLOW_ORIGINS?: string
   INTERNAL_SECRET: string
   JWT_SECRET: string

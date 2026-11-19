@@ -1,0 +1,909 @@
+import type { Environment } from '../types/env'
+import { createId, nowIso } from '../utils/id'
+
+export type OpenJobType = 'full_time' | 'part_time' | 'temp_full_time'
+
+export const OPEN_JOB_TYPES: OpenJobType[] = ['full_time', 'part_time', 'temp_full_time']
+
+export type CareerProfileRow = {
+  membership_number: string
+  headline: string | null
+  summary: string | null
+  is_published: number
+  can_relocate: number
+  relocate_notes: string | null
+  open_job_types: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type WorkLocationRow = {
+  id: string
+  membership_number: string
+  kind: 'remote' | 'country' | string
+  country_name: string | null
+  salary_min: number | null
+  salary_max: number | null
+  currency: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type WorkLocationDto = {
+  kind: 'remote' | 'country'
+  countryName: string | null
+  salaryMin: number | null
+  salaryMax: number | null
+  currency: string
+}
+
+export type WorkPreferencesDto = {
+  canRelocate: boolean
+  relocateNotes: string | null
+  jobTypes: OpenJobType[]
+  locations: WorkLocationDto[]
+}
+
+export type WorkExperienceRow = {
+  id: string
+  membership_number: string
+  company_name: string
+  title: string
+  location: string | null
+  start_date: string | null
+  end_date: string | null
+  is_current: number
+  description: string | null
+  responsibilities: string | null
+  achievements: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type ProjectRow = {
+  id: string
+  membership_number: string
+  name: string
+  role: string | null
+  project_type: string | null
+  company: string | null
+  start_date: string | null
+  end_date: string | null
+  is_ongoing: number
+  tools: string | null
+  responsibilities: string | null
+  outcomes: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type DocumentRow = {
+  id: string
+  membership_number: string
+  kind: string
+  file_name: string
+  content_type: string
+  r2_key: string
+  size_bytes: number
+  created_at: string
+}
+
+const PROFILE_SELECT = `membership_number, headline, summary, is_published,
+  COALESCE(can_relocate, 0) AS can_relocate, relocate_notes, open_job_types, created_at, updated_at`
+
+export function parseOpenJobTypes(raw: string | null | undefined): OpenJobType[] {
+  if (!raw?.trim()) return []
+  const allowed = new Set<string>(OPEN_JOB_TYPES)
+  const seen = new Set<OpenJobType>()
+  for (const part of raw.split(/[,|]/)) {
+    const key = part.trim() as OpenJobType
+    if (allowed.has(key)) seen.add(key)
+  }
+  return OPEN_JOB_TYPES.filter((item) => seen.has(item))
+}
+
+export function serializeOpenJobTypes(types: unknown): string | null {
+  if (!Array.isArray(types)) return null
+  const allowed = new Set<string>(OPEN_JOB_TYPES)
+  const seen = new Set<OpenJobType>()
+  for (const item of types) {
+    const key = String(item || '').trim() as OpenJobType
+    if (allowed.has(key)) seen.add(key)
+  }
+  const ordered = OPEN_JOB_TYPES.filter((item) => seen.has(item))
+  return ordered.length ? ordered.join(',') : null
+}
+
+export async function ensureCareerProfile(
+  env: Environment,
+  membershipNumber: string,
+): Promise<CareerProfileRow> {
+  const existing = await env.D1_DB.prepare(
+    `SELECT ${PROFILE_SELECT}
+     FROM career_profiles WHERE membership_number = ? LIMIT 1`,
+  )
+    .bind(membershipNumber)
+    .first<CareerProfileRow>()
+
+  if (existing) return existing
+
+  const stamp = nowIso()
+  await env.D1_DB.prepare(
+    `INSERT INTO career_profiles (membership_number, headline, summary, is_published, created_at, updated_at)
+     VALUES (?, NULL, NULL, 0, ?, ?)`,
+  )
+    .bind(membershipNumber, stamp, stamp)
+    .run()
+
+  return {
+    membership_number: membershipNumber,
+    headline: null,
+    summary: null,
+    is_published: 0,
+    can_relocate: 0,
+    relocate_notes: null,
+    open_job_types: null,
+    created_at: stamp,
+    updated_at: stamp,
+  }
+}
+
+export async function updateCareerProfile(
+  env: Environment,
+  membershipNumber: string,
+  patch: {
+    headline?: string | null
+    summary?: string | null
+    is_published?: boolean
+    can_relocate?: boolean
+    relocate_notes?: string | null
+    open_job_types?: OpenJobType[] | string | null
+  },
+): Promise<CareerProfileRow> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+
+  const current = await env.D1_DB.prepare(
+    `SELECT ${PROFILE_SELECT}
+     FROM career_profiles WHERE membership_number = ?`,
+  )
+    .bind(membershipNumber)
+    .first<CareerProfileRow>()
+
+  if (!current) {
+    throw new Error('profile missing after ensure')
+  }
+
+  const headline = patch.headline !== undefined ? patch.headline : current.headline
+  const summary = patch.summary !== undefined ? patch.summary : current.summary
+  const isPublished =
+    patch.is_published !== undefined ? (patch.is_published ? 1 : 0) : current.is_published
+  const canRelocate =
+    patch.can_relocate !== undefined ? (patch.can_relocate ? 1 : 0) : current.can_relocate
+  const relocateNotes =
+    patch.relocate_notes !== undefined
+      ? patch.relocate_notes?.trim() || null
+      : current.relocate_notes
+  const openJobTypes =
+    patch.open_job_types !== undefined
+      ? typeof patch.open_job_types === 'string'
+        ? serializeOpenJobTypes(parseOpenJobTypes(patch.open_job_types))
+        : serializeOpenJobTypes(patch.open_job_types)
+      : current.open_job_types
+
+  await env.D1_DB.prepare(
+    `UPDATE career_profiles
+     SET headline = ?, summary = ?, is_published = ?, can_relocate = ?, relocate_notes = ?, open_job_types = ?, updated_at = ?
+     WHERE membership_number = ?`,
+  )
+    .bind(
+      headline,
+      summary,
+      isPublished,
+      canRelocate,
+      relocateNotes,
+      openJobTypes,
+      stamp,
+      membershipNumber,
+    )
+    .run()
+
+  return {
+    ...current,
+    headline,
+    summary,
+    is_published: isPublished,
+    can_relocate: canRelocate,
+    relocate_notes: relocateNotes,
+    open_job_types: openJobTypes,
+    updated_at: stamp,
+  }
+}
+
+export async function listWorkExperiences(
+  env: Environment,
+  membershipNumber: string,
+): Promise<WorkExperienceRow[]> {
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM work_experiences
+     WHERE membership_number = ?
+     ORDER BY sort_order ASC, start_date DESC, created_at DESC`,
+  )
+    .bind(membershipNumber)
+    .all<WorkExperienceRow>()
+  return result.results ?? []
+}
+
+export async function createWorkExperience(
+  env: Environment,
+  membershipNumber: string,
+  input: {
+    company_name: string
+    title: string
+    location?: string | null
+    start_date?: string | null
+    end_date?: string | null
+    is_current?: boolean
+    description?: string | null
+    responsibilities?: string | null
+    achievements?: string | null
+    sort_order?: number
+  },
+): Promise<WorkExperienceRow> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+  const id = createId('wx')
+  const responsibilities = input.responsibilities?.trim() || null
+  const description = input.description?.trim() || responsibilities
+  const row: WorkExperienceRow = {
+    id,
+    membership_number: membershipNumber,
+    company_name: input.company_name.trim(),
+    title: input.title.trim(),
+    location: input.location?.trim() || null,
+    start_date: input.start_date?.trim() || null,
+    end_date: input.end_date?.trim() || null,
+    is_current: input.is_current ? 1 : 0,
+    description,
+    responsibilities,
+    achievements: input.achievements?.trim() || null,
+    sort_order: input.sort_order ?? 0,
+    created_at: stamp,
+    updated_at: stamp,
+  }
+
+  await env.D1_DB.prepare(
+    `INSERT INTO work_experiences
+     (id, membership_number, company_name, title, location, start_date, end_date, is_current, description, responsibilities, achievements, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      row.id,
+      row.membership_number,
+      row.company_name,
+      row.title,
+      row.location,
+      row.start_date,
+      row.end_date,
+      row.is_current,
+      row.description,
+      row.responsibilities,
+      row.achievements,
+      row.sort_order,
+      row.created_at,
+      row.updated_at,
+    )
+    .run()
+
+  return row
+}
+
+export async function updateWorkExperience(
+  env: Environment,
+  membershipNumber: string,
+  id: string,
+  input: Partial<{
+    company_name: string
+    title: string
+    location: string | null
+    start_date: string | null
+    end_date: string | null
+    is_current: boolean
+    description: string | null
+    responsibilities: string | null
+    achievements: string | null
+    sort_order: number
+  }>,
+): Promise<WorkExperienceRow | null> {
+  const existing = await env.D1_DB.prepare(
+    `SELECT * FROM work_experiences WHERE id = ? AND membership_number = ? LIMIT 1`,
+  )
+    .bind(id, membershipNumber)
+    .first<WorkExperienceRow>()
+  if (!existing) return null
+
+  const stamp = nowIso()
+  const responsibilities =
+    input.responsibilities !== undefined
+      ? input.responsibilities?.trim() || null
+      : existing.responsibilities ?? null
+  const description =
+    input.description !== undefined
+      ? input.description?.trim() || null
+      : responsibilities || existing.description
+  const row: WorkExperienceRow = {
+    ...existing,
+    company_name: input.company_name?.trim() ?? existing.company_name,
+    title: input.title?.trim() ?? existing.title,
+    location: input.location !== undefined ? input.location?.trim() || null : existing.location,
+    start_date: input.start_date !== undefined ? input.start_date?.trim() || null : existing.start_date,
+    end_date: input.end_date !== undefined ? input.end_date?.trim() || null : existing.end_date,
+    is_current: input.is_current !== undefined ? (input.is_current ? 1 : 0) : existing.is_current,
+    description,
+    responsibilities,
+    achievements:
+      input.achievements !== undefined
+        ? input.achievements?.trim() || null
+        : existing.achievements ?? null,
+    sort_order: input.sort_order ?? existing.sort_order,
+    updated_at: stamp,
+  }
+
+  await env.D1_DB.prepare(
+    `UPDATE work_experiences
+     SET company_name = ?, title = ?, location = ?, start_date = ?, end_date = ?,
+         is_current = ?, description = ?, responsibilities = ?, achievements = ?, sort_order = ?, updated_at = ?
+     WHERE id = ? AND membership_number = ?`,
+  )
+    .bind(
+      row.company_name,
+      row.title,
+      row.location,
+      row.start_date,
+      row.end_date,
+      row.is_current,
+      row.description,
+      row.responsibilities,
+      row.achievements,
+      row.sort_order,
+      row.updated_at,
+      id,
+      membershipNumber,
+    )
+    .run()
+
+  return row
+}
+
+export async function deleteWorkExperience(
+  env: Environment,
+  membershipNumber: string,
+  id: string,
+): Promise<boolean> {
+  const result = await env.D1_DB.prepare(
+    `DELETE FROM work_experiences WHERE id = ? AND membership_number = ?`,
+  )
+    .bind(id, membershipNumber)
+    .run()
+  return (result.meta?.changes ?? 0) > 0
+}
+
+export async function listDocuments(
+  env: Environment,
+  membershipNumber: string,
+): Promise<DocumentRow[]> {
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM documents WHERE membership_number = ? ORDER BY created_at DESC`,
+  )
+    .bind(membershipNumber)
+    .all<DocumentRow>()
+  return result.results ?? []
+}
+
+export async function createDocument(
+  env: Environment,
+  membershipNumber: string,
+  input: {
+    kind: string
+    file_name: string
+    content_type: string
+    r2_key: string
+    size_bytes: number
+  },
+): Promise<DocumentRow> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+  const row: DocumentRow = {
+    id: createId('doc'),
+    membership_number: membershipNumber,
+    kind: input.kind,
+    file_name: input.file_name,
+    content_type: input.content_type,
+    r2_key: input.r2_key,
+    size_bytes: input.size_bytes,
+    created_at: stamp,
+  }
+
+  await env.D1_DB.prepare(
+    `INSERT INTO documents (id, membership_number, kind, file_name, content_type, r2_key, size_bytes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      row.id,
+      row.membership_number,
+      row.kind,
+      row.file_name,
+      row.content_type,
+      row.r2_key,
+      row.size_bytes,
+      row.created_at,
+    )
+    .run()
+
+  return row
+}
+
+export async function getDocument(
+  env: Environment,
+  membershipNumber: string,
+  id: string,
+): Promise<DocumentRow | null> {
+  return env.D1_DB.prepare(
+    `SELECT * FROM documents WHERE id = ? AND membership_number = ? LIMIT 1`,
+  )
+    .bind(id, membershipNumber)
+    .first<DocumentRow>()
+}
+
+export async function deleteDocument(
+  env: Environment,
+  membershipNumber: string,
+  id: string,
+): Promise<DocumentRow | null> {
+  const existing = await getDocument(env, membershipNumber, id)
+  if (!existing) return null
+  await env.D1_DB.prepare(`DELETE FROM documents WHERE id = ? AND membership_number = ?`)
+    .bind(id, membershipNumber)
+    .run()
+  return existing
+}
+
+export async function searchPublishedProfiles(
+  env: Environment,
+  query: string | undefined,
+  limit = 50,
+): Promise<CareerProfileRow[]> {
+  const needle = query?.trim()
+  if (!needle) {
+    const result = await env.D1_DB.prepare(
+      `SELECT * FROM career_profiles WHERE is_published = 1 ORDER BY updated_at DESC LIMIT ?`,
+    )
+      .bind(limit)
+      .all<CareerProfileRow>()
+    return result.results ?? []
+  }
+
+  const like = `%${needle.replace(/[%_]/g, '')}%`
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM career_profiles
+     WHERE is_published = 1
+       AND (COALESCE(headline, '') LIKE ? OR COALESCE(summary, '') LIKE ? OR membership_number LIKE ?)
+     ORDER BY updated_at DESC
+     LIMIT ?`,
+  )
+    .bind(like, like, like, limit)
+    .all<CareerProfileRow>()
+  return result.results ?? []
+}
+
+export async function getPublishedProfile(
+  env: Environment,
+  membershipNumber: string,
+): Promise<CareerProfileRow | null> {
+  return env.D1_DB.prepare(
+    `SELECT * FROM career_profiles WHERE membership_number = ? AND is_published = 1 LIMIT 1`,
+  )
+    .bind(membershipNumber)
+    .first<CareerProfileRow>()
+}
+
+export async function listProjects(
+  env: Environment,
+  membershipNumber: string,
+): Promise<ProjectRow[]> {
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM projects
+     WHERE membership_number = ?
+     ORDER BY sort_order ASC, start_date DESC, created_at DESC`,
+  )
+    .bind(membershipNumber)
+    .all<ProjectRow>()
+  return result.results ?? []
+}
+
+export async function createProject(
+  env: Environment,
+  membershipNumber: string,
+  input: {
+    name: string
+    role?: string | null
+    project_type?: string | null
+    company?: string | null
+    start_date?: string | null
+    end_date?: string | null
+    is_ongoing?: boolean
+    tools?: string | null
+    responsibilities?: string | null
+    outcomes?: string | null
+    sort_order?: number
+  },
+): Promise<ProjectRow> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+  const row: ProjectRow = {
+    id: createId('prj'),
+    membership_number: membershipNumber,
+    name: input.name.trim(),
+    role: input.role?.trim() || null,
+    project_type: input.project_type?.trim() || null,
+    company: input.company?.trim() || null,
+    start_date: input.start_date?.trim() || null,
+    end_date: input.end_date?.trim() || null,
+    is_ongoing: input.is_ongoing ? 1 : 0,
+    tools: input.tools?.trim() || null,
+    responsibilities: input.responsibilities?.trim() || null,
+    outcomes: input.outcomes?.trim() || null,
+    sort_order: input.sort_order ?? 0,
+    created_at: stamp,
+    updated_at: stamp,
+  }
+
+  await env.D1_DB.prepare(
+    `INSERT INTO projects
+     (id, membership_number, name, role, project_type, company, start_date, end_date, is_ongoing, tools, responsibilities, outcomes, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      row.id,
+      row.membership_number,
+      row.name,
+      row.role,
+      row.project_type,
+      row.company,
+      row.start_date,
+      row.end_date,
+      row.is_ongoing,
+      row.tools,
+      row.responsibilities,
+      row.outcomes,
+      row.sort_order,
+      row.created_at,
+      row.updated_at,
+    )
+    .run()
+
+  return row
+}
+
+export async function deleteProject(
+  env: Environment,
+  membershipNumber: string,
+  id: string,
+): Promise<boolean> {
+  const result = await env.D1_DB.prepare(
+    `DELETE FROM projects WHERE id = ? AND membership_number = ?`,
+  )
+    .bind(id, membershipNumber)
+    .run()
+  return (result.meta?.changes ?? 0) > 0
+}
+
+export async function hasAppliedToCompanyJob(
+  env: Environment,
+  membershipNumber: string,
+  companyId: string,
+): Promise<boolean> {
+  const row = await env.D1_DB.prepare(
+    `SELECT a.id
+     FROM applications a
+     JOIN jobs j ON j.id = a.job_id
+     WHERE a.membership_number = ? AND j.company_id = ?
+     LIMIT 1`,
+  )
+    .bind(membershipNumber, companyId)
+    .first<{ id: string }>()
+  return Boolean(row)
+}
+
+export type ProfileLanguageRow = {
+  id: string
+  membership_number: string
+  language_name: string
+  proficiency: number | null
+  open_to_translate: number
+  created_at: string
+  updated_at: string
+}
+
+export type ProfileLanguageDto = {
+  language: string
+  proficiency: number | null
+  openToTranslate: boolean
+}
+
+export async function listProfileLanguages(
+  env: Environment,
+  membershipNumber: string,
+): Promise<ProfileLanguageRow[]> {
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM profile_languages
+     WHERE membership_number = ?
+     ORDER BY language_name COLLATE NOCASE ASC`,
+  )
+    .bind(membershipNumber)
+    .all<ProfileLanguageRow>()
+  return result.results ?? []
+}
+
+function clampProficiency(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return null
+  return Math.min(10, Math.max(1, Math.round(n)))
+}
+
+/** Replace saved language prefs for names present in `items`. Drops prefs for languages no longer listed. */
+export async function replaceProfileLanguages(
+  env: Environment,
+  membershipNumber: string,
+  items: Array<{ language: string; proficiency?: number | null; openToTranslate?: boolean }>,
+): Promise<ProfileLanguageDto[]> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+
+  const normalized = items
+    .map((item) => ({
+      language: String(item.language || '').trim(),
+      proficiency: clampProficiency(item.proficiency),
+      openToTranslate: Boolean(item.openToTranslate),
+    }))
+    .filter((item) => item.language.length > 0)
+
+  // Deduplicate by case-insensitive name (keep last)
+  const byKey = new Map<string, (typeof normalized)[number]>()
+  for (const item of normalized) {
+    byKey.set(item.language.toLowerCase(), item)
+  }
+  const unique = [...byKey.values()]
+
+  await env.D1_DB.prepare(`DELETE FROM profile_languages WHERE membership_number = ?`)
+    .bind(membershipNumber)
+    .run()
+
+  for (const item of unique) {
+    await env.D1_DB.prepare(
+      `INSERT INTO profile_languages
+       (id, membership_number, language_name, proficiency, open_to_translate, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        createId(),
+        membershipNumber,
+        item.language,
+        item.proficiency,
+        item.openToTranslate ? 1 : 0,
+        stamp,
+        stamp,
+      )
+      .run()
+  }
+
+  return unique.map((item) => ({
+    language: item.language,
+    proficiency: item.proficiency,
+    openToTranslate: item.openToTranslate,
+  }))
+}
+
+export function mergeLanguagePreferences(
+  vmsLanguagesCsv: string | null | undefined,
+  rows: ProfileLanguageRow[],
+): ProfileLanguageDto[] {
+  const fromVms = (vmsLanguagesCsv || '')
+    .split(/[,،\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  const prefs = new Map(
+    rows.map((row) => [
+      row.language_name.toLowerCase(),
+      {
+        language: row.language_name,
+        proficiency: row.proficiency,
+        openToTranslate: row.open_to_translate === 1,
+      } satisfies ProfileLanguageDto,
+    ]),
+  )
+
+  const seen = new Set<string>()
+  const merged: ProfileLanguageDto[] = []
+
+  for (const name of fromVms) {
+    const key = name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const pref = prefs.get(key)
+    merged.push(
+      pref
+        ? { ...pref, language: name }
+        : { language: name, proficiency: null, openToTranslate: false },
+    )
+  }
+
+  // Keep orphan prefs for languages removed from VMS so the member can still edit/clear them
+  for (const row of rows) {
+    const key = row.language_name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push({
+      language: row.language_name,
+      proficiency: row.proficiency,
+      openToTranslate: row.open_to_translate === 1,
+    })
+  }
+
+  return merged
+}
+
+function toIntOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, Math.round(n))
+}
+
+export async function listWorkLocations(
+  env: Environment,
+  membershipNumber: string,
+): Promise<WorkLocationRow[]> {
+  const result = await env.D1_DB.prepare(
+    `SELECT * FROM work_locations
+     WHERE membership_number = ?
+     ORDER BY CASE WHEN kind = 'remote' THEN 0 ELSE 1 END, sort_order ASC, country_name COLLATE NOCASE ASC`,
+  )
+    .bind(membershipNumber)
+    .all<WorkLocationRow>()
+  return result.results ?? []
+}
+
+export function workLocationsToDto(rows: WorkLocationRow[]): WorkLocationDto[] {
+  return rows.map((row) => ({
+    kind: row.kind === 'remote' ? 'remote' : 'country',
+    countryName: row.kind === 'remote' ? null : row.country_name,
+    salaryMin: row.salary_min,
+    salaryMax: row.salary_max,
+    currency: row.currency || 'USD',
+  }))
+}
+
+export async function getWorkPreferences(
+  env: Environment,
+  membershipNumber: string,
+): Promise<WorkPreferencesDto> {
+  const profile = await ensureCareerProfile(env, membershipNumber)
+  const locations = workLocationsToDto(await listWorkLocations(env, membershipNumber))
+  return {
+    canRelocate: profile.can_relocate === 1,
+    relocateNotes: profile.relocate_notes,
+    jobTypes: parseOpenJobTypes(profile.open_job_types),
+    locations,
+  }
+}
+
+export async function replaceWorkPreferences(
+  env: Environment,
+  membershipNumber: string,
+  input: {
+    canRelocate?: boolean
+    relocateNotes?: string | null
+    jobTypes?: OpenJobType[] | string[] | null
+    locations?: Array<{
+      kind?: string
+      countryName?: string | null
+      salaryMin?: number | null
+      salaryMax?: number | null
+      currency?: string | null
+    }>
+  },
+): Promise<WorkPreferencesDto> {
+  await ensureCareerProfile(env, membershipNumber)
+  const stamp = nowIso()
+
+  if (
+    input.canRelocate !== undefined ||
+    input.relocateNotes !== undefined ||
+    input.jobTypes !== undefined
+  ) {
+    await updateCareerProfile(env, membershipNumber, {
+      can_relocate: input.canRelocate,
+      relocate_notes: input.relocateNotes,
+      open_job_types: input.jobTypes as OpenJobType[] | null | undefined,
+    })
+  }
+
+  if (Array.isArray(input.locations)) {
+    const normalized: WorkLocationDto[] = []
+    let hasRemote = false
+
+    for (const item of input.locations) {
+      const kind = item.kind === 'remote' ? 'remote' : 'country'
+      if (kind === 'remote') {
+        if (hasRemote) continue
+        hasRemote = true
+        normalized.push({
+          kind: 'remote',
+          countryName: null,
+          salaryMin: toIntOrNull(item.salaryMin),
+          salaryMax: toIntOrNull(item.salaryMax),
+          currency: (item.currency || 'USD').trim().toUpperCase().slice(0, 8) || 'USD',
+        })
+        continue
+      }
+
+      const countryName = String(item.countryName || '').trim()
+      if (!countryName) continue
+      if (
+        normalized.some(
+          (loc) => loc.kind === 'country' && loc.countryName?.toLowerCase() === countryName.toLowerCase(),
+        )
+      ) {
+        continue
+      }
+      normalized.push({
+        kind: 'country',
+        countryName,
+        salaryMin: toIntOrNull(item.salaryMin),
+        salaryMax: toIntOrNull(item.salaryMax),
+        currency: (item.currency || 'USD').trim().toUpperCase().slice(0, 8) || 'USD',
+      })
+    }
+
+    // Remote always first
+    normalized.sort((a, b) => {
+      if (a.kind === 'remote' && b.kind !== 'remote') return -1
+      if (a.kind !== 'remote' && b.kind === 'remote') return 1
+      return (a.countryName || '').localeCompare(b.countryName || '', 'ar')
+    })
+
+    await env.D1_DB.prepare(`DELETE FROM work_locations WHERE membership_number = ?`)
+      .bind(membershipNumber)
+      .run()
+
+    let order = 0
+    for (const loc of normalized) {
+      await env.D1_DB.prepare(
+        `INSERT INTO work_locations
+         (id, membership_number, kind, country_name, salary_min, salary_max, currency, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          createId(),
+          membershipNumber,
+          loc.kind,
+          loc.countryName,
+          loc.salaryMin,
+          loc.salaryMax,
+          loc.currency,
+          order++,
+          stamp,
+          stamp,
+        )
+        .run()
+    }
+  }
+
+  return getWorkPreferences(env, membershipNumber)
+}

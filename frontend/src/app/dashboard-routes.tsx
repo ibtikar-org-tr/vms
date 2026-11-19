@@ -28,6 +28,14 @@ export const dashboardRouteChildren: RouteObject[] = [
     lazy: lazyRoute(() => import('../pages/dashboard/DashboardAssemblyPage'), 'DashboardAssemblyPage'),
   },
   {
+    path: 'integrations',
+    hydrateFallbackElement: <div />,
+    lazy: lazyRoute(
+      () => import('../pages/dashboard/DashboardIntegrationsPage'),
+      'DashboardIntegrationsPage',
+    ),
+  },
+  {
     path: 'projects',
     hydrateFallbackElement: <div />,
     lazy: lazyRoute(() => import('../pages/dashboard/DashboardProjectsPage'), 'DashboardProjectsPage'),

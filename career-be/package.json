@@ -1,0 +1,17 @@
+{
+  "name": "career-be",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --persist-to ../backend/.wrangler/state",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "db:migrate:local": "wrangler d1 migrations apply ibtikar-career --local --persist-to ../backend/.wrangler/state",
+    "db:migrate:remote": "wrangler d1 migrations apply ibtikar-career --remote"
+  },
+  "dependencies": {
+    "hono": "^4.11.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.4.0"
+  }
+}

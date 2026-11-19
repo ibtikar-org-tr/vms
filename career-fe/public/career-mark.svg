@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="المسار المهني">
+  <!-- Ink slate ground — reads as a seal, not a VMS crest -->
+  <rect width="128" height="128" rx="30" fill="#0f172a"/>
+
+  <!-- Folio / CV page -->
+  <rect x="34" y="26" width="60" height="76" rx="10" fill="#f8fafc"/>
+  <!-- Folded corner -->
+  <path d="M78 26 V42 H94 Z" fill="#cbd5e1"/>
+  <path d="M78 26 V42 H94 L78 26 Z" fill="#e2e8f0"/>
+
+  <!-- Text lines -->
+  <rect x="46" y="44" width="36" height="5" rx="2.5" fill="#94a3b8"/>
+  <rect x="46" y="56" width="28" height="4.5" rx="2.25" fill="#cbd5e1"/>
+  <rect x="46" y="66" width="32" height="4.5" rx="2.25" fill="#cbd5e1"/>
+  <rect x="46" y="76" width="20" height="4.5" rx="2.25" fill="#cbd5e1"/>
+
+  <!-- Ascent stroke cutting across the page -->
+  <path
+    d="M42 94 L62 70 L74 78 L96 44"
+    fill="none"
+    stroke="#0f766e"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Destination node -->
+  <circle cx="96" cy="44" r="9" fill="#0f766e"/>
+  <circle cx="96" cy="44" r="3.8" fill="#ecfeff"/>
+</svg>
