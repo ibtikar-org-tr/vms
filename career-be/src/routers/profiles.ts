@@ -368,10 +368,12 @@ profilesRouter.get('/discover', async (c) => {
   for (const profile of profiles) {
     const vmsProfile = await fetchVmsPartnerProfile(c.env, profile.membership_number)
     const work = await listWorkExperiences(c.env, profile.membership_number)
+    const workPreferences = await getWorkPreferences(c.env, profile.membership_number)
     const latestRole = work.find((item) => item.is_current)?.title || work[0]?.title || null
     enriched.push({
       profile,
       latestRole,
+      workPreferences,
       vmsProfile: vmsProfile
         ? {
             membershipNumber: vmsProfile.membershipNumber,
@@ -381,6 +383,7 @@ profilesRouter.get('/discover', async (c) => {
             school: vmsProfile.school,
             fieldOfStudy: vmsProfile.fieldOfStudy,
             skills: vmsProfile.skills,
+            languages: vmsProfile.languages,
             profilePictureUrl: vmsProfile.profilePictureUrl,
             sex: vmsProfile.sex,
             dateOfBirth: vmsProfile.dateOfBirth,
