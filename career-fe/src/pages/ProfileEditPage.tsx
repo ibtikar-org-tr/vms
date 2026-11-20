@@ -12,6 +12,7 @@ import {
   ListChecks,
   MapPinned,
   Pencil,
+  RotateCcw,
   Save,
   Trash2,
   User,
@@ -97,7 +98,7 @@ export default function ProfileEditPage() {
   const [baseline, setBaseline] = useState<ProfileDraftSnapshot | null>(null)
   const [changelogOpen, setChangelogOpen] = useState(false)
   const [changelogEntries, setChangelogEntries] = useState<ChangelogEntry[]>([])
-  const [pendingAction, setPendingAction] = useState<'save' | 'publish' | 'review' | null>(null)
+  const [pendingAction, setPendingAction] = useState<'save' | 'review' | null>(null)
   const [saving, setSaving] = useState(false)
   const [editSection, setEditSection] = useState<EditSection>('profile')
   const [draftReady, setDraftReady] = useState(false)
@@ -178,14 +179,10 @@ export default function ProfileEditPage() {
       workPreferences: workPrefs,
     })
 
-  const openChangelog = (action: 'save' | 'publish' | 'review') => {
+  const openChangelog = (action: 'save' | 'review') => {
     if (!baseline) return
     const entries = buildProfileChangelog(baseline, currentDraft())
     if (!entries.length) {
-      if (action === 'publish') {
-        void commitChanges(action)
-        return
-      }
       toast(action === 'review' ? 'لا توجد تعديلات حالياً' : 'لا توجد تغييرات للحفظ')
       return
     }
@@ -195,7 +192,7 @@ export default function ProfileEditPage() {
   }
 
   const commitChanges = async (
-    action: 'save' | 'publish' | 'review' = pendingAction || 'save',
+    action: 'save' | 'review' = pendingAction || 'save',
   ) => {
     if (action === 'review') {
       setChangelogOpen(false)
@@ -204,12 +201,7 @@ export default function ProfileEditPage() {
     }
     setSaving(true)
     try {
-      const publishNext =
-        action === 'publish' ? !data?.profile?.is_published : undefined
-      await profilesApi.updateMe({
-        summary,
-        ...(publishNext === undefined ? {} : { is_published: publishNext }),
-      })
+      await profilesApi.updateMe({ summary })
       await profilesApi.updateLanguages(languagePrefs)
       await profilesApi.updateWorkPreferences({
         canRelocate: workPrefs.canRelocate,
@@ -217,13 +209,7 @@ export default function ProfileEditPage() {
         jobTypes: workPrefs.jobTypes,
         locations: workPrefs.locations,
       })
-      if (action === 'publish') {
-        toast.success(
-          publishNext ? 'تم نشر السيرة' : 'تم إلغاء النشر',
-        )
-      } else {
-        toast.success('تم حفظ السيرة')
-      }
+      toast.success('تم حفظ السيرة')
       const membershipNumber = String(data?.profile?.membership_number || '')
       if (membershipNumber) clearCvEditDraft(membershipNumber)
       setChangelogOpen(false)
@@ -268,6 +254,11 @@ export default function ProfileEditPage() {
     setDraftRestoredAt(null)
   }
 
+  const discardChanges = () => {
+    discardLocalDraft()
+    toast.success('تم تجاهل التعديلات')
+  }
+
   const skills = useMemo(() => splitCsv(data?.vmsProfile?.skills), [data])
   const interests = useMemo(() => splitCsv(data?.vmsProfile?.interests), [data])
   const availableSkills: SkillOption[] = useMemo(() => {
@@ -281,6 +272,18 @@ export default function ProfileEditPage() {
     return [...fromMember, ...fromCsv]
   }, [data, skills])
 
+  const hasUnsavedChanges = useMemo(() => {
+    if (!baseline || !draftReady) return false
+    return draftsDiffer(
+      baseline,
+      snapshotFromDraft({
+        summary,
+        languages: languagePrefs,
+        workPreferences: workPrefs,
+      }),
+    )
+  }, [baseline, draftReady, languagePrefs, summary, workPrefs])
+
   const saveProfile = (event?: FormEvent) => {
     event?.preventDefault()
     openChangelog('save')
@@ -288,10 +291,6 @@ export default function ProfileEditPage() {
 
   const reviewChanges = () => {
     openChangelog('review')
-  }
-
-  const togglePublish = () => {
-    openChangelog('publish')
   }
 
   const updateLanguage = (language: string, patch: Partial<LanguagePref>) => {
@@ -406,7 +405,7 @@ export default function ProfileEditPage() {
           </p>
         </div>
         <span className={`status-pill ${data.profile.is_published ? 'is-live' : 'is-draft'}`}>
-          {data.profile.is_published ? 'منشورة' : 'مسودة'}
+          {data.profile.is_published ? 'عامة' : 'خاصة'}
         </span>
       </div>
 
@@ -938,9 +937,17 @@ export default function ProfileEditPage() {
             <ListChecks className="h-4 w-4" />
             عرض التعديلات
           </button>
-          <button type="button" className="btn-ghost" disabled={saving} onClick={() => togglePublish()}>
-            {data.profile.is_published ? 'إلغاء النشر' : 'نشر السيرة للمراجعة'}
-          </button>
+          {hasUnsavedChanges ? (
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={saving}
+              onClick={() => discardChanges()}
+            >
+              <RotateCcw className="h-4 w-4" />
+              تجاهل التعديلات
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn-ghost ms-auto"
@@ -1013,15 +1020,7 @@ export default function ProfileEditPage() {
         entries={changelogEntries}
         saving={saving}
         reviewOnly={pendingAction === 'review'}
-        confirmLabel={
-          pendingAction === 'review'
-            ? 'إغلاق'
-            : pendingAction === 'publish'
-              ? data.profile.is_published
-                ? 'تأكيد إلغاء النشر'
-                : 'تأكيد النشر والحفظ'
-              : 'تأكيد الحفظ'
-        }
+        confirmLabel={pendingAction === 'review' ? 'إغلاق' : 'تأكيد الحفظ'}
         onCancel={() => {
           if (saving) return
           setChangelogOpen(false)

@@ -8,6 +8,7 @@ import { authDownloadHeaders, profilesApi } from '../services/api'
 
 export default function ProfilePage() {
   const [data, setData] = useState<any>(null)
+  const [publishing, setPublishing] = useState(false)
 
   useEffect(() => {
     void profilesApi
@@ -15,6 +16,36 @@ export default function ProfilePage() {
       .then(setData)
       .catch(() => toast.error('تعذّر تحميل السيرة'))
   }, [])
+
+  const setPublic = async (next: boolean) => {
+    if (!data || publishing) return
+    const previous = Boolean(data.profile?.is_published)
+    setPublishing(true)
+    setData((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            profile: { ...prev.profile, is_published: next },
+          }
+        : prev,
+    )
+    try {
+      await profilesApi.updateMe({ is_published: next })
+      toast.success(next ? 'أصبحت السيرة عامة' : 'أصبحت السيرة خاصة')
+    } catch {
+      setData((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              profile: { ...prev.profile, is_published: previous },
+            }
+          : prev,
+      )
+      toast.error('تعذّر تحديث حالة السيرة')
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   if (!data) {
     return (
@@ -26,6 +57,7 @@ export default function ProfilePage() {
   }
 
   const displayName = displayNameOf(data)
+  const isPublic = Boolean(data.profile.is_published)
 
   return (
     <div className="space-y-5">
@@ -33,12 +65,37 @@ export default function ProfilePage() {
         <div>
           <p className="page-kicker">سيرتي</p>
           <h1 className="page-title">{displayName}</h1>
-          <p className="page-desc">معاينة سيرتك المهنية كما تظهر للمراجعة.</p>
+          <p className="page-desc">
+            معاينة سيرتك المهنية. السيرة خاصة افتراضياً حتى تفعّل الظهور العام.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <span className={`status-pill ${data.profile.is_published ? 'is-live' : 'is-draft'}`}>
-            {data.profile.is_published ? 'منشورة' : 'مسودة'}
-          </span>
+          <div
+            className={`inline-flex items-center gap-3 rounded-md border border-line bg-white px-3 py-2 ${
+              publishing ? 'opacity-60' : ''
+            }`}
+          >
+            <span className="text-sm font-semibold text-slate-700">
+              {isPublic ? 'سيرة عامة' : 'سيرة خاصة'}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isPublic}
+              aria-label={isPublic ? 'جعل السيرة خاصة' : 'جعل السيرة عامة'}
+              disabled={publishing}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                isPublic ? 'bg-brand' : 'bg-slate-300'
+              }`}
+              onClick={() => void setPublic(!isPublic)}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[inset-inline-start] ${
+                  isPublic ? 'start-[1.375rem]' : 'start-0.5'
+                }`}
+              />
+            </button>
+          </div>
           <Link to="/profile/edit" className="btn-primary">
             <Pencil className="h-4 w-4" />
             تعديل السيرة

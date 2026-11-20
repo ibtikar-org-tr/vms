@@ -196,8 +196,8 @@ export default function TalentPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="page-kicker">اكتشاف</p>
-          <h1 className="page-title">السير المنشورة</h1>
-          <p className="page-desc">للمراجعة اليدوية من فريق إبتكار.</p>
+          <h1 className="page-title">السير العامة</h1>
+          <p className="page-desc">تصفح السير التي اختار أصحابها جعلها عامة.</p>
         </div>
         <p className="text-sm text-muted">
           {loading ? 'جاري التحميل…' : `${filtered.length} من ${profiles.length} سيرة`}

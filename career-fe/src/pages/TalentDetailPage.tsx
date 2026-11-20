@@ -33,7 +33,7 @@ export default function TalentDetailPage() {
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-brand"
       >
         <ArrowRight className="h-4 w-4" />
-        العودة للسير المنشورة
+        العودة للسير العامة
       </Link>
 
       <CvDocument

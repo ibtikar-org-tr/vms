@@ -56,7 +56,7 @@ export default function Home() {
                 تعديل السيرة
               </Link>
               <Link to="/talent" className="btn-ghost">
-                تصفح السير المنشورة
+                تصفح السير العامة
               </Link>
             </>
           ) : (
