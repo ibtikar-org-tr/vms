@@ -15,6 +15,8 @@ import {
   UserRound,
 } from 'lucide-react'
 import { CvSectionMap, type CvMapItem } from './CvSectionMap'
+import { FileTypeIcon } from './FileTypeIcon'
+import { documentKindLabel } from '../lib/file-icons'
 import {
   displayNameOf,
   formatBirthDate,
@@ -89,6 +91,8 @@ export type CvDocumentData = {
     id: string
     file_name: string
     kind?: string
+    content_type?: string | null
+    size_bytes?: number | null
   }>
   languages?: Array<{
     language: string
@@ -659,16 +663,23 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                     key={doc.id}
                     className="flex items-center justify-between gap-3 px-4 py-3"
                   >
-                    <div>
-                      <p className="font-semibold text-ink">{doc.file_name}</p>
-                      <p className="text-xs text-slate-500">
-                        {doc.kind === 'cv' ? 'سيرة ذاتية' : 'ملف أعمال'}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <FileTypeIcon
+                        fileName={doc.file_name}
+                        contentType={doc.content_type}
+                        size="sm"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-ink" title={doc.file_name}>
+                          {doc.file_name}
+                        </p>
+                        <p className="text-xs text-slate-500">{documentKindLabel(doc.kind)}</p>
+                      </div>
                     </div>
                     {onDownloadDocument ? (
                       <button
                         type="button"
-                        className="btn-ghost py-1.5 text-xs"
+                        className="btn-ghost shrink-0 py-1.5 text-xs"
                         onClick={() => onDownloadDocument(doc)}
                       >
                         تنزيل

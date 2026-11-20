@@ -23,6 +23,7 @@ import { AddWorkExperienceForm } from '../components/AddWorkExperienceForm'
 import { ChangelogModal } from '../components/ChangelogModal'
 import { CountrySelect, type LocationPick } from '../components/CountrySelect'
 import { CvDocument } from '../components/CvDocument'
+import { DocumentsSection } from '../components/DocumentsSection'
 import { DraftRestoredModal } from '../components/DraftRestoredModal'
 import { LocationLabel } from '../components/LocationLabel'
 import { type SkillOption } from '../components/SkillPicker'
@@ -367,13 +368,6 @@ export default function ProfileEditPage() {
         jobTypes: has ? prev.jobTypes.filter((item) => item !== id) : [...prev.jobTypes, id],
       }
     })
-  }
-
-  const onUpload = async (file: File | null, kind: string) => {
-    if (!file) return
-    await profilesApi.uploadDocument(file, kind)
-    toast.success('تم رفع الملف')
-    await load()
   }
 
   if (!data) {
@@ -919,74 +913,7 @@ export default function ProfileEditPage() {
               <FileText className="h-4 w-4 text-slate-400" />
               السيرة والملفات
             </h2>
-            <div className="flex flex-wrap gap-3">
-              <label className="btn-ghost cursor-pointer">
-                رفع سيرة ذاتية (PDF)
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,image/*"
-                  onChange={(e) => void onUpload(e.target.files?.[0] || null, 'cv')}
-                />
-              </label>
-              <label className="btn-ghost cursor-pointer">
-                رفع ملف أعمال
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,image/*"
-                  onChange={(e) => void onUpload(e.target.files?.[0] || null, 'portfolio')}
-                />
-              </label>
-            </div>
-            <ul className="mt-4 space-y-2">
-              {data.documents?.map((doc: any) => (
-                <li
-                  key={doc.id}
-                  className="flex items-center justify-between border border-line px-4 py-3"
-                >
-                  <div>
-                    <p className="font-semibold text-slate-900">{doc.file_name}</p>
-                    <p className="text-xs text-slate-500">
-                      {doc.kind === 'cv' ? 'سيرة ذاتية' : 'ملف أعمال'}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="btn-ghost py-1.5 text-xs"
-                      onClick={() =>
-                        void fetch(profilesApi.documentDownloadUrl(doc.id), {
-                          headers: authDownloadHeaders(),
-                        }).then(async (res) => {
-                          const blob = await res.blob()
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = doc.file_name
-                          a.click()
-                          URL.revokeObjectURL(url)
-                        })
-                      }
-                    >
-                      تنزيل
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-danger py-1.5 text-xs"
-                      onClick={() =>
-                        void profilesApi
-                          .deleteDocument(doc.id)
-                          .then(load)
-                          .then(() => toast.success('تم الحذف'))
-                      }
-                    >
-                      حذف
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <DocumentsSection documents={data.documents || []} onChanged={load} />
           </section>
           ) : null}
       </div>
