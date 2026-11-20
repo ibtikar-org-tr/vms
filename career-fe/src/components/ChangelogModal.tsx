@@ -9,6 +9,7 @@ type Props = {
   open: boolean
   entries: ChangelogEntry[]
   saving?: boolean
+  reviewOnly?: boolean
   confirmLabel?: string
   onConfirm: () => void
   onCancel: () => void
@@ -33,6 +34,7 @@ export function ChangelogModal({
   open,
   entries,
   saving,
+  reviewOnly,
   confirmLabel = 'تأكيد الحفظ',
   onConfirm,
   onCancel,
@@ -59,10 +61,12 @@ export function ChangelogModal({
           <div>
             <p className="page-kicker">مراجعة التغييرات</p>
             <h2 id="changelog-title" className="mt-1 text-lg font-bold text-ink">
-              سجل التعديلات قبل الحفظ
+              {reviewOnly ? 'التعديلات الحالية' : 'سجل التعديلات قبل الحفظ'}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              راجع ما تغيّر ثم أكّد الحفظ. لم يُرسل أي شيء للخادم بعد.
+              {reviewOnly
+                ? 'هذه قائمة بما تغيّر محلياً مقارنةً بآخر نسخة محفوظة. لم يُرسل شيء للخادم بعد.'
+                : 'راجع ما تغيّر ثم أكّد الحفظ. لم يُرسل أي شيء للخادم بعد.'}
             </p>
           </div>
           <button type="button" className="btn-ghost px-2 py-2" onClick={onCancel}>
@@ -128,16 +132,18 @@ export function ChangelogModal({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-white px-4 py-3 sm:px-5">
-          <button type="button" className="btn-ghost" disabled={saving} onClick={onCancel}>
-            إلغاء
-          </button>
+          {!reviewOnly ? (
+            <button type="button" className="btn-ghost" disabled={saving} onClick={onCancel}>
+              إلغاء
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn-primary"
             disabled={saving || entries.length === 0}
             onClick={onConfirm}
           >
-            <Save className="h-4 w-4" />
+            {!reviewOnly ? <Save className="h-4 w-4" /> : null}
             {saving ? 'جاري الحفظ…' : confirmLabel}
           </button>
         </div>

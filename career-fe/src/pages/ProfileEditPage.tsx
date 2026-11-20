@@ -9,6 +9,7 @@ import {
   GraduationCap,
   Heart,
   Languages,
+  ListChecks,
   MapPinned,
   Save,
   Trash2,
@@ -90,7 +91,7 @@ export default function ProfileEditPage() {
   const [baseline, setBaseline] = useState<ProfileDraftSnapshot | null>(null)
   const [changelogOpen, setChangelogOpen] = useState(false)
   const [changelogEntries, setChangelogEntries] = useState<ChangelogEntry[]>([])
-  const [pendingAction, setPendingAction] = useState<'save' | 'publish' | null>(null)
+  const [pendingAction, setPendingAction] = useState<'save' | 'publish' | 'review' | null>(null)
   const [saving, setSaving] = useState(false)
   const [editSection, setEditSection] = useState<EditSection>('profile')
   const [draftReady, setDraftReady] = useState(false)
@@ -190,7 +191,7 @@ export default function ProfileEditPage() {
       workPreferences: workPrefs,
     })
 
-  const openChangelog = (action: 'save' | 'publish') => {
+  const openChangelog = (action: 'save' | 'publish' | 'review') => {
     if (!baseline) return
     const entries = buildProfileChangelog(baseline, currentDraft())
     if (!entries.length) {
@@ -198,7 +199,7 @@ export default function ProfileEditPage() {
         void commitChanges(action)
         return
       }
-      toast('لا توجد تغييرات للحفظ')
+      toast(action === 'review' ? 'لا توجد تعديلات حالياً' : 'لا توجد تغييرات للحفظ')
       return
     }
     setChangelogEntries(entries)
@@ -206,7 +207,14 @@ export default function ProfileEditPage() {
     setChangelogOpen(true)
   }
 
-  const commitChanges = async (action: 'save' | 'publish' = pendingAction || 'save') => {
+  const commitChanges = async (
+    action: 'save' | 'publish' | 'review' = pendingAction || 'save',
+  ) => {
+    if (action === 'review') {
+      setChangelogOpen(false)
+      setPendingAction(null)
+      return
+    }
     setSaving(true)
     try {
       const publishNext =
@@ -289,6 +297,10 @@ export default function ProfileEditPage() {
   const saveProfile = (event?: FormEvent) => {
     event?.preventDefault()
     openChangelog('save')
+  }
+
+  const reviewChanges = () => {
+    openChangelog('review')
   }
 
   const togglePublish = () => {
@@ -1215,6 +1227,15 @@ export default function ProfileEditPage() {
           <Save className="h-4 w-4" />
           {saving ? 'جاري الحفظ…' : 'حفظ السيرة'}
         </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          disabled={saving}
+          onClick={() => reviewChanges()}
+        >
+          <ListChecks className="h-4 w-4" />
+          عرض التعديلات
+        </button>
         <button type="button" className="btn-ghost" disabled={saving} onClick={() => togglePublish()}>
           {data.profile.is_published ? 'إلغاء النشر' : 'نشر السيرة للمراجعة'}
         </button>
@@ -1235,12 +1256,15 @@ export default function ProfileEditPage() {
         open={changelogOpen}
         entries={changelogEntries}
         saving={saving}
+        reviewOnly={pendingAction === 'review'}
         confirmLabel={
-          pendingAction === 'publish'
-            ? data.profile.is_published
-              ? 'تأكيد إلغاء النشر'
-              : 'تأكيد النشر والحفظ'
-            : 'تأكيد الحفظ'
+          pendingAction === 'review'
+            ? 'إغلاق'
+            : pendingAction === 'publish'
+              ? data.profile.is_published
+                ? 'تأكيد إلغاء النشر'
+                : 'تأكيد النشر والحفظ'
+              : 'تأكيد الحفظ'
         }
         onCancel={() => {
           if (saving) return
