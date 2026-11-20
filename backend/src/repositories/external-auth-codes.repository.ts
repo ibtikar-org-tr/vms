@@ -59,7 +59,7 @@ export async function createExternalAuthCode(
   }
 }
 
-export async function consumeExternalAuthCode(
+export async function findValidExternalAuthCode(
   db: D1DatabaseLike,
   code: string,
 ): Promise<ExternalAuthCodeRow | null> {
@@ -83,10 +83,21 @@ export async function consumeExternalAuthCode(
     return null
   }
 
-  await db
-    .prepare(`UPDATE external_auth_codes SET consumed_at = datetime('now') WHERE id = ? AND consumed_at IS NULL`)
-    .bind(row.id)
+  return row
+}
+
+export async function markExternalAuthCodeConsumed(
+  db: D1DatabaseLike,
+  id: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE external_auth_codes
+       SET consumed_at = datetime('now')
+       WHERE id = ? AND consumed_at IS NULL`,
+    )
+    .bind(id)
     .run()
 
-  return row
+  return (result.meta?.changes ?? 0) > 0
 }

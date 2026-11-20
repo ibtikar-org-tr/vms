@@ -46,8 +46,15 @@ authRouter.post('/vms/exchange', async (c) => {
     if (!response.ok) {
       const text = await response.text().catch(() => '')
       console.error('VMS external-exchange failed', response.status, text)
-      if (response.status === 400) {
-        return c.json({ message: 'Invalid or expired code' }, 401)
+      let vmsMessage = 'Invalid or expired code'
+      try {
+        const parsed = JSON.parse(text) as { error?: string }
+        if (parsed.error?.trim()) vmsMessage = parsed.error.trim()
+      } catch {
+        /* keep default */
+      }
+      if (response.status === 400 || response.status === 401) {
+        return c.json({ message: vmsMessage }, 401)
       }
       return c.json({ message: 'Could not exchange code with VMS' }, 502)
     }

@@ -35,3 +35,23 @@ export function getSafeExternalRedirectUri(
 
   return parsed.toString()
 }
+
+export function externalRedirectUrisMatch(stored: string, provided: string): boolean {
+  try {
+    const a = new URL(stored.trim())
+    const b = new URL(provided.trim())
+    if (a.origin !== b.origin) return false
+
+    const pathA = a.pathname.replace(/\/+$/, '') || '/'
+    const pathB = b.pathname.replace(/\/+$/, '') || '/'
+    if (pathA !== pathB) return false
+
+    const keys = new Set([...a.searchParams.keys(), ...b.searchParams.keys()])
+    for (const key of keys) {
+      if (a.searchParams.get(key) !== b.searchParams.get(key)) return false
+    }
+    return true
+  } catch {
+    return stored.trim() === provided.trim()
+  }
+}

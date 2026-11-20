@@ -12,8 +12,9 @@ import {
   resetPasswordSchema,
 } from '../schemas/auth.schema'
 import {
-  consumeExternalAuthCode,
   createExternalAuthCode,
+  findValidExternalAuthCode,
+  markExternalAuthCodeConsumed,
 } from '../repositories/external-auth-codes.repository'
 import { createRefreshToken, findValidRefreshToken, revokeRefreshToken, revokeRefreshTokenById } from '../repositories/refresh-tokens.repository'
 import {
@@ -27,7 +28,10 @@ import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber, getActorUser } from '../utils/actor'
 import { clearRefreshTokenCookie, getRefreshTokenFromCookie, setRefreshTokenCookie } from '../utils/auth-cookies'
 import { listAllowedBrowserOrigins } from '../utils/cors'
-import { getSafeExternalRedirectUri } from '../utils/external-auth-redirect'
+import {
+  externalRedirectUrisMatch,
+  getSafeExternalRedirectUri,
+} from '../utils/external-auth-redirect'
 import { createAccessToken, getJwks } from '../utils/jwt'
 import { hashPassword, verifyPassword } from '../utils/password'
 
@@ -624,17 +628,22 @@ authRoute.get('/reset-password/status', async (c) => {
 authRoute.post('/external-exchange', zValidator('json', externalExchangeSchema), async (c) => {
   try {
     const { code, redirectUri, client } = c.req.valid('json')
-    const record = await consumeExternalAuthCode(c.env.VMS_LOGS_DB, code)
+    const record = await findValidExternalAuthCode(c.env.VMS_LOGS_DB, code)
     if (!record) {
       return c.json({ error: 'Invalid or expired code.' }, 400)
     }
 
-    if (record.redirect_uri !== redirectUri.trim()) {
+    if (!externalRedirectUrisMatch(record.redirect_uri, redirectUri)) {
       return c.json({ error: 'redirectUri mismatch.' }, 400)
     }
 
     if (client && record.client_id && record.client_id !== client.trim()) {
       return c.json({ error: 'client mismatch.' }, 400)
+    }
+
+    const consumed = await markExternalAuthCodeConsumed(c.env.VMS_LOGS_DB, record.id)
+    if (!consumed) {
+      return c.json({ error: 'Invalid or expired code.' }, 400)
     }
 
     const user = await getUserByMembershipNumber(c.env.MEMBERS_DB, record.membership_number)
