@@ -11,6 +11,7 @@ import {
   retryAssemblyAnnouncement,
 } from '../../api/vms'
 import type { AssemblyAnnouncement, AssemblyAnnouncementFailure, AssemblyMember } from '../../types/vms'
+import { AnnouncementImageField, AnnouncementLivePreview } from '../../components/announcements/AnnouncementLivePreview'
 import { getStoredUser, isPlatformAdmin } from '../../utils/auth'
 
 type TabKey = 'members' | 'broadcast'
@@ -49,6 +50,10 @@ function formatTelegramLabel(username: string) {
 function telegramProfileUrl(username: string) {
   const handle = username.replace(/^@/, '').trim()
   return `https://t.me/${encodeURIComponent(handle)}`
+}
+
+function messageCopyText(item: Pick<AssemblyAnnouncement, 'subject' | 'body'>) {
+  return `${item.subject.trim()}\n\n${item.body.trim()}`
 }
 
 function downloadFailuresCsv(failures: AssemblyAnnouncementFailure[]) {
@@ -96,6 +101,7 @@ export function DashboardAssemblyPage() {
 
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [sendEmail, setSendEmail] = useState(true)
   const [sendTelegram, setSendTelegram] = useState(true)
   const [confirmed, setConfirmed] = useState(false)
@@ -239,11 +245,7 @@ export function DashboardAssemblyPage() {
                 detail.announcement.status === 'partial' ? ' · راجع من تعذر الوصول إليهم بالأسفل' : ''
               }`,
             )
-            if (detail.announcement.status === 'sent') {
-              setSubject('')
-              setBody('')
-              setConfirmed(false)
-            }
+            setConfirmed(false)
           }
           await loadAnnouncements()
         }
@@ -295,6 +297,7 @@ export function DashboardAssemblyPage() {
         body: body.trim(),
         sendEmail,
         sendTelegram,
+        imageUrl,
       })
       let announcement = created.announcement
       setProgress(announcement)
@@ -327,11 +330,7 @@ export function DashboardAssemblyPage() {
             announcement.status === 'partial' ? ' · راجع من تعذر الوصول إليهم بالأسفل' : ''
           }`,
         )
-        if (announcement.status === 'sent') {
-          setSubject('')
-          setBody('')
-          setConfirmed(false)
-        }
+        setConfirmed(false)
       }
       setIsSending(false)
     } catch (error) {
@@ -605,6 +604,7 @@ export function DashboardAssemblyPage() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm leading-7 outline-none focus:border-cyan-600"
               />
             </label>
+            <AnnouncementImageField imageUrl={imageUrl} onChange={setImageUrl} disabled={isSending} />
             <div className="flex flex-wrap gap-4 text-sm text-slate-700">
               <label className="inline-flex items-center gap-2">
                 <input type="checkbox" checked={sendTelegram} onChange={(event) => setSendTelegram(event.target.checked)} />
@@ -658,22 +658,7 @@ export function DashboardAssemblyPage() {
           </form>
 
           <div className="space-y-4">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-              <div className="bg-linear-to-l from-cyan-800 to-teal-700 px-5 py-4 text-white">
-                <p className="text-[11px] font-bold tracking-wide text-cyan-100">تجمّع إبتكار</p>
-                <h3 className="mt-1 text-lg font-extrabold">{subject.trim() || 'عنوان الرسالة'}</h3>
-                <p className="mt-1 text-xs text-cyan-100">رسالة من مجلس الإدارة إلى أعضاء التجمّع</p>
-              </div>
-              <div className="space-y-3 bg-white px-5 py-4 text-sm leading-7 text-slate-700">
-                <p>السلام عليكم عضو تجمّع إبتكار،</p>
-                <p className="whitespace-pre-wrap">{body.trim() || 'سيظهر نص الرسالة هنا مع التوقيع.'}</p>
-                <div className="border-t border-slate-100 pt-3 text-center text-xs text-slate-500">
-                  <p className="font-extrabold text-teal-700">مجلس الإدارة</p>
-                  <p className="font-semibold text-slate-700">تجمّع إبتكار</p>
-                  <p>vms.ibtikar.tr</p>
-                </div>
-              </div>
-            </div>
+            <AnnouncementLivePreview kind="assembly" subject={subject} body={body} imageUrl={imageUrl} />
             {failures.length > 0 ? (
               <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -836,64 +821,81 @@ export function DashboardAssemblyPage() {
               </p>
               <div className="mt-3 space-y-2">
                 {announcements.length === 0 ? (
-                  <p className="text-xs text-slate-500">لا توجد رسائل بعد.</p>
+                  <p className="text-xs text-slate-500">لا توجد رسائل بعد. بعد الإرسال تبقى هنا ويمكن نسخها.</p>
                 ) : (
                   announcements.slice(0, 8).map((item) => (
                     <div key={item.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <button
-                        type="button"
-                        className="w-full text-right"
-                        onClick={() => {
-                          setProgress(item)
-                          setWatchingId(announcementDone(item.status) ? null : item.id)
-                          void fetchAssemblyAnnouncement(item.id)
-                            .then((detail) => {
-                              setProgress(detail.announcement)
-                              setFailures(detail.failures)
-                            })
-                            .catch(() => undefined)
-                        }}
-                      >
-                        <p className="text-sm font-semibold text-slate-900">{item.subject}</p>
-                        <p className="text-xs text-slate-500">
-                          {announcementStatusLabel(item.status)} · بريد {item.emailSent}/{item.emailTotal || '—'} · تيليغرام{' '}
-                          {item.telegramSent}/{item.telegramTotal || '—'}
-                        </p>
-                      </button>
-                      {item.status === 'queued' || item.status === 'sending' ? (
+                      <p className="text-sm font-semibold text-slate-900">{item.subject}</p>
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt="" className="mt-2 max-h-24 w-full rounded object-cover" />
+                      ) : null}
+                      <p className="mt-1 whitespace-pre-wrap text-xs leading-6 text-slate-600">{item.body}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {announcementStatusLabel(item.status)} · بريد {item.emailSent}/{item.emailTotal || '—'} · تيليغرام{' '}
+                        {item.telegramSent}/{item.telegramTotal || '—'}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-3">
                         <button
                           type="button"
-                          disabled={isSending}
-                          onClick={() => void resumeAnnouncement(item)}
-                          className="mt-2 text-xs font-semibold text-cyan-800 underline"
+                          onClick={() => void copyText(item.id, messageCopyText(item))}
+                          className="text-xs font-semibold text-cyan-800 underline"
                         >
-                          متابعة الإرسال
+                          {copied === item.id ? 'تم النسخ' : 'نسخ الرسالة'}
                         </button>
-                      ) : null}
-                      {announcementDone(item.status) && (item.emailFailed > 0 || item.telegramFailed > 0) ? (
-                        <div className="mt-2 flex flex-wrap gap-3">
-                          {item.telegramFailed > 0 ? (
-                            <button
-                              type="button"
-                              disabled={isSending}
-                              onClick={() => void retryFailed(item, 'telegram')}
-                              className="text-xs font-semibold text-cyan-800 underline disabled:opacity-50"
-                            >
-                              إعادة تيليغرام الفاشل ({item.telegramFailed})
-                            </button>
-                          ) : null}
-                          {item.emailFailed > 0 ? (
-                            <button
-                              type="button"
-                              disabled={isSending}
-                              onClick={() => void retryFailed(item, 'email')}
-                              className="text-xs font-semibold text-cyan-800 underline disabled:opacity-50"
-                            >
-                              إعادة البريد الفاشل ({item.emailFailed})
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubject(item.subject)
+                            setBody(item.body)
+                            setImageUrl(item.imageUrl?.trim() || null)
+                            setSendSuccess('تم تعبئة النموذج من الرسالة السابقة. يمكنك تعديلها ثم الإرسال.')
+                            setProgress(item)
+                            void fetchAssemblyAnnouncement(item.id)
+                              .then((detail) => {
+                                setProgress(detail.announcement)
+                                setFailures(detail.failures)
+                              })
+                              .catch(() => undefined)
+                          }}
+                          className="text-xs font-semibold text-cyan-800 underline"
+                        >
+                          استخدم في النموذج
+                        </button>
+                        {item.status === 'queued' || item.status === 'sending' ? (
+                          <button
+                            type="button"
+                            disabled={isSending}
+                            onClick={() => void resumeAnnouncement(item)}
+                            className="text-xs font-semibold text-cyan-800 underline disabled:opacity-50"
+                          >
+                            متابعة الإرسال
+                          </button>
+                        ) : null}
+                        {announcementDone(item.status) && (item.emailFailed > 0 || item.telegramFailed > 0) ? (
+                          <>
+                            {item.telegramFailed > 0 ? (
+                              <button
+                                type="button"
+                                disabled={isSending}
+                                onClick={() => void retryFailed(item, 'telegram')}
+                                className="text-xs font-semibold text-cyan-800 underline disabled:opacity-50"
+                              >
+                                إعادة تيليغرام الفاشل ({item.telegramFailed})
+                              </button>
+                            ) : null}
+                            {item.emailFailed > 0 ? (
+                              <button
+                                type="button"
+                                disabled={isSending}
+                                onClick={() => void retryFailed(item, 'email')}
+                                className="text-xs font-semibold text-cyan-800 underline disabled:opacity-50"
+                              >
+                                إعادة البريد الفاشل ({item.emailFailed})
+                              </button>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </div>
                     </div>
                   ))
                 )}

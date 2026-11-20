@@ -70,6 +70,7 @@ export interface VmsEvent {
   cancellationDeadlineHours: number
   allowGuestRegistration: boolean
   allowMultipleTickets?: boolean
+  requireApplicantContact?: boolean
   registrationSuccessMessage?: string | null
   canManage?: boolean
 }
@@ -280,6 +281,7 @@ export interface AssemblyAnnouncement {
   createdBy: string
   subject: string
   body: string
+  imageUrl?: string | null
   sendEmail: boolean
   sendTelegram: boolean
   status: 'queued' | 'sending' | 'sent' | 'partial' | 'failed'
@@ -304,6 +306,18 @@ export interface AssemblyAnnouncementFailure {
   phoneNumber?: string | null
   telegramUsername?: string | null
   error: string | null
+}
+
+export interface EventAnnouncement extends AssemblyAnnouncement {
+  eventId: string
+}
+
+export type EventAnnouncementFailure = AssemblyAnnouncementFailure
+
+export interface EventAnnouncementAudience {
+  people: number
+  email: number
+  telegram: number
 }
 
 export interface VmsProjectNote {

@@ -27,6 +27,7 @@ interface EventRow {
   cancellation_deadline_hours: number | null
   allow_guest_registration: number | null
   allow_multiple_tickets: number | null
+  require_applicant_contact: number | null
   registration_success_message: string | null
 }
 
@@ -40,6 +41,10 @@ function mapAllowGuestRegistration(value: number | null | undefined) {
 
 function mapAllowMultipleTickets(value: number | null | undefined) {
   return value === 1
+}
+
+function mapRequireApplicantContact(value: number | null | undefined) {
+  return value !== 0
 }
 
 function parseJsonObject(data: string | null): Record<string, unknown> | null {
@@ -86,6 +91,7 @@ function mapEventRow(row: EventRow) {
     cancellationDeadlineHours: mapCancellationDeadlineHours(row.cancellation_deadline_hours),
     allowGuestRegistration: mapAllowGuestRegistration(row.allow_guest_registration),
     allowMultipleTickets: mapAllowMultipleTickets(row.allow_multiple_tickets),
+    requireApplicantContact: mapRequireApplicantContact(row.require_applicant_contact),
     registrationSuccessMessage: row.registration_success_message ?? null,
   }
 }
@@ -214,8 +220,15 @@ export async function createEvent(db: D1DatabaseLike, id: string, input: CreateE
 
   await replaceAssociatedSkills(db, 'event', id, input.skills ?? null)
 
-  if (input.registrationSuccessMessage !== undefined) {
-    return updateEventById(db, id, { registrationSuccessMessage: input.registrationSuccessMessage })
+  if (input.registrationSuccessMessage !== undefined || input.requireApplicantContact !== undefined) {
+    return updateEventById(db, id, {
+      ...(input.registrationSuccessMessage !== undefined
+        ? { registrationSuccessMessage: input.registrationSuccessMessage }
+        : {}),
+      ...(input.requireApplicantContact !== undefined
+        ? { requireApplicantContact: input.requireApplicantContact }
+        : {}),
+    })
   }
 
   return getEventById(db, id)
@@ -316,6 +329,7 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
 
   const allowMultipleTickets = input.allowMultipleTickets
   const registrationSuccessMessage = input.registrationSuccessMessage
+  const requireApplicantContact = input.requireApplicantContact
 
   if (updates.length > 0) {
     updates.push("updated_at = datetime('now')")
@@ -348,7 +362,23 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
     }
   }
 
-  if (updates.length === 0 && registrationSuccessMessage === undefined && allowMultipleTickets === undefined) {
+  if (requireApplicantContact !== undefined) {
+    try {
+      await db
+        .prepare(`UPDATE events SET require_applicant_contact = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(requireApplicantContact ? 1 : 0, id)
+        .run()
+    } catch (error) {
+      console.error('Failed to save event require applicant contact setting', error)
+    }
+  }
+
+  if (
+    updates.length === 0 &&
+    registrationSuccessMessage === undefined &&
+    allowMultipleTickets === undefined &&
+    requireApplicantContact === undefined
+  ) {
     return getEventById(db, id)
   }
 

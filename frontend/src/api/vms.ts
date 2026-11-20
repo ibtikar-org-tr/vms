@@ -23,6 +23,9 @@ import type {
   AssemblyMember,
   AssemblyAnnouncement,
   AssemblyAnnouncementFailure,
+  EventAnnouncement,
+  EventAnnouncementAudience,
+  EventAnnouncementFailure,
 } from '../types/vms'
 import type {
   ForgotPasswordResponse,
@@ -225,6 +228,7 @@ export function createAssemblyAnnouncement(payload: {
   body: string
   sendEmail: boolean
   sendTelegram: boolean
+  imageUrl?: string | null
 }) {
   return postJson<
     {
@@ -257,6 +261,56 @@ export function retryAssemblyAnnouncement(id: string, channel: 'email' | 'telegr
     { announcement: AssemblyAnnouncement; queued: boolean; needsContinue: boolean },
     { channel: 'email' | 'telegram' }
   >(`/assembly/announcements/${encodeURIComponent(id)}/retry`, { channel })
+}
+
+export function fetchEventAnnouncements(eventId: string) {
+  return fetchJson<{ announcements: EventAnnouncement[]; audience: EventAnnouncementAudience }>(
+    `/events/${encodeURIComponent(eventId)}/announcements`,
+    { cache: false },
+  )
+}
+
+export function createEventAnnouncement(
+  eventId: string,
+  payload: {
+    subject: string
+    body: string
+    sendEmail: boolean
+    sendTelegram: boolean
+    imageUrl?: string | null
+  },
+) {
+  return postJson<
+    {
+      announcement: EventAnnouncement
+      queued: boolean
+      needsContinue: boolean
+      audience: EventAnnouncementAudience
+    },
+    typeof payload
+  >(`/events/${encodeURIComponent(eventId)}/announcements`, payload)
+}
+
+export function fetchEventAnnouncement(eventId: string, announcementId: string) {
+  return fetchJson<{
+    announcement: EventAnnouncement
+    failures: EventAnnouncementFailure[]
+    needsContinue: boolean
+  }>(`/events/${encodeURIComponent(eventId)}/announcements/${encodeURIComponent(announcementId)}`, { cache: false })
+}
+
+export function continueEventAnnouncement(eventId: string, announcementId: string) {
+  return postJson<
+    { announcement: EventAnnouncement; queued: boolean; needsContinue: boolean },
+    Record<string, never>
+  >(`/events/${encodeURIComponent(eventId)}/announcements/${encodeURIComponent(announcementId)}/continue`, {})
+}
+
+export function retryEventAnnouncement(eventId: string, announcementId: string, channel: 'email' | 'telegram') {
+  return postJson<
+    { announcement: EventAnnouncement; queued: boolean; needsContinue: boolean },
+    { channel: 'email' | 'telegram' }
+  >(`/events/${encodeURIComponent(eventId)}/announcements/${encodeURIComponent(announcementId)}/retry`, { channel })
 }
 
 export function fetchProfile(membershipNumber: string) {
@@ -528,6 +582,7 @@ export function createEvent(payload: {
   cancellationDeadlineHours?: number
   allowGuestRegistration?: boolean
   allowMultipleTickets?: boolean
+  requireApplicantContact?: boolean
 }) {
   return postJson<{ event: VmsEvent }, typeof payload>('/events', payload)
 }
@@ -670,6 +725,7 @@ export function updateEvent(
     cancellationDeadlineHours: number
     allowGuestRegistration: boolean
     allowMultipleTickets: boolean
+    requireApplicantContact: boolean
     registrationSuccessMessage: string | null
   }>,
 ) {

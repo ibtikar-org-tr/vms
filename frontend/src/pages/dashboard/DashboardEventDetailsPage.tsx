@@ -781,6 +781,7 @@ export function DashboardEventDetailsPage() {
             loginRedirect={loginRedirect}
             deferSubmit={combineApplicationWithTickets}
             disabled={isApplying}
+            requireApplicantContact={eventItem.requireApplicantContact !== false}
             onSubmitted={() => setHasSubmittedApplication(true)}
           />
         </div>

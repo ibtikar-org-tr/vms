@@ -50,7 +50,7 @@ function errorMessage(error: unknown, fallback = 'تعذر إرسال أحد ر�
   return fallback
 }
 
-function telegramNotifyPayload(result: { error?: string; responseData?: unknown }): TelegramNotifyResponse {
+export function telegramNotifyPayload(result: { error?: string; responseData?: unknown }): TelegramNotifyResponse {
   const raw = result.responseData
   if (!raw || typeof raw !== 'object') {
     return { error: result.error }
@@ -179,6 +179,8 @@ async function sendTelegramBatch(
   const result = await sendBackendTelegramNotification(bindings, {
     targets: batch,
     message,
+    photo: announcement.imageUrl || undefined,
+    boxes: [{ text: 'تجمّع إبتكار', link: siteUrl }],
   })
 
   const payload = telegramNotifyPayload(result)
@@ -290,6 +292,7 @@ async function sendEmailBatch(
           subject: announcement.subject,
           body: announcement.body,
           siteUrl,
+          imageUrl: announcement.imageUrl,
         }),
       })
       current =
@@ -502,6 +505,8 @@ async function sendRetryTelegramBatch(
     const result = await sendBackendTelegramNotification(bindings, {
       targets: batch,
       message,
+      photo: announcement.imageUrl || undefined,
+      boxes: [{ text: 'تجمّع إبتكار', link: siteUrl }],
     })
     const payload = telegramNotifyPayload(result)
     const successfulIds = new Set(
@@ -622,6 +627,7 @@ async function sendRetryEmailBatch(
           subject: announcement.subject,
           body: announcement.body,
           siteUrl,
+          imageUrl: announcement.imageUrl,
         }),
       })
       await deleteAssemblyAnnouncementFailure(bindings.VMS_DB, item.id)

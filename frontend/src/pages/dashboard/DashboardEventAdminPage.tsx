@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { CheckCircle, ClipboardList, Clock, Download, Search, Trash2, Users } from 'lucide-react'
+import { EventAnnouncementPanel } from '../../components/events/EventAnnouncementPanel'
+import { EventQrCard } from '../../components/events/EventQrCard'
 import {
   approveRegistration,
   deleteEventRegistration,
@@ -319,6 +321,10 @@ export function DashboardEventAdminPage() {
         </div>
       </div>
 
+      <EventQrCard eventId={eventItem.id} eventName={eventItem.name} status={eventItem.status} />
+
+      <EventAnnouncementPanel eventId={eventItem.id} eventName={eventItem.name} />
+
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
           <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
             <ClipboardList className="h-5 w-5 text-slate-700" />
@@ -356,8 +362,10 @@ export function DashboardEventAdminPage() {
                       className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-right"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{submission.applicantName}</p>
-                        <p className="text-xs text-slate-500">{submission.applicantEmail} • {submission.applicantPhone}</p>
+                        <p className="text-sm font-semibold text-slate-900">{submission.applicantName.trim() || 'بدون اسم'}</p>
+                        <p className="text-xs text-slate-500">
+                          {submission.applicantEmail.trim() || 'بدون بريد'} • {submission.applicantPhone.trim() || 'بدون هاتف'}
+                        </p>
                       </div>
                       <span className="text-xs text-slate-500">{submission.createdAt}</span>
                     </button>

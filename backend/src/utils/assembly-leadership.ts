@@ -6,6 +6,14 @@ export function isPlatformAdminRole(role: string | null | undefined) {
   return role?.trim().toLowerCase() === 'admin'
 }
 
+export async function isBoardLeadership(db: D1DatabaseLike, membershipNumber: string) {
+  const affiliations = await listMemberProjectAffiliations(db, membershipNumber)
+  return affiliations.some(
+    (affiliation) =>
+      isBoardProject(affiliation.projectName) && (affiliation.role === 'owner' || affiliation.role === 'manager'),
+  )
+}
+
 export async function isAssemblyLeadership(
   db: D1DatabaseLike,
   actor: { membershipNumber: string; role: string },
@@ -14,9 +22,5 @@ export async function isAssemblyLeadership(
     return true
   }
 
-  const affiliations = await listMemberProjectAffiliations(db, actor.membershipNumber)
-  return affiliations.some(
-    (affiliation) =>
-      isBoardProject(affiliation.projectName) && (affiliation.role === 'owner' || affiliation.role === 'manager'),
-  )
+  return isBoardLeadership(db, actor.membershipNumber)
 }

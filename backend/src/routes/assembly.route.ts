@@ -280,6 +280,7 @@ assemblyRoute.post(
         sendTelegram,
         emailTotal: emailCount,
         telegramTotal: telegramCount,
+        imageUrl: payload.imageUrl ?? null,
       })
 
       if (!created) {
