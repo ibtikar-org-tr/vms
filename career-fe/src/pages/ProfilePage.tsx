@@ -651,7 +651,7 @@ export default function ProfilePage() {
                   onChange={(e) =>
                     setWorkPrefs((prev) => ({ ...prev, relocateNotes: e.target.value }))
                   }
-                  placeholder="مثال: مستعد للانتقال داخل تركيا أو إلى دول الخليج خلال 3 أشهر"
+                  placeholder="مثال: مستعد للانتقال داخل تركيا أو إلى سوريا أو إلى دول الخليج خلال 3 أشهر"
                 />
               </div>
             ) : null}
