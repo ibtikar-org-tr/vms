@@ -94,7 +94,7 @@
     "FRONTEND_BASE_URL":"https://ibtikar.tr",
     "CORS_ALLOW_ORIGINS":"https://ibtikar.tr,https://ibtikar-career.ctf.web.tr",
     "INTERNAL_SECRET":"delete-on-deployment",
-    "JWT_SECRET":"delete-on-deployment",
+    "JWT_PRIVATE_KEY":"delete-on-deployment",
     "SMTP_HOST": "",
     "SMTP_PORT": "587",
     "SMTP_USER": "",

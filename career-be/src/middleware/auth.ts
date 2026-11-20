@@ -13,13 +13,12 @@ export const memberAuthMiddleware: MiddlewareHandler<AppBindings> = async (c, ne
     return c.json({ message: 'Unauthorized' }, 401)
   }
 
-  const secret = c.env.JWT_SECRET?.trim()
-  if (!secret) {
-    console.error('JWT_SECRET is not configured on career-backend')
+  if (!c.env.MEMBERSHIP_MS_SERVICE && !c.env.VMS_API_BASE?.trim()) {
+    console.error('MEMBERSHIP_MS_SERVICE / VMS_API_BASE not configured on career-backend')
     return c.json({ message: 'Auth not configured' }, 500)
   }
 
-  const payload = await verifyVmsAccessToken(secret, token)
+  const payload = await verifyVmsAccessToken(c.env, token)
   if (!payload) {
     return c.json({ message: 'Unauthorized' }, 401)
   }

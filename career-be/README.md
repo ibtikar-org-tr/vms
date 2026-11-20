@@ -23,8 +23,8 @@ cp .dev.vars.example .dev.vars
 
 `.dev.vars` is gitignored and loaded automatically by `wrangler dev`:
 
-- `JWT_SECRET` — same as VMS `JWT_SECRET`
-- `VMS_INTERNAL_SECRET` — same as VMS `INTERNAL_SECRET`
+- `VMS_INTERNAL_SECRET` — same as VMS `INTERNAL_SECRET` (server exchange only)
+- Access tokens are verified via VMS JWKS (`/.well-known/jwks.json`) — no shared JWT secret
 
 ## Scripts
 

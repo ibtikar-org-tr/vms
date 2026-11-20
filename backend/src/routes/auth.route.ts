@@ -28,10 +28,22 @@ import { getActorMembershipNumber, getActorUser } from '../utils/actor'
 import { clearRefreshTokenCookie, getRefreshTokenFromCookie, setRefreshTokenCookie } from '../utils/auth-cookies'
 import { listAllowedBrowserOrigins } from '../utils/cors'
 import { getSafeExternalRedirectUri } from '../utils/external-auth-redirect'
-import { createAccessToken } from '../utils/jwt'
+import { createAccessToken, getJwks } from '../utils/jwt'
 import { hashPassword, verifyPassword } from '../utils/password'
 
 export const authRoute = new Hono<{ Bindings: AppBindings }>()
+
+/** Public JWKS for kitchen/career (and others) to verify VMS access tokens. */
+authRoute.get('/.well-known/jwks.json', async (c) => {
+  try {
+    return c.json(await getJwks(c.env), 200, {
+      'Cache-Control': 'public, max-age=300',
+    })
+  } catch (error) {
+    console.error('Failed to serve JWKS', error)
+    return c.json({ error: 'JWKS unavailable.' }, 500)
+  }
+})
 
 interface ForgotMemberRow {
   membership_number: string

@@ -44,7 +44,7 @@ jobs:
           | .vars.VMS_API_BASE = $vmsApiBase
           | .services = [{binding: "MEMBERSHIP_MS_SERVICE", service: $membershipMsName, remote: true}]
           | .account_id = $accountId
-          | del(.vars.JWT_SECRET, .vars.VMS_INTERNAL_SECRET)'
+          | del(.vars.VMS_INTERNAL_SECRET)'
 
           jq \
             --arg careerDbId "${{ vars.CAREER_DB_ID }}" \
@@ -70,7 +70,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET --config wrangler.local.jsonc --name ibtikar-career-be
           echo "${{ secrets.INTERNAL_SECRET }}" | wrangler secret put VMS_INTERNAL_SECRET --config wrangler.local.jsonc --name ibtikar-career-be
 
       - name: Migrate Career D1 Database

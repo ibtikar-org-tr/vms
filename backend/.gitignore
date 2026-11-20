@@ -38,3 +38,6 @@ samples/
 !README.md
 wrangler.local.jsonc
 worker-configuration.d.ts
+
+# certs
+*.pem
