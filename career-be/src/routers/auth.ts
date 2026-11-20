@@ -15,17 +15,19 @@ interface VmsExchangeResponse {
 }
 
 authRouter.post('/vms/exchange', async (c) => {
-  const body = await c.req.json<{ code?: string }>().catch(() => ({} as { code?: string }))
+  const body = await c
+    .req
+    .json<{ code?: string; redirectUri?: string }>()
+    .catch(() => ({} as { code?: string; redirectUri?: string }))
   const code = body.code?.trim()
+  const redirectUri = body.redirectUri?.trim()
   if (!code) {
     return c.json({ message: 'code is required' }, 400)
   }
-
-  const internalSecret = c.env.VMS_INTERNAL_SECRET?.trim()
-  if (!internalSecret) {
-    console.error('VMS_INTERNAL_SECRET is not configured')
-    return c.json({ message: 'VMS exchange not configured' }, 500)
+  if (!redirectUri) {
+    return c.json({ message: 'redirectUri is required' }, 400)
   }
+
   if (!c.env.MEMBERSHIP_MS_SERVICE && !c.env.VMS_API_BASE?.trim()) {
     console.error('MEMBERSHIP_MS_SERVICE / VMS_API_BASE not configured')
     return c.json({ message: 'VMS exchange not configured' }, 500)
@@ -37,17 +39,13 @@ authRouter.post('/vms/exchange', async (c) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': internalSecret,
       },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, redirectUri, client: 'career' }),
     })
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
       console.error('VMS external-exchange failed', response.status, text)
-      if (response.status === 401) {
-        return c.json({ message: 'VMS rejected internal auth (check INTERNAL_SECRET)' }, 502)
-      }
       if (response.status === 400) {
         return c.json({ message: 'Invalid or expired code' }, 401)
       }

@@ -622,19 +622,24 @@ authRoute.get('/reset-password/status', async (c) => {
   }
 })
 
+/**
+ * Public OAuth-style code exchange (no shared INTERNAL_SECRET).
+ * Protection: high-entropy one-time code (60s) + redirectUri must match handoff.
+ */
 authRoute.post('/external-exchange', zValidator('json', externalExchangeSchema), async (c) => {
-  const apiKey = c.req.header('X-API-Key')?.trim()
-  const expected = c.env.INTERNAL_SECRET?.trim()
-
-  if (!expected || apiKey !== expected) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
   try {
-    const { code } = c.req.valid('json')
+    const { code, redirectUri, client } = c.req.valid('json')
     const record = await consumeExternalAuthCode(c.env.VMS_LOGS_DB, code)
     if (!record) {
       return c.json({ error: 'Invalid or expired code.' }, 400)
+    }
+
+    if (record.redirect_uri !== redirectUri.trim()) {
+      return c.json({ error: 'redirectUri mismatch.' }, 400)
+    }
+
+    if (client && record.client_id && record.client_id !== client.trim()) {
+      return c.json({ error: 'client mismatch.' }, 400)
     }
 
     const user = await getUserByMembershipNumber(c.env.MEMBERS_DB, record.membership_number)

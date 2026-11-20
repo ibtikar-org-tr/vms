@@ -27,6 +27,9 @@ export const externalHandoffSchema = z.object({
 
 export const externalExchangeSchema = z.object({
   code: z.string().trim().min(1),
+  /** Must match the redirectUri stored when the handoff code was created. */
+  redirectUri: z.string().trim().url(),
+  client: z.string().trim().min(1).optional(),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>
