@@ -56,7 +56,7 @@ export function Layout() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-3 py-7 sm:px-4 sm:py-10">
+      <main className="mx-auto w-full max-w-6xl px-3 py-7 sm:px-4 sm:py-10">
         <Outlet />
       </main>
 

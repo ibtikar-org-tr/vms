@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  AlignLeft,
   Briefcase,
   Calendar,
   ChevronDown,
@@ -13,6 +14,7 @@ import {
   Phone,
   UserRound,
 } from 'lucide-react'
+import { CvSectionMap, type CvMapItem } from './CvSectionMap'
 import {
   displayNameOf,
   formatBirthDate,
@@ -118,20 +120,28 @@ function EmptyHint({ children }: { children: ReactNode }) {
 }
 
 function CollapsibleCvSection({
+  id,
   title,
   icon,
   children,
-  defaultOpen = true,
+  open,
+  onOpenChange,
+  onHover,
 }: {
+  id: string
   title: string
   icon?: ReactNode
   children: ReactNode
-  defaultOpen?: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onHover?: () => void
 }) {
-  const [open, setOpen] = useState(defaultOpen)
-
   return (
-    <section className="cv-collapse">
+    <section
+      id={id}
+      className="cv-collapse scroll-mt-24"
+      onMouseEnter={onHover}
+    >
       <div className="cv-section-title">
         <span className="inline-flex min-w-0 items-center gap-1.5">
           {icon}
@@ -142,7 +152,7 @@ function CollapsibleCvSection({
           className="cv-collapse-toggle print:hidden"
           aria-expanded={open}
           aria-label={open ? `إخفاء ${title}` : `إظهار ${title}`}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => onOpenChange(!open)}
         >
           <ChevronDown
             className={`h-4 w-4 transition-transform duration-300 ease-out ${
@@ -151,10 +161,7 @@ function CollapsibleCvSection({
           />
         </button>
       </div>
-      <div
-        className={`cv-collapse-panel ${open ? 'is-open' : ''}`}
-        aria-hidden={!open}
-      >
+      <div className={`cv-collapse-panel ${open ? 'is-open' : ''}`} aria-hidden={!open}>
         <div className="cv-collapse-panel-inner">{children}</div>
       </div>
     </section>
@@ -198,9 +205,84 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     workPreferences.jobTypes.length > 0 ||
     workPreferences.locations.length > 0
 
+  // Main content column only (not the right sidebar).
+  const mapItems = useMemo(() => {
+    const iconCls = 'h-3.5 w-3.5'
+    const items: CvMapItem[] = []
+    if (data.profile.summary) {
+      items.push({
+        id: 'cv-summary',
+        label: 'نبذة مهنية',
+        icon: <AlignLeft className={iconCls} />,
+      })
+    }
+    if (hasWorkPrefs) {
+      items.push({
+        id: 'cv-work-prefs',
+        label: 'تفضيلات العمل',
+        icon: <MapPinned className={iconCls} />,
+      })
+    }
+    items.push({
+      id: 'cv-experience',
+      label: 'الخبرة العملية',
+      icon: <Briefcase className={iconCls} />,
+    })
+    items.push({
+      id: 'cv-education',
+      label: 'التعليم',
+      icon: <GraduationCap className={iconCls} />,
+    })
+    items.push({
+      id: 'cv-projects',
+      label: 'المشاريع',
+      icon: <FolderKanban className={iconCls} />,
+    })
+    if (data.documents?.length) {
+      items.push({
+        id: 'cv-documents',
+        label: 'الملفات المرفقة',
+        icon: <Download className={iconCls} />,
+      })
+    }
+    return items
+  }, [data.documents?.length, data.profile.summary, hasWorkPrefs])
+
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({})
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setOpenMap((prev) => {
+      const next = { ...prev }
+      for (const item of mapItems) {
+        if (next[item.id] === undefined) next[item.id] = true
+      }
+      return next
+    })
+    setActiveId((prev) => prev ?? mapItems[0]?.id ?? null)
+  }, [mapItems])
+
+  const setSectionOpen = (id: string, open: boolean) => {
+    setOpenMap((prev) => ({ ...prev, [id]: open }))
+  }
+
+  const hoverSection = (id: string) => {
+    setActiveId(id)
+  }
+
+  const navigateToSection = (id: string) => {
+    setActiveId(id)
+    setSectionOpen(id, true)
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   return (
+    <div className="cv-shell">
     <article
-      className={`overflow-hidden rounded-lg border border-line bg-white ${
+      id="cv-top"
+      className={`cv-doc overflow-hidden rounded-lg border border-line bg-white scroll-mt-24 ${
         compact ? '' : 'print:shadow-none'
       }`}
     >
@@ -242,7 +324,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
 
           <div className="mt-6 space-y-4 text-sm">
             {hasPersonal ? (
-              <CollapsibleCvSection title="تواصل ومعلومات شخصية">
+              <CollapsibleCvSection
+                id="cv-personal"
+                title="تواصل ومعلومات شخصية"
+                open={openMap['cv-personal'] !== false}
+                onOpenChange={(open) => setSectionOpen('cv-personal', open)}
+              >
                 <ul className="space-y-2.5 text-slate-600">
                   {vms?.email ? (
                     <li className="flex items-start gap-2 break-all">
@@ -278,7 +365,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
               </CollapsibleCvSection>
             ) : null}
 
-            <CollapsibleCvSection title="المهارات">
+            <CollapsibleCvSection
+              id="cv-skills"
+              title="المهارات"
+              open={openMap['cv-skills'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-skills', open)}
+            >
               <div className="flex flex-wrap gap-1.5">
                 {skills.length ? (
                   skills.map((item) => (
@@ -293,8 +385,11 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
             </CollapsibleCvSection>
 
             <CollapsibleCvSection
+              id="cv-languages"
               title="اللغات"
               icon={<Languages className="h-3.5 w-3.5 text-slate-400" />}
+              open={openMap['cv-languages'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-languages', open)}
             >
               <ul className="space-y-2">
                 {languages.length ? (
@@ -332,7 +427,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
             </CollapsibleCvSection>
 
             {!!interests.length && (
-              <CollapsibleCvSection title="الاهتمامات">
+              <CollapsibleCvSection
+                id="cv-interests"
+                title="الاهتمامات"
+                open={openMap['cv-interests'] !== false}
+                onOpenChange={(open) => setSectionOpen('cv-interests', open)}
+              >
                 <div className="flex flex-wrap gap-1.5">
                   {interests.map((item) => (
                     <span key={item} className="chip">
@@ -358,15 +458,25 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </header>
 
           {data.profile.summary ? (
-            <CollapsibleCvSection title="نبذة مهنية">
+            <CollapsibleCvSection
+              id="cv-summary"
+              title="نبذة مهنية"
+              open={openMap['cv-summary'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-summary', open)}
+              onHover={() => hoverSection('cv-summary')}
+            >
               <p className="whitespace-pre-wrap leading-7 text-slate-700">{data.profile.summary}</p>
             </CollapsibleCvSection>
           ) : null}
 
           {hasWorkPrefs ? (
             <CollapsibleCvSection
+              id="cv-work-prefs"
               title="تفضيلات العمل"
               icon={<MapPinned className="h-3.5 w-3.5 text-slate-400" />}
+              open={openMap['cv-work-prefs'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-work-prefs', open)}
+              onHover={() => hoverSection('cv-work-prefs')}
             >
               {!!workPreferences.jobTypes.length && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
@@ -414,8 +524,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           ) : null}
 
           <CollapsibleCvSection
+            id="cv-experience"
             title="الخبرة العملية"
             icon={<Briefcase className="h-3.5 w-3.5 text-slate-400" />}
+            open={openMap['cv-experience'] !== false}
+            onOpenChange={(open) => setSectionOpen('cv-experience', open)}
+              onHover={() => hoverSection('cv-experience')}
           >
             <ul className="divide-y divide-line">
               {data.workExperiences?.map((item) => (
@@ -457,8 +571,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </CollapsibleCvSection>
 
           <CollapsibleCvSection
+            id="cv-education"
             title="التعليم"
             icon={<GraduationCap className="h-3.5 w-3.5 text-slate-400" />}
+            open={openMap['cv-education'] !== false}
+            onOpenChange={(open) => setSectionOpen('cv-education', open)}
+              onHover={() => hoverSection('cv-education')}
           >
             {educationBits || vms?.school ? (
               <div>
@@ -478,8 +596,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </CollapsibleCvSection>
 
           <CollapsibleCvSection
+            id="cv-projects"
             title="المشاريع"
             icon={<FolderKanban className="h-3.5 w-3.5 text-slate-400" />}
+            open={openMap['cv-projects'] !== false}
+            onOpenChange={(open) => setSectionOpen('cv-projects', open)}
+              onHover={() => hoverSection('cv-projects')}
           >
             <ul className="divide-y divide-line">
               {data.projects?.map((item) => (
@@ -524,8 +646,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
 
           {!!data.documents?.length && (
             <CollapsibleCvSection
+              id="cv-documents"
               title="الملفات المرفقة"
               icon={<Download className="h-3.5 w-3.5 text-slate-400" />}
+              open={openMap['cv-documents'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-documents', open)}
+              onHover={() => hoverSection('cv-documents')}
             >
               <ul className="divide-y divide-line border border-line">
                 {data.documents.map((doc) => (
@@ -556,5 +682,9 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
         </div>
       </div>
     </article>
+      {!compact ? (
+        <CvSectionMap items={mapItems} activeId={activeId} onNavigate={navigateToSection} onHover={hoverSection} />
+      ) : null}
+    </div>
   )
 }
