@@ -30,8 +30,8 @@ api.interceptors.response.use(
 )
 
 export const authApi = {
-  exchangeVmsCode: async (code: string) => {
-    const { data } = await api.post('/auth/vms/exchange', { code })
+  exchangeVmsCode: async (code: string, redirectUri: string) => {
+    const { data } = await api.post('/auth/vms/exchange', { code, redirectUri })
     return data as {
       access_token: string
       user: { membershipNumber: string; email: string; role: string }
