@@ -12,7 +12,6 @@ const exchangeByCode = new Map<string, Promise<ExchangeResult>>()
 /** Prevent toast/navigate loops when auth context identity changes after login. */
 const completedCodes = new Set<string>()
 
-/** Handoff redirectUri without the one-time `code` (must match what VMS stored). */
 function handoffRedirectUri(): string {
   const url = new URL(window.location.href)
   url.searchParams.delete('code')

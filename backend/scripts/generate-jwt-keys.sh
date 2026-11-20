@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Generate an RSA key pair for VMS access-token signing (RS256).
-# Put the private PEM in GitHub secret JWT_PRIVATE_KEY / Worker secret JWT_PRIVATE_KEY.
-# Public verification is served at GET /ms/membership-app/api/.well-known/jwks.json
 set -euo pipefail
 
 OUT_DIR="${1:-./jwt-keys}"

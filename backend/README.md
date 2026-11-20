@@ -1,3 +1,7 @@
+# VMS membership-app backend
+
+See [docs/INTEGRATION.md](./docs/INTEGRATION.md) for SSO, JWKS, handoff/exchange, and integrating other apps.
+
 ```txt
 npm install
 npm run dev

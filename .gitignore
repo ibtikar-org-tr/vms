@@ -1,9 +1,10 @@
 .agents
 skills-lock.json
-*.md
 !README.md
 .logs
 .keys
+.cursor
+
 
 # Local-only offline VMS development (do not commit)
 backend/wrangler.offline.jsonc

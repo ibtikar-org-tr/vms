@@ -156,7 +156,6 @@ export interface AppBindings {
   /** Comma-separated browser origins for CORS and external SSO redirect_uri (Kitchen/Career FE, etc.). */
   CORS_ALLOW_ORIGINS?: string
   INTERNAL_SECRET: string
-  /** PKCS#8 PEM private key used to sign member access JWTs (RS256). */
   JWT_PRIVATE_KEY: string
   CRON_TIMEZONE?: string
   CRON_DRY_RUN?: string
