@@ -33,7 +33,6 @@ import { hashPassword, verifyPassword } from '../utils/password'
 
 export const authRoute = new Hono<{ Bindings: AppBindings }>()
 
-/** Public JWKS for kitchen/career (and others) to verify VMS access tokens. */
 authRoute.get('/.well-known/jwks.json', async (c) => {
   try {
     return c.json(await getJwks(c.env), 200, {
@@ -622,10 +621,6 @@ authRoute.get('/reset-password/status', async (c) => {
   }
 })
 
-/**
- * Public OAuth-style code exchange (no shared INTERNAL_SECRET).
- * Protection: high-entropy one-time code (60s) + redirectUri must match handoff.
- */
 authRoute.post('/external-exchange', zValidator('json', externalExchangeSchema), async (c) => {
   try {
     const { code, redirectUri, client } = c.req.valid('json')
