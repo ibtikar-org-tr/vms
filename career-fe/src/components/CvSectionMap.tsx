@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { ListTree } from 'lucide-react'
 
 export type CvMapItem = {
   id: string
@@ -20,10 +19,6 @@ export function CvSectionMap({ items, activeId, onNavigate, onHover }: Props) {
   return (
     <nav className="cv-toc print:hidden" aria-label="خريطة أقسام السيرة">
       <div className="cv-toc-card">
-        <p className="cv-toc-title">
-          <ListTree className="h-3.5 w-3.5" />
-          خريطة السيرة
-        </p>
         <ol className="cv-toc-list">
           {items.map((item) => {
             const active = activeId === item.id
