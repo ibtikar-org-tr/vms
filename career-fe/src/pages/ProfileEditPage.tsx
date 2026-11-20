@@ -11,13 +11,16 @@ import {
   Languages,
   ListChecks,
   MapPinned,
+  Pencil,
   Save,
   Trash2,
   User,
+  X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ChangelogModal } from '../components/ChangelogModal'
 import { CountrySelect, type LocationPick } from '../components/CountrySelect'
+import { CvDocument } from '../components/CvDocument'
 import { DraftRestoredModal } from '../components/DraftRestoredModal'
 import { LocationLabel } from '../components/LocationLabel'
 import { SkillPicker, type SkillOption } from '../components/SkillPicker'
@@ -97,6 +100,7 @@ export default function ProfileEditPage() {
   const [draftReady, setDraftReady] = useState(false)
   const [draftRestoredOpen, setDraftRestoredOpen] = useState(false)
   const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null)
+  const [livePreviewOpen, setLivePreviewOpen] = useState(false)
   const [workForm, setWorkForm] = useState({
     company_name: '',
     title: '',
@@ -445,6 +449,12 @@ export default function ProfileEditPage() {
 
   const vms = data.vmsProfile
   const displayName = displayNameOf(data)
+  const livePreviewData = {
+    ...data,
+    profile: { ...data.profile, summary },
+    languages: languagePrefs,
+    workPreferences: workPrefs,
+  }
 
   return (
     <div className="space-y-5">
@@ -455,7 +465,7 @@ export default function ProfileEditPage() {
             className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-brand"
           >
             <ArrowRight className="h-4 w-4" />
-            العودة لمعاينة السيرة
+            العودة للسيرة المحفوظة
           </Link>
           <p className="page-kicker">تعديل السيرة</p>
           <h1 className="page-title">{displayName}</h1>
@@ -468,7 +478,7 @@ export default function ProfileEditPage() {
         </span>
       </div>
 
-      <div className="space-y-4">
+      <div className={`space-y-4 ${livePreviewOpen ? 'hidden' : ''}`}>
           <nav className="panel overflow-x-auto p-1.5" aria-label="أقسام التعديل">
             <div className="flex min-w-max gap-1">
               {EDIT_SECTIONS.map((section) => {
@@ -1217,33 +1227,88 @@ export default function ProfileEditPage() {
           ) : null}
       </div>
 
-      <div className="sticky bottom-3 z-10 flex flex-wrap gap-3 border border-line bg-white/95 p-3 backdrop-blur-sm">
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={saving}
-          onClick={() => saveProfile()}
-        >
-          <Save className="h-4 w-4" />
-          {saving ? 'جاري الحفظ…' : 'حفظ السيرة'}
-        </button>
-        <button
-          type="button"
-          className="btn-ghost"
-          disabled={saving}
-          onClick={() => reviewChanges()}
-        >
-          <ListChecks className="h-4 w-4" />
-          عرض التعديلات
-        </button>
-        <button type="button" className="btn-ghost" disabled={saving} onClick={() => togglePublish()}>
-          {data.profile.is_published ? 'إلغاء النشر' : 'نشر السيرة للمراجعة'}
-        </button>
-        <Link to="/profile" className="btn-ghost ms-auto">
-          <Eye className="h-4 w-4" />
-          معاينة السيرة
-        </Link>
-      </div>
+      {!livePreviewOpen ? (
+        <div className="sticky bottom-3 z-10 flex flex-wrap gap-3 border border-line bg-white/95 p-3 backdrop-blur-sm">
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={saving}
+            onClick={() => saveProfile()}
+          >
+            <Save className="h-4 w-4" />
+            {saving ? 'جاري الحفظ…' : 'حفظ السيرة'}
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={saving}
+            onClick={() => reviewChanges()}
+          >
+            <ListChecks className="h-4 w-4" />
+            عرض التعديلات
+          </button>
+          <button type="button" className="btn-ghost" disabled={saving} onClick={() => togglePublish()}>
+            {data.profile.is_published ? 'إلغاء النشر' : 'نشر السيرة للمراجعة'}
+          </button>
+          <button
+            type="button"
+            className="btn-ghost ms-auto"
+            onClick={() => setLivePreviewOpen(true)}
+          >
+            <Eye className="h-4 w-4" />
+            معاينة السيرة
+          </button>
+        </div>
+      ) : null}
+
+      {livePreviewOpen ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-brand-light/40 px-4 py-3">
+            <div>
+              <p className="text-sm font-bold text-brand-ink">معاينة حية للتعديلات الحالية</p>
+              <p className="mt-0.5 text-xs text-muted">
+                هذه معاينة داخل صفحة التعديل فقط — لم تُحفظ على الخادم بعد ما لم تضغط حفظ.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => setLivePreviewOpen(false)}
+            >
+              <Pencil className="h-4 w-4" />
+              العودة للتعديل
+            </button>
+          </div>
+
+          <CvDocument
+            data={livePreviewData}
+            onDownloadDocument={(doc) =>
+              void fetch(profilesApi.documentDownloadUrl(doc.id), {
+                headers: authDownloadHeaders(),
+              }).then(async (res) => {
+                const blob = await res.blob()
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = doc.file_name
+                a.click()
+                URL.revokeObjectURL(url)
+              })
+            }
+          />
+
+          <div className="sticky bottom-3 z-10 flex justify-end border border-line bg-white/95 p-3 backdrop-blur-sm">
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setLivePreviewOpen(false)}
+            >
+              <X className="h-4 w-4" />
+              إغلاق المعاينة
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <DraftRestoredModal
         open={draftRestoredOpen}
