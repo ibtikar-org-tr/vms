@@ -14,9 +14,11 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ChangelogModal } from '../components/ChangelogModal'
-import { CountrySelect } from '../components/CountrySelect'
+import { CountrySelect, type LocationPick } from '../components/CountrySelect'
+import { LocationLabel } from '../components/LocationLabel'
 import { CvDocument } from '../components/CvDocument'
 import { SkillPicker, type SkillOption } from '../components/SkillPicker'
+import { isSyriaName } from '../lib/countries'
 import {
   buildProfileChangelog,
   snapshotFromDraft,
@@ -35,6 +37,7 @@ import {
   emptyWorkPreferences,
   JOB_TYPE_OPTIONS,
   normalizeWorkPreferences,
+  sortWorkLocations,
   type OpenJobType,
   type WorkLocationPref,
   type WorkPreferences,
@@ -212,10 +215,27 @@ export default function ProfilePage() {
     }))
   }
 
-  const addCountryLocation = (name: string) => {
-    const countryName = name.trim()
-    if (!countryName) return
+  const addWorkLocation = (pick: LocationPick) => {
     setWorkPrefs((prev) => {
+      if (pick.kind === 'remote') {
+        if (prev.locations.some((loc) => loc.kind === 'remote')) return prev
+        return {
+          ...prev,
+          locations: sortWorkLocations([
+            ...prev.locations,
+            {
+              kind: 'remote',
+              countryName: null,
+              salaryMin: null,
+              salaryMax: null,
+              currency: 'USD',
+            },
+          ]),
+        }
+      }
+
+      const countryName = pick.countryName.trim()
+      if (!countryName) return prev
       if (
         prev.locations.some(
           (loc) =>
@@ -227,7 +247,7 @@ export default function ProfilePage() {
       }
       return {
         ...prev,
-        locations: [
+        locations: sortWorkLocations([
           ...prev.locations,
           {
             kind: 'country',
@@ -236,17 +256,16 @@ export default function ProfilePage() {
             salaryMax: null,
             currency: 'USD',
           },
-        ],
+        ]),
       }
     })
   }
 
   const removeLocation = (index: number) => {
-    setWorkPrefs((prev) => {
-      const target = prev.locations[index]
-      if (!target || target.kind === 'remote') return prev
-      return { ...prev, locations: prev.locations.filter((_, i) => i !== index) }
-    })
+    setWorkPrefs((prev) => ({
+      ...prev,
+      locations: prev.locations.filter((_, i) => i !== index),
+    }))
   }
 
   const toggleJobType = (id: OpenJobType) => {
@@ -659,29 +678,23 @@ export default function ProfilePage() {
             <div className="mt-5">
               <p className="label">أماكن العمل المتوقعة والراتب الشهري (دوام كامل)</p>
               <p className="mb-3 text-xs text-slate-500">
-                «عن بُعد» دائماً في أعلى القائمة. أضف دولاً مع نطاق الراتب المتوقع لكل خيار.
+                اختر عن بُعد أو دولاً من القائمة. الترتيب: عن بُعد، سوريا، تركيا، ثم الباقي أبجدياً.
               </p>
               <ul className="space-y-3">
                 {workPrefs.locations.map((loc, index) => (
                   <li key={`${loc.kind}-${loc.countryName || 'remote'}`} className="border border-line p-3 sm:p-4">
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <p className="font-bold text-slate-900">
-                        {loc.kind === 'remote' ? 'عن بُعد (Remote)' : loc.countryName}
+                        <LocationLabel location={loc} />
                       </p>
-                      {loc.kind === 'country' ? (
-                        <button
-                          type="button"
-                          className="btn-danger py-1.5 text-xs"
-                          onClick={() => removeLocation(index)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          حذف
-                        </button>
-                      ) : (
-                        <span className="status-pill text-[10px]">
-                          أولاً في القائمة
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        className="btn-danger py-1.5 text-xs"
+                        onClick={() => removeLocation(index)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        حذف
+                      </button>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div>
@@ -697,7 +710,11 @@ export default function ProfilePage() {
                               salaryMin: e.target.value === '' ? null : Number(e.target.value),
                             })
                           }
-                          placeholder="مثال: 2000"
+                          placeholder={
+                            loc.kind === 'country' && isSyriaName(loc.countryName)
+                              ? 'مثال: 500'
+                              : 'مثال: 800'
+                          }
                         />
                       </div>
                       <div>
@@ -713,7 +730,11 @@ export default function ProfilePage() {
                               salaryMax: e.target.value === '' ? null : Number(e.target.value),
                             })
                           }
-                          placeholder="مثال: 3500"
+                          placeholder={
+                            loc.kind === 'country' && isSyriaName(loc.countryName)
+                              ? 'مثال: 1000'
+                              : 'مثال: 1500'
+                          }
                         />
                       </div>
                       <div>
@@ -737,12 +758,12 @@ export default function ProfilePage() {
 
               <div className="mt-3 max-w-md">
                 <CountrySelect
-                  value=""
+                  excludeRemote={workPrefs.locations.some((loc) => loc.kind === 'remote')}
                   excludeNames={workPrefs.locations
                     .filter((loc) => loc.kind === 'country')
                     .map((loc) => loc.countryName || '')}
-                  onChange={(name) => addCountryLocation(name)}
-                  placeholder="ابحث واختر دولة للإضافة"
+                  onPick={addWorkLocation}
+                  placeholder="ابحث واختر عن بُعد أو دولة"
                 />
               </div>
             </div>
