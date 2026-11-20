@@ -1,4 +1,4 @@
 # Copy to .dev.vars for local `wrangler dev` (gitignored).
-# Values must match VMS backend JWT_SECRET / INTERNAL_SECRET.
-JWT_SECRET=
+# VMS access tokens are verified via JWKS from membership-app (no shared JWT secret).
 VMS_INTERNAL_SECRET=
+VMS_API_BASE=http://localhost:5931/ms/membership-app/api

@@ -5,6 +5,7 @@ export interface AuthUser {
 }
 
 export interface AccessTokenPayload {
+  iss: string
   sub: string
   email: string
   role: string
