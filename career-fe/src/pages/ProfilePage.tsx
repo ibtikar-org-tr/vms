@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   Briefcase,
   Eye,
+  FileText,
   FolderKanban,
   GraduationCap,
   Heart,
@@ -46,6 +47,29 @@ import { authDownloadHeaders, profilesApi } from '../services/api'
 
 type Tab = 'preview' | 'edit'
 
+type EditSection =
+  | 'profile'
+  | 'education'
+  | 'skills'
+  | 'workPrefs'
+  | 'experience'
+  | 'projects'
+  | 'documents'
+
+const EDIT_SECTIONS: Array<{
+  id: EditSection
+  label: string
+  icon: typeof User
+}> = [
+  { id: 'profile', label: 'الملف الشخصي', icon: User },
+  { id: 'education', label: 'التعليم', icon: GraduationCap },
+  { id: 'skills', label: 'المهارات واللغات', icon: Heart },
+  { id: 'workPrefs', label: 'تفضيلات العمل', icon: MapPinned },
+  { id: 'experience', label: 'الخبرة', icon: Briefcase },
+  { id: 'projects', label: 'المشاريع', icon: FolderKanban },
+  { id: 'documents', label: 'الملفات', icon: FileText },
+]
+
 type LanguagePref = {
   language: string
   proficiency: number | null
@@ -63,6 +87,7 @@ export default function ProfilePage() {
   const [pendingAction, setPendingAction] = useState<'save' | 'publish' | null>(null)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<Tab>('preview')
+  const [editSection, setEditSection] = useState<EditSection>('profile')
   const [workForm, setWorkForm] = useState({
     company_name: '',
     title: '',
@@ -409,6 +434,31 @@ export default function ProfilePage() {
         />
       ) : (
         <div className="space-y-4">
+          <nav className="panel overflow-x-auto p-1.5" aria-label="أقسام التعديل">
+            <div className="flex min-w-max gap-1">
+              {EDIT_SECTIONS.map((section) => {
+                const Icon = section.icon
+                const active = editSection === section.id
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition ${
+                      active
+                        ? 'bg-brand text-white'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-ink'
+                    }`}
+                    onClick={() => setEditSection(section.id)}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {section.label}
+                  </button>
+                )
+              })}
+            </div>
+          </nav>
+
+          {editSection === 'profile' ? (
           <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
               <User className="h-4 w-4 text-slate-400" />
@@ -484,7 +534,9 @@ export default function ProfilePage() {
               </div>
             </div>
           </section>
+          ) : null}
 
+          {editSection === 'education' ? (
           <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
               <GraduationCap className="h-4 w-4 text-slate-400" />
@@ -514,7 +566,9 @@ export default function ProfilePage() {
             </div>
             <p className="mt-3 text-xs text-slate-500">لتعديل التعليم، حدّث ملفك في منصة الأعضاء.</p>
           </section>
+          ) : null}
 
+          {editSection === 'skills' ? (
           <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
               <Heart className="h-4 w-4 text-slate-400" />
@@ -614,7 +668,9 @@ export default function ProfilePage() {
               </div>
             </div>
           </section>
+          ) : null}
 
+          {editSection === 'workPrefs' ? (
           <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
               <MapPinned className="h-4 w-4 text-slate-400" />
@@ -768,7 +824,9 @@ export default function ProfilePage() {
               </div>
             </div>
           </section>
+          ) : null}
 
+          {editSection === 'experience' ? (
           <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
               <Briefcase className="h-4 w-4 text-slate-400" />
@@ -909,7 +967,9 @@ export default function ProfilePage() {
               </button>
             </form>
           </section>
+          ) : null}
 
+          {editSection === 'projects' ? (
           <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
               <FolderKanban className="h-4 w-4 text-slate-400" />
@@ -1042,9 +1102,14 @@ export default function ProfilePage() {
               </button>
             </form>
           </section>
+          ) : null}
 
+          {editSection === 'documents' ? (
           <section className="panel p-4 sm:p-6">
-            <h2 className="section-title">السيرة والملفات</h2>
+            <h2 className="section-title">
+              <FileText className="h-4 w-4 text-slate-400" />
+              السيرة والملفات
+            </h2>
             <div className="flex flex-wrap gap-3">
               <label className="btn-ghost cursor-pointer">
                 رفع سيرة ذاتية (PDF)
@@ -1114,6 +1179,7 @@ export default function ProfilePage() {
               ))}
             </ul>
           </section>
+          ) : null}
         </div>
       )}
 
