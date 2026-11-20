@@ -209,15 +209,15 @@ h3,
     width: 1.75rem;
     height: 1.75rem;
     border-radius: 0.375rem;
-    border: 1px solid var(--line);
-    background: #fff;
+    border: 1px solid transparent;
+    background: transparent;
     color: #5b6b7c;
     transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
 
   .cv-collapse-toggle:hover {
-    border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
-    background: var(--brand-light);
+    border-color: var(--line);
+    background: #f7f8fa;
     color: var(--brand-ink);
   }
 
