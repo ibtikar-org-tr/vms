@@ -104,7 +104,8 @@ export default function ProfileEditPage() {
   const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null)
   const [livePreviewOpen, setLivePreviewOpen] = useState(false)
 
-  const load = async () => {
+  const load = async (options?: { restoreLocalDraft?: boolean }) => {
+    const restoreLocalDraft = Boolean(options?.restoreLocalDraft)
     setDraftReady(false)
     const payload = await profilesApi.me()
     setData(payload)
@@ -132,31 +133,33 @@ export default function ProfileEditPage() {
       workPreferences: nextWorkPrefs,
     })
 
-    const localDraft = membershipNumber ? readCvEditDraft(membershipNumber) : null
-    const localSnapshot = localDraft
-      ? draftSnapshot({
-          summary: localDraft.summary,
-          languages: localDraft.languages,
-          workPreferences: localDraft.workPreferences,
-        })
-      : null
-    const shouldRestore =
-      Boolean(localSnapshot) && draftsDiffer(serverSnapshot, localSnapshot!)
+    if (restoreLocalDraft) {
+      const localDraft = membershipNumber ? readCvEditDraft(membershipNumber) : null
+      const localSnapshot = localDraft
+        ? draftSnapshot({
+            summary: localDraft.summary,
+            languages: localDraft.languages,
+            workPreferences: localDraft.workPreferences,
+          })
+        : null
+      const shouldRestore =
+        Boolean(localSnapshot) && draftsDiffer(serverSnapshot, localSnapshot!)
 
-    if (shouldRestore && localDraft) {
-      setSummary(localDraft.summary)
-      setLanguagePrefs(localDraft.languages)
-      setWorkPrefs(localDraft.workPreferences)
-      setDraftRestoredAt(localDraft.savedAt || null)
-      setDraftRestoredOpen(true)
-    } else {
-      setSummary(nextSummary)
-      setLanguagePrefs(nextLanguages)
-      setWorkPrefs(nextWorkPrefs)
-      setDraftRestoredOpen(false)
-      setDraftRestoredAt(null)
-      if (membershipNumber && localDraft && !shouldRestore) {
-        clearCvEditDraft(membershipNumber)
+      if (shouldRestore && localDraft) {
+        setSummary(localDraft.summary)
+        setLanguagePrefs(localDraft.languages)
+        setWorkPrefs(localDraft.workPreferences)
+        setDraftRestoredAt(localDraft.savedAt || null)
+        setDraftRestoredOpen(true)
+      } else {
+        setSummary(nextSummary)
+        setLanguagePrefs(nextLanguages)
+        setWorkPrefs(nextWorkPrefs)
+        setDraftRestoredOpen(false)
+        setDraftRestoredAt(null)
+        if (membershipNumber && localDraft && !shouldRestore) {
+          clearCvEditDraft(membershipNumber)
+        }
       }
     }
 
@@ -231,7 +234,7 @@ export default function ProfileEditPage() {
   }
 
   useEffect(() => {
-    void load().catch(() => toast.error('تعذّر تحميل السيرة'))
+    void load({ restoreLocalDraft: true }).catch(() => toast.error('تعذّر تحميل السيرة'))
   }, [])
 
   useEffect(() => {
