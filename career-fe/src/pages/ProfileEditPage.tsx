@@ -17,9 +17,17 @@ import {
 import toast from 'react-hot-toast'
 import { ChangelogModal } from '../components/ChangelogModal'
 import { CountrySelect, type LocationPick } from '../components/CountrySelect'
+import { DraftRestoredModal } from '../components/DraftRestoredModal'
 import { LocationLabel } from '../components/LocationLabel'
 import { SkillPicker, type SkillOption } from '../components/SkillPicker'
 import { isSyriaName } from '../lib/countries'
+import {
+  clearCvEditDraft,
+  draftsDiffer,
+  draftSnapshot,
+  readCvEditDraft,
+  writeCvEditDraft,
+} from '../lib/cv-edit-draft'
 import {
   buildProfileChangelog,
   snapshotFromDraft,
@@ -85,6 +93,9 @@ export default function ProfileEditPage() {
   const [pendingAction, setPendingAction] = useState<'save' | 'publish' | null>(null)
   const [saving, setSaving] = useState(false)
   const [editSection, setEditSection] = useState<EditSection>('profile')
+  const [draftReady, setDraftReady] = useState(false)
+  const [draftRestoredOpen, setDraftRestoredOpen] = useState(false)
+  const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null)
   const [workForm, setWorkForm] = useState({
     company_name: '',
     title: '',
@@ -110,8 +121,10 @@ export default function ProfileEditPage() {
   const [projectSkills, setProjectSkills] = useState<SkillOption[]>([])
 
   const load = async () => {
+    setDraftReady(false)
     const payload = await profilesApi.me()
     setData(payload)
+    const membershipNumber = String(payload.profile?.membership_number || '')
     const nextSummary = payload.profile?.summary || ''
     const fromApi: LanguagePref[] = Array.isArray(payload.languages)
       ? payload.languages.map((item: any) => ({
@@ -129,19 +142,45 @@ export default function ProfileEditPage() {
         }))
     const nextLanguages = fromApi.filter((item) => item.language)
     const nextWorkPrefs = normalizeWorkPreferences(payload.workPreferences)
-    setSummary(nextSummary)
-    setLanguagePrefs(nextLanguages)
-    setWorkPrefs(nextWorkPrefs)
-    setBaseline(
-      snapshotFromDraft({
-        summary: nextSummary,
-        languages: nextLanguages,
-        workPreferences: nextWorkPrefs,
-      }),
-    )
+    const serverSnapshot = snapshotFromDraft({
+      summary: nextSummary,
+      languages: nextLanguages,
+      workPreferences: nextWorkPrefs,
+    })
+
+    const localDraft = membershipNumber ? readCvEditDraft(membershipNumber) : null
+    const localSnapshot = localDraft
+      ? draftSnapshot({
+          summary: localDraft.summary,
+          languages: localDraft.languages,
+          workPreferences: localDraft.workPreferences,
+        })
+      : null
+    const shouldRestore =
+      Boolean(localSnapshot) && draftsDiffer(serverSnapshot, localSnapshot!)
+
+    if (shouldRestore && localDraft) {
+      setSummary(localDraft.summary)
+      setLanguagePrefs(localDraft.languages)
+      setWorkPrefs(localDraft.workPreferences)
+      setDraftRestoredAt(localDraft.savedAt || null)
+      setDraftRestoredOpen(true)
+    } else {
+      setSummary(nextSummary)
+      setLanguagePrefs(nextLanguages)
+      setWorkPrefs(nextWorkPrefs)
+      setDraftRestoredOpen(false)
+      setDraftRestoredAt(null)
+      if (membershipNumber && localDraft && !shouldRestore) {
+        clearCvEditDraft(membershipNumber)
+      }
+    }
+
+    setBaseline(serverSnapshot)
     setChangelogOpen(false)
     setChangelogEntries([])
     setPendingAction(null)
+    setDraftReady(true)
   }
 
   const currentDraft = () =>
@@ -190,6 +229,8 @@ export default function ProfileEditPage() {
       } else {
         toast.success('تم حفظ السيرة')
       }
+      const membershipNumber = String(data?.profile?.membership_number || '')
+      if (membershipNumber) clearCvEditDraft(membershipNumber)
       setChangelogOpen(false)
       setPendingAction(null)
       await load()
@@ -201,6 +242,36 @@ export default function ProfileEditPage() {
   useEffect(() => {
     void load().catch(() => toast.error('تعذّر تحميل السيرة'))
   }, [])
+
+  useEffect(() => {
+    if (!draftReady || !baseline || !data?.profile?.membership_number) return
+    const membershipNumber = String(data.profile.membership_number)
+    const current = currentDraft()
+    if (!draftsDiffer(baseline, current)) {
+      clearCvEditDraft(membershipNumber)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      writeCvEditDraft(membershipNumber, {
+        summary,
+        languages: languagePrefs,
+        workPreferences: workPrefs,
+      })
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [baseline, data, draftReady, languagePrefs, summary, workPrefs])
+
+  const discardLocalDraft = () => {
+    const membershipNumber = String(data?.profile?.membership_number || '')
+    if (membershipNumber) clearCvEditDraft(membershipNumber)
+    if (baseline) {
+      setSummary(baseline.summary)
+      setLanguagePrefs(baseline.languages)
+      setWorkPrefs(baseline.workPreferences)
+    }
+    setDraftRestoredOpen(false)
+    setDraftRestoredAt(null)
+  }
 
   const skills = useMemo(() => splitCsv(data?.vmsProfile?.skills), [data])
   const interests = useMemo(() => splitCsv(data?.vmsProfile?.interests), [data])
@@ -1152,6 +1223,13 @@ export default function ProfileEditPage() {
           معاينة السيرة
         </Link>
       </div>
+
+      <DraftRestoredModal
+        open={draftRestoredOpen}
+        savedAt={draftRestoredAt}
+        onKeep={() => setDraftRestoredOpen(false)}
+        onDiscard={discardLocalDraft}
+      />
 
       <ChangelogModal
         open={changelogOpen}
