@@ -344,7 +344,8 @@ export default function TalentPage() {
                   .split(/\s+/)
                   .filter(Boolean)
                   .slice(0, 2)
-                  .map((p: string) => p[0])
+                  .map((p: string) => Array.from(p.replace(/\./g, ''))[0] || '')
+                  .filter(Boolean)
                   .join('')
                 const prefs = normalizeWorkPreferences(item.workPreferences)
                 const meta = [
@@ -361,17 +362,9 @@ export default function TalentPage() {
                       to={`/talent/${item.profile.membership_number}`}
                       className="flex items-start gap-3 px-4 py-4 transition hover:bg-slate-50/80 sm:px-5"
                     >
-                      {item.vmsProfile?.profilePictureUrl ? (
-                        <img
-                          src={item.vmsProfile.profilePictureUrl}
-                          alt=""
-                          className="h-11 w-11 shrink-0 rounded-md object-cover ring-1 ring-line"
-                        />
-                      ) : (
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-brand-light text-xs font-bold text-brand-ink">
-                          {initials || '؟'}
-                        </div>
-                      )}
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-brand-light text-xs font-bold text-brand-ink">
+                        {initials || '؟'}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                           <h2 className="truncate font-semibold text-ink">{name}</h2>

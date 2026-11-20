@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Pencil } from 'lucide-react'
+import { Pencil, Shield } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { CvDocument } from '../components/CvDocument'
 import { displayNameOf } from '../lib/profile-utils'
@@ -96,6 +96,10 @@ export default function ProfilePage() {
               />
             </button>
           </div>
+          <Link to="/profile/access" className="btn-ghost">
+            <Shield className="h-4 w-4" />
+            طلبات الوصول
+          </Link>
           <Link to="/profile/edit" className="btn-primary">
             <Pencil className="h-4 w-4" />
             تعديل السيرة

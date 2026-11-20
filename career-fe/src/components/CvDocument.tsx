@@ -117,6 +117,8 @@ type Props = {
   data: CvDocumentData
   onDownloadDocument?: (doc: NonNullable<CvDocumentData['documents']>[number]) => void
   compact?: boolean
+  /** limited = privacy-redacted public view (no export / downloads / photo) */
+  privacyMode?: 'full' | 'limited'
 }
 
 function EmptyHint({ children }: { children: ReactNode }) {
@@ -172,7 +174,13 @@ function CollapsibleCvSection({
   )
 }
 
-export function CvDocument({ data, onDownloadDocument, compact }: Props) {
+export function CvDocument({
+  data,
+  onDownloadDocument,
+  compact,
+  privacyMode = 'full',
+}: Props) {
+  const limited = privacyMode === 'limited'
   const vms = data.vmsProfile
   const name = displayNameOf(data)
   const role = latestRoleOf(data.workExperiences)
@@ -198,11 +206,17 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part[0])
+    .map((part) => Array.from(part.replace(/\./g, ''))[0] || '')
+    .filter(Boolean)
     .join('')
 
+  const showEmail = !limited && Boolean(vms?.email)
+  const showPhone = !limited && Boolean(vms?.phoneNumber)
+  const showPhoto = !limited && Boolean(vms?.profilePictureUrl)
+  const canDownload = !limited && Boolean(onDownloadDocument)
+
   const hasPersonal = Boolean(
-    vms?.email || vms?.phoneNumber || location || birthDate || (sex && sex !== '—'),
+    showEmail || showPhone || location || birthDate || sex,
   )
   const hasWorkPrefs =
     workPreferences.canRelocate ||
@@ -299,18 +313,20 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           />
           <div>
             <p className="text-sm font-bold text-ink">المسار المهني</p>
-            <p className="text-[11px] text-muted">تصدير PDF · Markdown · TXT</p>
+            <p className="text-[11px] text-muted">
+              {limited ? 'عرض محدود للخصوصية' : 'تصدير PDF · Markdown · TXT'}
+            </p>
           </div>
         </div>
-        <CvExportMenu data={data} />
+        {!limited ? <CvExportMenu data={data} /> : null}
       </div>
 
       <div className={`grid gap-0 lg:grid-cols-[230px_1fr] ${compact ? '' : 'lg:min-h-[640px]'}`}>
         <aside className="border-b border-line bg-[#f7f8fa] p-5 sm:p-6 lg:border-b-0 lg:border-l lg:border-line">
           <div className="flex flex-col items-center text-center lg:items-stretch lg:text-start">
-            {vms?.profilePictureUrl ? (
+            {showPhoto ? (
               <img
-                src={vms.profilePictureUrl}
+                src={vms!.profilePictureUrl!}
                 alt=""
                 className="mx-auto h-28 w-28 rounded-md object-cover ring-1 ring-line lg:mx-0"
               />
@@ -330,21 +346,21 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
             {hasPersonal ? (
               <CollapsibleCvSection
                 id="cv-personal"
-                title="تواصل ومعلومات شخصية"
+                title={limited ? 'معلومات شخصية' : 'تواصل ومعلومات شخصية'}
                 open={openMap['cv-personal'] !== false}
                 onOpenChange={(open) => setSectionOpen('cv-personal', open)}
               >
                 <ul className="space-y-2.5 text-slate-600">
-                  {vms?.email ? (
+                  {showEmail ? (
                     <li className="flex items-start gap-2 break-all">
                       <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span dir="ltr">{vms.email}</span>
+                      <span dir="ltr">{vms?.email}</span>
                     </li>
                   ) : null}
-                  {vms?.phoneNumber ? (
+                  {showPhone ? (
                     <li className="flex items-start gap-2">
                       <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span dir="ltr">{vms.phoneNumber}</span>
+                      <span dir="ltr">{vms?.phoneNumber}</span>
                     </li>
                   ) : null}
                   {location ? (
@@ -353,12 +369,10 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                       <span>{location}</span>
                     </li>
                   ) : null}
-                  {sex && sex !== '—' ? (
-                    <li className="flex items-start gap-2">
-                      <UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span>{sex}</span>
-                    </li>
-                  ) : null}
+                  <li className="flex items-start gap-2">
+                    <UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span>{sex}</span>
+                  </li>
                   {birthDate ? (
                     <li className="flex items-start gap-2">
                       <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -676,14 +690,18 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                         <p className="text-xs text-slate-500">{documentKindLabel(doc.kind)}</p>
                       </div>
                     </div>
-                    {onDownloadDocument ? (
+                    {canDownload ? (
                       <button
                         type="button"
                         className="btn-ghost shrink-0 py-1.5 text-xs"
-                        onClick={() => onDownloadDocument(doc)}
+                        onClick={() => onDownloadDocument?.(doc)}
                       >
                         تنزيل
                       </button>
+                    ) : limited ? (
+                      <span className="shrink-0 text-[11px] font-medium text-slate-400">
+                        محمي
+                      </span>
                     ) : null}
                   </li>
                 ))}

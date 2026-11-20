@@ -34,6 +34,9 @@ export function Layout() {
                 <NavLink to="/profile" className={navClass}>
                   سيرتي
                 </NavLink>
+                <NavLink to="/profile/access" className={navClass}>
+                  طلبات الوصول
+                </NavLink>
                 <NavLink to="/talent" className={navClass}>
                   تصفح السير
                 </NavLink>
