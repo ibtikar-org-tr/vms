@@ -189,15 +189,62 @@ h3,
   }
 
   .cv-section-title {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    justify-content: space-between;
+    gap: 0.5rem;
     border-bottom: 1px solid var(--line);
     padding-bottom: 0.4rem;
     font-size: 0.8125rem;
     font-weight: 700;
     color: var(--brand-ink);
+  }
+
+  .cv-collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: #5b6b7c;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .cv-collapse-toggle:hover {
+    border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+    background: var(--brand-light);
+    color: var(--brand-ink);
+  }
+
+  .cv-collapse-panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 0.32s ease,
+      opacity 0.24s ease;
+  }
+
+  .cv-collapse-panel.is-open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .cv-collapse-panel-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  @media print {
+    .cv-collapse-panel {
+      display: block;
+      opacity: 1;
+    }
   }
 
   .page-kicker {

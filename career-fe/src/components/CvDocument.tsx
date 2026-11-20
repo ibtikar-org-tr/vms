@@ -1,7 +1,8 @@
-import { type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Briefcase,
   Calendar,
+  ChevronDown,
   Download,
   FolderKanban,
   GraduationCap,
@@ -116,6 +117,50 @@ function EmptyHint({ children }: { children: ReactNode }) {
   return <p className="text-sm text-slate-400">{children}</p>
 }
 
+function CollapsibleCvSection({
+  title,
+  icon,
+  children,
+  defaultOpen = true,
+}: {
+  title: string
+  icon?: ReactNode
+  children: ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <section className="cv-collapse">
+      <div className="cv-section-title">
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          {icon}
+          {title}
+        </span>
+        <button
+          type="button"
+          className="cv-collapse-toggle print:hidden"
+          aria-expanded={open}
+          aria-label={open ? `إخفاء ${title}` : `إظهار ${title}`}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-300 ease-out ${
+              open ? 'rotate-180' : 'rotate-0'
+            }`}
+          />
+        </button>
+      </div>
+      <div
+        className={`cv-collapse-panel ${open ? 'is-open' : ''}`}
+        aria-hidden={!open}
+      >
+        <div className="cv-collapse-panel-inner">{children}</div>
+      </div>
+    </section>
+  )
+}
+
 export function CvDocument({ data, onDownloadDocument, compact }: Props) {
   const vms = data.vmsProfile
   const name = displayNameOf(data)
@@ -145,6 +190,14 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     .map((part) => part[0])
     .join('')
 
+  const hasPersonal = Boolean(
+    vms?.email || vms?.phoneNumber || location || birthDate || (sex && sex !== '—'),
+  )
+  const hasWorkPrefs =
+    workPreferences.canRelocate ||
+    workPreferences.jobTypes.length > 0 ||
+    workPreferences.locations.length > 0
+
   return (
     <article
       className={`overflow-hidden rounded-lg border border-line bg-white ${
@@ -153,7 +206,11 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2.5">
-          <img src="/career-mark.svg" alt="" className="h-8 w-8 rounded-md object-cover ring-1 ring-line" />
+          <img
+            src="/career-mark.svg"
+            alt=""
+            className="h-8 w-8 rounded-md object-cover ring-1 ring-line"
+          />
           <div>
             <p className="text-sm font-bold text-ink">المسار المهني</p>
             <p className="text-[11px] text-muted">تصدير PDF · Markdown · TXT</p>
@@ -184,9 +241,8 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </div>
 
           <div className="mt-6 space-y-4 text-sm">
-            {(vms?.email || vms?.phoneNumber || location || birthDate || (sex && sex !== '—')) && (
-              <div>
-                <p className="cv-section-title">تواصل ومعلومات شخصية</p>
+            {hasPersonal ? (
+              <CollapsibleCvSection title="تواصل ومعلومات شخصية">
                 <ul className="space-y-2.5 text-slate-600">
                   {vms?.email ? (
                     <li className="flex items-start gap-2 break-all">
@@ -219,11 +275,10 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                     </li>
                   ) : null}
                 </ul>
-              </div>
-            )}
+              </CollapsibleCvSection>
+            ) : null}
 
-            <div>
-              <p className="cv-section-title">المهارات</p>
+            <CollapsibleCvSection title="المهارات">
               <div className="flex flex-wrap gap-1.5">
                 {skills.length ? (
                   skills.map((item) => (
@@ -235,13 +290,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                   <EmptyHint>لا توجد مهارات بعد</EmptyHint>
                 )}
               </div>
-            </div>
+            </CollapsibleCvSection>
 
-            <div>
-              <p className="cv-section-title">
-                <Languages className="h-3.5 w-3.5 text-slate-400" />
-                اللغات
-              </p>
+            <CollapsibleCvSection
+              title="اللغات"
+              icon={<Languages className="h-3.5 w-3.5 text-slate-400" />}
+            >
               <ul className="space-y-2">
                 {languages.length ? (
                   languages.map((item) => (
@@ -260,7 +314,9 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                         <div className="mt-1.5 h-1 overflow-hidden bg-slate-100">
                           <div
                             className="h-full bg-brand"
-                            style={{ width: `${Math.min(100, Math.max(0, item.proficiency * 10))}%` }}
+                            style={{
+                              width: `${Math.min(100, Math.max(0, item.proficiency * 10))}%`,
+                            }}
                           />
                         </div>
                       ) : null}
@@ -273,11 +329,10 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                   <EmptyHint>لا توجد لغات بعد</EmptyHint>
                 )}
               </ul>
-            </div>
+            </CollapsibleCvSection>
 
             {!!interests.length && (
-              <div>
-                <p className="cv-section-title">الاهتمامات</p>
+              <CollapsibleCvSection title="الاهتمامات">
                 <div className="flex flex-wrap gap-1.5">
                   {interests.map((item) => (
                     <span key={item} className="chip">
@@ -285,7 +340,7 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                     </span>
                   ))}
                 </div>
-              </div>
+              </CollapsibleCvSection>
             )}
           </div>
         </aside>
@@ -303,20 +358,16 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </header>
 
           {data.profile.summary ? (
-            <section>
-              <h2 className="cv-section-title">نبذة مهنية</h2>
+            <CollapsibleCvSection title="نبذة مهنية">
               <p className="whitespace-pre-wrap leading-7 text-slate-700">{data.profile.summary}</p>
-            </section>
+            </CollapsibleCvSection>
           ) : null}
 
-          {(workPreferences.canRelocate ||
-            workPreferences.jobTypes.length > 0 ||
-            workPreferences.locations.length > 0) && (
-            <section>
-              <h2 className="cv-section-title">
-                <MapPinned className="h-3.5 w-3.5 text-slate-400" />
-                تفضيلات العمل
-              </h2>
+          {hasWorkPrefs ? (
+            <CollapsibleCvSection
+              title="تفضيلات العمل"
+              icon={<MapPinned className="h-3.5 w-3.5 text-slate-400" />}
+            >
               {!!workPreferences.jobTypes.length && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {workPreferences.jobTypes.map((id) => (
@@ -359,14 +410,13 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                   })}
                 </ul>
               )}
-            </section>
-          )}
+            </CollapsibleCvSection>
+          ) : null}
 
-          <section>
-            <h2 className="cv-section-title">
-              <Briefcase className="h-3.5 w-3.5 text-slate-400" />
-              الخبرة العملية
-            </h2>
+          <CollapsibleCvSection
+            title="الخبرة العملية"
+            icon={<Briefcase className="h-3.5 w-3.5 text-slate-400" />}
+          >
             <ul className="divide-y divide-line">
               {data.workExperiences?.map((item) => (
                 <li key={item.id} className="py-4 first:pt-0 last:pb-0">
@@ -404,13 +454,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
               ))}
               {!data.workExperiences?.length && <EmptyHint>لا توجد خبرات مسجّلة بعد.</EmptyHint>}
             </ul>
-          </section>
+          </CollapsibleCvSection>
 
-          <section>
-            <h2 className="cv-section-title">
-              <GraduationCap className="h-3.5 w-3.5 text-slate-400" />
-              التعليم
-            </h2>
+          <CollapsibleCvSection
+            title="التعليم"
+            icon={<GraduationCap className="h-3.5 w-3.5 text-slate-400" />}
+          >
             {educationBits || vms?.school ? (
               <div>
                 <p className="font-semibold text-ink">
@@ -426,13 +475,12 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
             ) : (
               <EmptyHint>لا توجد بيانات تعليم في منصة الأعضاء بعد.</EmptyHint>
             )}
-          </section>
+          </CollapsibleCvSection>
 
-          <section>
-            <h2 className="cv-section-title">
-              <FolderKanban className="h-3.5 w-3.5 text-slate-400" />
-              المشاريع
-            </h2>
+          <CollapsibleCvSection
+            title="المشاريع"
+            icon={<FolderKanban className="h-3.5 w-3.5 text-slate-400" />}
+          >
             <ul className="divide-y divide-line">
               {data.projects?.map((item) => (
                 <li key={item.id} className="py-4 first:pt-0 last:pb-0">
@@ -472,14 +520,13 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
               ))}
               {!data.projects?.length && <EmptyHint>لا توجد مشاريع مسجّلة بعد.</EmptyHint>}
             </ul>
-          </section>
+          </CollapsibleCvSection>
 
           {!!data.documents?.length && (
-            <section>
-            <h2 className="cv-section-title">
-              <Download className="h-3.5 w-3.5 text-slate-400" />
-              الملفات المرفقة
-            </h2>
+            <CollapsibleCvSection
+              title="الملفات المرفقة"
+              icon={<Download className="h-3.5 w-3.5 text-slate-400" />}
+            >
               <ul className="divide-y divide-line border border-line">
                 {data.documents.map((doc) => (
                   <li
@@ -504,7 +551,7 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                   </li>
                 ))}
               </ul>
-            </section>
+            </CollapsibleCvSection>
           )}
         </div>
       </div>
