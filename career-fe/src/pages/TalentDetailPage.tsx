@@ -20,8 +20,8 @@ export default function TalentDetailPage() {
   if (!data) {
     return (
       <div className="flex flex-col items-center py-16">
-        <div className="mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-brand" />
-        <p className="text-slate-600">جاري تحميل السيرة…</p>
+        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-line border-t-brand" />
+        <p className="text-sm text-muted">جاري تحميل السيرة…</p>
       </div>
     )
   }

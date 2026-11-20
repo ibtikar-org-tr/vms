@@ -91,7 +91,7 @@ export function CountrySelect({
       </button>
 
       {open ? (
-        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-xl border border-line bg-white shadow-sheet">
+        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-line bg-white">
           <div className="relative border-b border-line p-2">
             <Search className="pointer-events-none absolute start-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
@@ -107,7 +107,7 @@ export function CountrySelect({
               <li key={country.id}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-start text-sm transition hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-start text-sm transition hover:bg-slate-50"
                   onClick={() => {
                     onChange(country.nameAr, country)
                     setOpen(false)

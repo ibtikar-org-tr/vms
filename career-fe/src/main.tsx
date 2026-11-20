@@ -16,7 +16,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <AuthProvider>
         <App />
-        <Toaster position="top-center" />
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            className: 'text-sm font-medium',
+            style: {
+              borderRadius: '0.375rem',
+              border: '1px solid #d8dee6',
+              boxShadow: '0 1px 0 rgba(21, 32, 43, 0.04)',
+            },
+          }}
+        />
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,
