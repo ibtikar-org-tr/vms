@@ -18,12 +18,14 @@ import {
   X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { AddProjectForm } from '../components/AddProjectForm'
+import { AddWorkExperienceForm } from '../components/AddWorkExperienceForm'
 import { ChangelogModal } from '../components/ChangelogModal'
 import { CountrySelect, type LocationPick } from '../components/CountrySelect'
 import { CvDocument } from '../components/CvDocument'
 import { DraftRestoredModal } from '../components/DraftRestoredModal'
 import { LocationLabel } from '../components/LocationLabel'
-import { SkillPicker, type SkillOption } from '../components/SkillPicker'
+import { type SkillOption } from '../components/SkillPicker'
 import { isSyriaName } from '../lib/countries'
 import {
   clearCvEditDraft,
@@ -101,29 +103,6 @@ export default function ProfileEditPage() {
   const [draftRestoredOpen, setDraftRestoredOpen] = useState(false)
   const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null)
   const [livePreviewOpen, setLivePreviewOpen] = useState(false)
-  const [workForm, setWorkForm] = useState({
-    company_name: '',
-    title: '',
-    location: '',
-    start_date: '',
-    end_date: '',
-    is_current: false,
-    responsibilities: '',
-    achievements: '',
-  })
-  const [workSkills, setWorkSkills] = useState<SkillOption[]>([])
-  const [projectForm, setProjectForm] = useState({
-    name: '',
-    role: '',
-    company: '',
-    project_type: 'personal',
-    start_date: '',
-    end_date: '',
-    is_ongoing: false,
-    responsibilities: '',
-    outcomes: '',
-  })
-  const [projectSkills, setProjectSkills] = useState<SkillOption[]>([])
 
   const load = async () => {
     setDraftReady(false)
@@ -385,50 +364,6 @@ export default function ProfileEditPage() {
         jobTypes: has ? prev.jobTypes.filter((item) => item !== id) : [...prev.jobTypes, id],
       }
     })
-  }
-
-  const addWork = async (event: FormEvent) => {
-    event.preventDefault()
-    await profilesApi.addWork({
-      ...workForm,
-      description: workForm.responsibilities,
-      skills: workSkills,
-    })
-    setWorkForm({
-      company_name: '',
-      title: '',
-      location: '',
-      start_date: '',
-      end_date: '',
-      is_current: false,
-      responsibilities: '',
-      achievements: '',
-    })
-    setWorkSkills([])
-    toast.success('تمت إضافة الخبرة')
-    await load()
-  }
-
-  const addProject = async (event: FormEvent) => {
-    event.preventDefault()
-    await profilesApi.addProject({
-      ...projectForm,
-      skills: projectSkills,
-    })
-    setProjectForm({
-      name: '',
-      role: '',
-      company: '',
-      project_type: 'personal',
-      start_date: '',
-      end_date: '',
-      is_ongoing: false,
-      responsibilities: '',
-      outcomes: '',
-    })
-    setProjectSkills([])
-    toast.success('تمت إضافة المشروع')
-    await load()
   }
 
   const onUpload = async (file: File | null, kind: string) => {
@@ -917,100 +852,12 @@ export default function ProfileEditPage() {
                   </div>
                 </li>
               ))}
+              {!data.workExperiences?.length && (
+                <p className="text-sm text-slate-400">لا توجد خبرات عملية بعد.</p>
+              )}
             </ul>
 
-            <form
-              className="mt-6 grid grid-cols-1 gap-4 border-t border-line pt-6 md:grid-cols-2"
-              onSubmit={(e) => void addWork(e)}
-            >
-              <div>
-                <label className="label">المسمى الوظيفي *</label>
-                <input
-                  className="field"
-                  required
-                  placeholder="مثال: مهندس برمجيات أول"
-                  value={workForm.title}
-                  onChange={(e) => setWorkForm((s) => ({ ...s, title: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">الشركة *</label>
-                <input
-                  className="field"
-                  required
-                  placeholder="مثال: جوجل، مايكروسوفت، شركة محلية"
-                  value={workForm.company_name}
-                  onChange={(e) => setWorkForm((s) => ({ ...s, company_name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">الموقع</label>
-                <input
-                  className="field"
-                  value={workForm.location}
-                  onChange={(e) => setWorkForm((s) => ({ ...s, location: e.target.value }))}
-                />
-              </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={workForm.is_current}
-                    onChange={(e) => setWorkForm((s) => ({ ...s, is_current: e.target.checked }))}
-                  />
-                  أعمل هنا حالياً
-                </label>
-              </div>
-              <div>
-                <label className="label">تاريخ البداية</label>
-                <input
-                  className="field"
-                  type="month"
-                  value={workForm.start_date}
-                  onChange={(e) => setWorkForm((s) => ({ ...s, start_date: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">تاريخ النهاية</label>
-                <input
-                  className="field"
-                  type="month"
-                  disabled={workForm.is_current}
-                  value={workForm.end_date}
-                  onChange={(e) => setWorkForm((s) => ({ ...s, end_date: e.target.value }))}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="label">المسؤوليات *</label>
-                <textarea
-                  className="field min-h-28"
-                  required
-                  placeholder="صف مسؤولياتك وتأثيرك بأرقام أو نتائج محددة عند الإمكان"
-                  value={workForm.responsibilities}
-                  onChange={(e) => setWorkForm((s) => ({ ...s, responsibilities: e.target.value }))}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="label">الإنجازات</label>
-                <textarea
-                  className="field min-h-24"
-                  placeholder="اختياري: أبرز النتائج"
-                  value={workForm.achievements}
-                  onChange={(e) => setWorkForm((s) => ({ ...s, achievements: e.target.value }))}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <SkillPicker
-                  available={availableSkills}
-                  selected={workSkills}
-                  onChange={setWorkSkills}
-                  label="المهارات المكتسبة في هذه الخبرة"
-                />
-              </div>
-              <button type="submit" className="btn-primary md:col-span-2">
-                إضافة خبرة عملية
-              </button>
-            </form>
+            <AddWorkExperienceForm availableSkills={availableSkills} onAdded={load} />
           </section>
           ) : null}
 
@@ -1059,93 +906,7 @@ export default function ProfileEditPage() {
               {!data.projects?.length && <p className="text-sm text-slate-400">لا توجد مشاريع بعد.</p>}
             </ul>
 
-            <form
-              className="mt-6 grid grid-cols-1 gap-4 border-t border-line pt-6 md:grid-cols-2"
-              onSubmit={(e) => void addProject(e)}
-            >
-              <div>
-                <label className="label">اسم المشروع *</label>
-                <input
-                  className="field"
-                  required
-                  placeholder="منصة تجارة إلكترونية، تطبيق جوال…"
-                  value={projectForm.name}
-                  onChange={(e) => setProjectForm((s) => ({ ...s, name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">دورك</label>
-                <input
-                  className="field"
-                  value={projectForm.role}
-                  onChange={(e) => setProjectForm((s) => ({ ...s, role: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">الجهة / الشركة</label>
-                <input
-                  className="field"
-                  value={projectForm.company}
-                  onChange={(e) => setProjectForm((s) => ({ ...s, company: e.target.value }))}
-                />
-              </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={projectForm.is_ongoing}
-                    onChange={(e) => setProjectForm((s) => ({ ...s, is_ongoing: e.target.checked }))}
-                  />
-                  مشروع مستمر
-                </label>
-              </div>
-              <div>
-                <label className="label">البداية</label>
-                <input
-                  className="field"
-                  type="month"
-                  value={projectForm.start_date}
-                  onChange={(e) => setProjectForm((s) => ({ ...s, start_date: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label">النهاية</label>
-                <input
-                  className="field"
-                  type="month"
-                  disabled={projectForm.is_ongoing}
-                  value={projectForm.end_date}
-                  onChange={(e) => setProjectForm((s) => ({ ...s, end_date: e.target.value }))}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <SkillPicker
-                  available={availableSkills}
-                  selected={projectSkills}
-                  onChange={setProjectSkills}
-                  label="المهارات المكتسبة في هذا المشروع"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="label">المسؤوليات</label>
-                <textarea
-                  className="field min-h-24"
-                  value={projectForm.responsibilities}
-                  onChange={(e) => setProjectForm((s) => ({ ...s, responsibilities: e.target.value }))}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="label">النتائج</label>
-                <textarea
-                  className="field min-h-24"
-                  value={projectForm.outcomes}
-                  onChange={(e) => setProjectForm((s) => ({ ...s, outcomes: e.target.value }))}
-                />
-              </div>
-              <button type="submit" className="btn-primary md:col-span-2">
-                إضافة مشروع
-              </button>
-            </form>
+            <AddProjectForm availableSkills={availableSkills} onAdded={load} />
           </section>
           ) : null}
 
