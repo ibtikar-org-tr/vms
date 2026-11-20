@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import AuthCallback from './pages/AuthCallback'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import ProfileEditPage from './pages/ProfileEditPage'
 import ProfilePage from './pages/ProfilePage'
 import TalentDetailPage from './pages/TalentDetailPage'
 import TalentPage from './pages/TalentPage'
@@ -19,6 +20,7 @@ export default function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="profile/edit" element={<ProfileEditPage />} />
           <Route path="talent" element={<TalentPage />} />
           <Route path="talent/:membershipNumber" element={<TalentDetailPage />} />
         </Route>

@@ -50,7 +50,10 @@ export default function Home() {
           {session ? (
             <>
               <Link to="/profile" className="btn-primary">
-                فتح سيرتي
+                سيرتي
+              </Link>
+              <Link to="/profile/edit" className="btn-ghost">
+                تعديل السيرة
               </Link>
               <Link to="/talent" className="btn-ghost">
                 تصفح السير المنشورة
