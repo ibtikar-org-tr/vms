@@ -81,18 +81,18 @@ export function CvExportMenu({ data }: Props) {
       </button>
 
       {open ? (
-        <div className="absolute end-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-white shadow-sheet">
+        <div className="absolute end-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-line bg-white">
           <div className="border-b border-line bg-slate-50 px-3 py-2">
             <p className="text-[11px] font-bold text-slate-700">PDF</p>
           </div>
           <div className="p-1.5">
             <button
               type="button"
-              className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-start transition hover:bg-slate-50 disabled:opacity-50"
+              className="flex w-full items-start gap-2.5 px-2.5 py-2 text-start transition hover:bg-slate-50 disabled:opacity-50"
               disabled={Boolean(busy)}
               onClick={() => void downloadPdf('standard')}
             >
-              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <span>
                 <span className="block text-sm font-semibold text-slate-900">PDF قياسي</span>
                 <span className="block text-[11px] text-slate-500">
@@ -103,11 +103,11 @@ export function CvExportMenu({ data }: Props) {
             </button>
             <button
               type="button"
-              className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-start transition hover:bg-slate-50 disabled:opacity-50"
+              className="flex w-full items-start gap-2.5 px-2.5 py-2 text-start transition hover:bg-slate-50 disabled:opacity-50"
               disabled={Boolean(busy)}
               onClick={() => void downloadPdf('modern')}
             >
-              <Palette className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <Palette className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <span>
                 <span className="block text-sm font-semibold text-slate-900">PDF حديث</span>
                 <span className="block text-[11px] text-slate-500">
@@ -124,7 +124,7 @@ export function CvExportMenu({ data }: Props) {
           <div className="grid grid-cols-2 gap-1 p-1.5">
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               disabled={Boolean(busy)}
               onClick={() =>
                 void run(
@@ -146,7 +146,7 @@ export function CvExportMenu({ data }: Props) {
             </button>
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               disabled={Boolean(busy)}
               onClick={() =>
                 void run(
@@ -170,7 +170,7 @@ export function CvExportMenu({ data }: Props) {
           <div className="grid grid-cols-2 gap-1 p-1.5">
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               disabled={Boolean(busy)}
               onClick={() =>
                 void run(
@@ -192,7 +192,7 @@ export function CvExportMenu({ data }: Props) {
             </button>
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               disabled={Boolean(busy)}
               onClick={() =>
                 void run(

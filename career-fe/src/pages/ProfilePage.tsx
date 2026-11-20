@@ -313,8 +313,8 @@ export default function ProfilePage() {
   if (!data) {
     return (
       <div className="flex flex-col items-center py-16">
-        <div className="mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-brand" />
-        <p className="text-slate-600">جاري تحميل بيانات سيرتك…</p>
+        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-line border-t-brand" />
+        <p className="text-sm text-muted">جاري تحميل بيانات سيرتك…</p>
       </div>
     )
   }
@@ -330,31 +330,27 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">سيرتي</p>
-          <h1 className="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">
-            {displayName}
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="page-kicker">سيرتي</p>
+          <h1 className="page-title">{displayName}</h1>
+          <p className="page-desc">
             البيانات الشخصية من منصة الأعضاء · الخبرات والمشاريع تُحرَّر هنا
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              data.profile.is_published
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-amber-50 text-amber-800'
-            }`}
+            className={`status-pill ${data.profile.is_published ? 'is-live' : 'is-draft'}`}
           >
             {data.profile.is_published ? 'منشورة' : 'مسودة'}
           </span>
-          <div className="inline-flex rounded-xl border border-line bg-white p-1 shadow-sm">
+          <div className="inline-flex border border-line bg-white">
             <button
               type="button"
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                tab === 'preview' ? 'bg-brand text-white' : 'text-slate-600 hover:bg-slate-50'
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold transition ${
+                tab === 'preview'
+                  ? 'bg-brand text-white'
+                  : 'text-slate-600 hover:bg-slate-50'
               }`}
               onClick={() => setTab('preview')}
             >
@@ -363,7 +359,7 @@ export default function ProfilePage() {
             </button>
             <button
               type="button"
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+              className={`inline-flex items-center gap-1.5 border-s border-line px-3 py-1.5 text-sm font-semibold transition ${
                 tab === 'edit' ? 'bg-brand text-white' : 'text-slate-600 hover:bg-slate-50'
               }`}
               onClick={() => setTab('edit')}
@@ -393,10 +389,10 @@ export default function ProfilePage() {
           }
         />
       ) : (
-        <div className="space-y-6">
-          <section className="panel p-4 sm:p-7">
+        <div className="space-y-4">
+          <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
-              <User className="h-5 w-5 text-brand" />
+              <User className="h-4 w-4 text-slate-400" />
               معلومات الملف الشخصي
             </h2>
 
@@ -405,10 +401,10 @@ export default function ProfilePage() {
                 <img
                   src={vms.profilePictureUrl}
                   alt=""
-                  className="h-24 w-24 rounded-2xl border border-line object-cover shadow-sm sm:h-28 sm:w-28"
+                  className="h-24 w-24 rounded-md border border-line object-cover sm:h-28 sm:w-28"
                 />
               ) : (
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-400 sm:h-28 sm:w-28">
+                <div className="flex h-24 w-24 items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-400 sm:h-28 sm:w-28">
                   بلا صورة
                 </div>
               )}
@@ -470,9 +466,9 @@ export default function ProfilePage() {
             </div>
           </section>
 
-          <section className="panel p-4 sm:p-7">
+          <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
-              <GraduationCap className="h-5 w-5 text-brand" />
+              <GraduationCap className="h-4 w-4 text-slate-400" />
               الخلفية الأكاديمية
             </h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -500,9 +496,9 @@ export default function ProfilePage() {
             <p className="mt-3 text-xs text-slate-500">لتعديل التعليم، حدّث ملفك في منصة الأعضاء.</p>
           </section>
 
-          <section className="panel p-4 sm:p-7">
+          <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
-              <Heart className="h-5 w-5 text-brand" />
+              <Heart className="h-4 w-4 text-slate-400" />
               المهارات والاهتمامات واللغات
             </h2>
             <div className="space-y-5">
@@ -547,7 +543,7 @@ export default function ProfilePage() {
                     {languagePrefs.map((item) => (
                       <li
                         key={item.language}
-                        className="rounded-xl border border-line bg-slate-50/80 p-3 sm:p-4"
+                        className="border border-line bg-slate-50/80 p-3 sm:p-4"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="font-bold text-slate-900">{item.language}</p>
@@ -600,9 +596,9 @@ export default function ProfilePage() {
             </div>
           </section>
 
-          <section className="panel p-4 sm:p-7">
+          <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
-              <MapPinned className="h-5 w-5 text-brand" />
+              <MapPinned className="h-4 w-4 text-slate-400" />
               تفضيلات العمل والراتب
             </h2>
 
@@ -613,7 +609,7 @@ export default function ProfilePage() {
                 {JOB_TYPE_OPTIONS.map((opt) => (
                   <label
                     key={opt.id}
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-sm text-slate-700"
+                    className="inline-flex cursor-pointer items-center gap-2 border border-line bg-white px-3 py-2 text-sm text-slate-700"
                   >
                     <input
                       type="checkbox"
@@ -629,7 +625,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <label className="flex items-start gap-3 rounded-xl border border-line bg-slate-50/80 p-3 text-sm text-slate-700">
+            <label className="flex items-start gap-3 border border-line bg-slate-50/80 p-3 text-sm text-slate-700">
               <input
                 type="checkbox"
                 className="mt-1"
@@ -667,7 +663,7 @@ export default function ProfilePage() {
               </p>
               <ul className="space-y-3">
                 {workPrefs.locations.map((loc, index) => (
-                  <li key={`${loc.kind}-${loc.countryName || 'remote'}`} className="rounded-xl border border-line p-3 sm:p-4">
+                  <li key={`${loc.kind}-${loc.countryName || 'remote'}`} className="border border-line p-3 sm:p-4">
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <p className="font-bold text-slate-900">
                         {loc.kind === 'remote' ? 'عن بُعد (Remote)' : loc.countryName}
@@ -682,7 +678,7 @@ export default function ProfilePage() {
                           حذف
                         </button>
                       ) : (
-                        <span className="rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-ink">
+                        <span className="status-pill text-[10px]">
                           أولاً في القائمة
                         </span>
                       )}
@@ -752,14 +748,14 @@ export default function ProfilePage() {
             </div>
           </section>
 
-          <section className="panel p-4 sm:p-7">
+          <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
-              <Briefcase className="h-5 w-5 text-brand" />
+              <Briefcase className="h-4 w-4 text-slate-400" />
               الخبرة العملية
             </h2>
             <ul className="space-y-3">
               {data.workExperiences?.map((item: any, index: number) => (
-                <li key={item.id} className="rounded-xl border border-line p-4">
+                <li key={item.id} className="border border-line p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold text-brand">الخبرة #{index + 1}</p>
@@ -893,14 +889,14 @@ export default function ProfilePage() {
             </form>
           </section>
 
-          <section className="panel p-4 sm:p-7">
+          <section className="panel p-4 sm:p-6">
             <h2 className="section-title">
-              <FolderKanban className="h-5 w-5 text-brand" />
+              <FolderKanban className="h-4 w-4 text-slate-400" />
               المشاريع
             </h2>
             <ul className="space-y-3">
               {data.projects?.map((item: any, index: number) => (
-                <li key={item.id} className="rounded-xl border border-line p-4">
+                <li key={item.id} className="border border-line p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold text-brand">المشروع {index + 1}</p>
@@ -1026,7 +1022,7 @@ export default function ProfilePage() {
             </form>
           </section>
 
-          <section className="panel p-4 sm:p-7">
+          <section className="panel p-4 sm:p-6">
             <h2 className="section-title">السيرة والملفات</h2>
             <div className="flex flex-wrap gap-3">
               <label className="btn-ghost cursor-pointer">
@@ -1052,7 +1048,7 @@ export default function ProfilePage() {
               {data.documents?.map((doc: any) => (
                 <li
                   key={doc.id}
-                  className="flex items-center justify-between rounded-xl border border-line px-4 py-3"
+                  className="flex items-center justify-between border border-line px-4 py-3"
                 >
                   <div>
                     <p className="font-semibold text-slate-900">{doc.file_name}</p>
@@ -1100,7 +1096,7 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div className="sticky bottom-4 z-10 flex flex-wrap gap-3 rounded-2xl border border-line bg-white/95 p-4 shadow-sheet backdrop-blur">
+      <div className="sticky bottom-3 z-10 flex flex-wrap gap-3 border border-line bg-white/95 p-3 backdrop-blur-sm">
         <button
           type="button"
           className="btn-primary"
