@@ -38,6 +38,15 @@ export async function hasAcceptedCvAccess(
   return row?.status === 'accepted'
 }
 
+export class CvAccessAlreadyRequestedError extends Error {
+  readonly code = 'ACCESS_ALREADY_REQUESTED' as const
+  constructor(public readonly existing: CvAccessRequestRow) {
+    super('Access already requested')
+    this.name = 'CvAccessAlreadyRequestedError'
+  }
+}
+
+/** One request per member forever — rows are never deleted/reset so public counts stay accurate. */
 export async function requestCvAccess(
   env: Environment,
   ownerMembershipNumber: string,
@@ -45,36 +54,17 @@ export async function requestCvAccess(
   message?: string | null,
 ): Promise<CvAccessRequestRow> {
   const existing = await getCvAccessBetween(env, ownerMembershipNumber, requesterMembershipNumber)
-  const now = nowIso()
-  const note = message?.trim() || null
-
   if (existing) {
-    if (existing.status === 'accepted') return existing
-    if (existing.status === 'pending') return existing
-
-    await env.D1_DB.prepare(
-      `UPDATE cv_access_requests
-       SET status = 'pending', message = ?, updated_at = ?, decided_at = NULL
-       WHERE id = ?`,
-    )
-      .bind(note, now, existing.id)
-      .run()
-
-    return {
-      ...existing,
-      status: 'pending',
-      message: note,
-      updated_at: now,
-      decided_at: null,
-    }
+    throw new CvAccessAlreadyRequestedError(existing)
   }
 
+  const now = nowIso()
   const row: CvAccessRequestRow = {
     id: createId('cva'),
     owner_membership_number: ownerMembershipNumber,
     requester_membership_number: requesterMembershipNumber,
     status: 'pending',
-    message: note,
+    message: message?.trim() || null,
     created_at: now,
     updated_at: now,
     decided_at: null,
@@ -97,6 +87,20 @@ export async function requestCvAccess(
     .run()
 
   return row
+}
+
+export async function countCvAccessRequests(
+  env: Environment,
+  ownerMembershipNumber: string,
+): Promise<number> {
+  const row = await env.D1_DB.prepare(
+    `SELECT COUNT(*) AS total
+     FROM cv_access_requests
+     WHERE owner_membership_number = ?`,
+  )
+    .bind(ownerMembershipNumber)
+    .first<{ total: number }>()
+  return Number(row?.total || 0)
 }
 
 export async function listOwnerAccessRequests(

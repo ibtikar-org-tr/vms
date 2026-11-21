@@ -20,6 +20,7 @@ type TalentItem = {
     updated_at?: string
   }
   latestRole?: string | null
+  accessRequestCount?: number
   workPreferences?: unknown
   vmsProfile?: {
     arName?: string | null
@@ -193,7 +194,7 @@ export default function TalentPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-end sm:justify-between sm:border-0 sm:pb-0">
         <div>
           <p className="page-kicker">اكتشاف</p>
           <h1 className="page-title">السير العامة</h1>
@@ -205,33 +206,39 @@ export default function TalentPage() {
       </div>
 
       <div className="panel p-3 sm:p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[12rem] flex-1">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full min-w-0 flex-1 sm:min-w-[12rem]">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               className="field ps-9"
               value={filters.q}
               onChange={(e) => setFilter('q', e.target.value)}
-              placeholder="بحث بالاسم، المهارة، المسمى، النبذة…"
+              placeholder="بحث بالاسم، المهارة، المسمى…"
             />
           </div>
-          <button
-            type="button"
-            className={`btn-ghost ${filtersOpen ? 'border-brand text-brand-ink' : ''}`}
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            <Filter className="h-4 w-4" />
-            تصفية
-            {activeFilterCount > 0 ? (
-              <span className="status-pill text-[10px]">{activeFilterCount}</span>
-            ) : null}
-          </button>
-          {(activeFilterCount > 0 || filters.q) && (
-            <button type="button" className="btn-ghost" onClick={() => setFilters(emptyFilters())}>
-              <X className="h-4 w-4" />
-              مسح
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`btn-ghost flex-1 sm:flex-none ${filtersOpen ? 'border-brand text-brand-ink' : ''}`}
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              <Filter className="h-4 w-4" />
+              تصفية
+              {activeFilterCount > 0 ? (
+                <span className="status-pill text-[10px]">{activeFilterCount}</span>
+              ) : null}
             </button>
-          )}
+            {(activeFilterCount > 0 || filters.q) && (
+              <button
+                type="button"
+                className="btn-ghost flex-1 sm:flex-none"
+                onClick={() => setFilters(emptyFilters())}
+              >
+                <X className="h-4 w-4" />
+                مسح
+              </button>
+            )}
+          </div>
         </div>
 
         {filtersOpen ? (
@@ -348,10 +355,12 @@ export default function TalentPage() {
                   .filter(Boolean)
                   .join('')
                 const prefs = normalizeWorkPreferences(item.workPreferences)
+                const requestCount = Number(item.accessRequestCount || 0)
                 const meta = [
                   item.vmsProfile?.country,
                   item.vmsProfile?.fieldOfStudy,
                   prefs.canRelocate ? 'قابل للانتقال' : null,
+                  requestCount > 0 ? `${requestCount} طلب اطلاع` : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')

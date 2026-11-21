@@ -304,16 +304,16 @@ export function CvDocument({
         compact ? '' : 'print:shadow-none'
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
           <img
             src="/career-mark.svg"
             alt=""
-            className="h-8 w-8 rounded-md object-cover ring-1 ring-line"
+            className="h-7 w-7 shrink-0 rounded-md object-cover ring-1 ring-line sm:h-8 sm:w-8"
           />
-          <div>
-            <p className="text-sm font-bold text-ink">المسار المهني</p>
-            <p className="text-[11px] text-muted">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-ink">المسار المهني</p>
+            <p className="truncate text-[11px] text-muted">
               {limited ? 'عرض محدود للخصوصية' : 'تصدير PDF · Markdown · TXT'}
             </p>
           </div>

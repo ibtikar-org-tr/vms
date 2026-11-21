@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowRight, Lock, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Inbox, Lock, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { CvDocument } from '../components/CvDocument'
 import { authDownloadHeaders, profilesApi } from '../services/api'
@@ -10,6 +10,14 @@ type PrivacyInfo = {
   accessStatus?: 'none' | 'pending' | 'accepted' | 'rejected' | 'revoked' | 'self'
   canRequestAccess?: boolean
   canDownloadDocuments?: boolean
+}
+
+function requestCountLabel(count: number) {
+  if (count <= 0) return 'لا طلبات اطلاع بعد'
+  if (count === 1) return 'طلب اطلاع واحد'
+  if (count === 2) return 'طلبا اطلاع'
+  if (count >= 3 && count <= 10) return `${count} طلبات اطلاع`
+  return `${count} طلب اطلاع`
 }
 
 export default function TalentDetailPage() {
@@ -36,6 +44,7 @@ export default function TalentDetailPage() {
       await load()
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'تعذّر إرسال الطلب')
+      if (err?.response?.status === 409) await load()
     } finally {
       setRequesting(false)
     }
@@ -53,6 +62,17 @@ export default function TalentDetailPage() {
   const privacy = (data.privacy || {}) as PrivacyInfo
   const mode = privacy.mode === 'full' ? 'full' : 'limited'
   const status = privacy.accessStatus || 'none'
+  const requestCount = Number(data.accessRequestCount || 0)
+  const canRequest = Boolean(privacy.canRequestAccess)
+
+  const limitedHint =
+    status === 'pending'
+      ? 'طلبك قيد الانتظار. الاسم والشركات تظهر بالأحرف الأولى فقط، ولا يمكن تنزيل الملفات.'
+      : status === 'rejected'
+        ? 'تم رفض طلبك سابقاً. لا يمكن إعادة إرسال الطلب.'
+        : status === 'revoked'
+          ? 'تم سحب صلاحيتك سابقاً. لا يمكن إعادة إرسال الطلب.'
+          : 'الاسم والصورة وبيانات التواصل والشركات محمية. يمكنك طلب الاطلاع الكامل مرة واحدة فقط.'
 
   return (
     <div className="space-y-4">
@@ -63,6 +83,12 @@ export default function TalentDetailPage() {
         <ArrowRight className="h-4 w-4" />
         العودة للسير العامة
       </Link>
+
+      <div className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm text-slate-600">
+        <Inbox className="h-4 w-4 text-slate-400" />
+        <span className="font-semibold text-slate-800">{requestCountLabel(requestCount)}</span>
+        <span className="text-xs text-slate-400">· إجمالي عام بدون تفاصيل</span>
+      </div>
 
       {status !== 'self' ? (
         <div
@@ -80,33 +106,33 @@ export default function TalentDetailPage() {
             )}
             <div>
               <p className="text-sm font-bold text-slate-800">
-                {mode === 'full'
-                  ? 'لديك صلاحية الاطلاع الكامل'
-                  : 'عرض محدود للخصوصية'}
+                {mode === 'full' ? 'لديك صلاحية الاطلاع الكامل' : 'عرض محدود للخصوصية'}
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
                 {mode === 'full'
                   ? 'الاسم الكامل وبيانات التواصل والملفات متاحة لك.'
-                  : status === 'pending'
-                    ? 'طلبك قيد الانتظار. الاسم والشركات تظهر بالأحرف الأولى فقط، ولا يمكن تنزيل الملفات.'
-                    : 'الاسم والصورة وبيانات التواصل والشركات محمية. يمكنك طلب الاطلاع الكامل من صاحب السيرة.'}
+                  : limitedHint}
               </p>
             </div>
           </div>
 
           {mode === 'limited' ? (
-            status === 'pending' ? (
-              <span className="status-pill is-draft shrink-0">بانتظار الموافقة</span>
-            ) : (
+            canRequest ? (
               <button
                 type="button"
-                className="btn-primary shrink-0"
+                className="btn-primary w-full shrink-0 sm:w-auto"
                 disabled={requesting}
                 onClick={() => void requestAccess()}
               >
                 {requesting ? 'جارٍ الإرسال…' : 'طلب الاطلاع الكامل'}
               </button>
-            )
+            ) : status === 'pending' ? (
+              <span className="status-pill is-draft shrink-0">بانتظار الموافقة</span>
+            ) : status === 'rejected' ? (
+              <span className="status-pill shrink-0">مرفوض</span>
+            ) : status === 'revoked' ? (
+              <span className="status-pill shrink-0">مسحوب</span>
+            ) : null
           ) : null}
         </div>
       ) : null}

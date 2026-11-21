@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { memberAuthMiddleware } from '../middleware/auth'
 import {
+  countCvAccessRequests,
+  CvAccessAlreadyRequestedError,
   decideCvAccessRequest,
   getCvAccessBetween,
   hasAcceptedCvAccess,
@@ -464,11 +466,13 @@ profilesRouter.get('/discover', async (c) => {
               }
             : null,
         )
+    const accessRequestCount = await countCvAccessRequests(c.env, profile.membership_number)
     enriched.push({
       profile,
       latestRole,
       workPreferences,
       privacyMode: fullAccess ? 'full' : 'limited',
+      accessRequestCount,
       vmsProfile: safeVms,
     })
   }
@@ -485,13 +489,27 @@ profilesRouter.post('/:membershipNumber/access-requests', async (c) => {
   if (!published) return c.json({ message: 'السيرة غير متاحة' }, 404)
 
   const body = await c.req.json<{ message?: string }>().catch(() => ({}))
-  const request = await requestCvAccess(
-    c.env,
-    membershipNumber,
-    actor.membership_number,
-    body.message,
-  )
-  return c.json({ request }, request.created_at === request.updated_at ? 201 : 200)
+  try {
+    const request = await requestCvAccess(
+      c.env,
+      membershipNumber,
+      actor.membership_number,
+      body.message,
+    )
+    return c.json({ request }, 201)
+  } catch (error) {
+    if (error instanceof CvAccessAlreadyRequestedError) {
+      return c.json(
+        {
+          message: 'لقد أرسلت طلباً مسبقاً لهذه السيرة ولا يمكن إعادة الإرسال',
+          code: 'ACCESS_ALREADY_REQUESTED',
+          request: error.existing,
+        },
+        409,
+      )
+    }
+    throw error
+  }
 })
 
 profilesRouter.get('/:membershipNumber', async (c) => {
@@ -537,6 +555,7 @@ profilesRouter.get('/:membershipNumber', async (c) => {
   const workPreferences = await getWorkPreferences(c.env, membershipNumber)
 
   const safeDocs = documents.map(({ r2_key: _r2, ...rest }) => rest)
+  const accessRequestCount = await countCvAccessRequests(c.env, membershipNumber)
 
   return c.json({
     profile,
@@ -548,10 +567,12 @@ profilesRouter.get('/:membershipNumber', async (c) => {
     languages,
     workPreferences,
     vmsProfile: fullAccess ? vmsProfile : redactVmsProfile(vmsProfile),
+    accessRequestCount,
     privacy: {
       mode: fullAccess ? 'full' : 'limited',
       accessStatus,
-      canRequestAccess: !isSelf && accessStatus !== 'accepted' && accessStatus !== 'pending',
+      /** Only once ever — no resend after pending/accepted/rejected/revoked. */
+      canRequestAccess: !isSelf && accessStatus === 'none',
       canDownloadDocuments: fullAccess,
     },
   })

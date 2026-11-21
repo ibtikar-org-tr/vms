@@ -149,7 +149,8 @@ export default function AccessRequestsPage() {
         <p className="page-kicker">الخصوصية</p>
         <h1 className="page-title">طلبات الاطلاع على السيرة</h1>
         <p className="page-desc">
-          راجع من طلب رؤية بياناتك الكاملة، وامنح أو اسحب الصلاحية في أي وقت.
+          راجع من طلب رؤية بياناتك الكاملة، وامنح أو اسحب الصلاحية في أي وقت. كل طلب يُحفظ مرة
+          واحدة ولا يُعاد إرساله، ويظهر إجمالي عدد الطلبات علناً على سيرتك دون كشف التفاصيل.
         </p>
         <Link to="/profile" className="mt-3 inline-flex text-sm font-semibold text-brand">
           العودة لسيرتي
@@ -175,7 +176,7 @@ export default function AccessRequestsPage() {
                   <>
                     <button
                       type="button"
-                      className="btn-primary py-1.5 text-xs"
+                      className="btn-primary flex-1 py-2 text-xs sm:flex-none sm:py-1.5"
                       disabled={busyId === item.id}
                       onClick={() => void decide(item.id, 'accepted')}
                     >
@@ -184,7 +185,7 @@ export default function AccessRequestsPage() {
                     </button>
                     <button
                       type="button"
-                      className="btn-danger py-1.5 text-xs"
+                      className="btn-danger flex-1 py-2 text-xs sm:flex-none sm:py-1.5"
                       disabled={busyId === item.id}
                       onClick={() => void decide(item.id, 'rejected')}
                     >

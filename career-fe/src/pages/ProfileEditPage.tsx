@@ -410,7 +410,10 @@ export default function ProfileEditPage() {
       </div>
 
       <div className={`space-y-4 ${livePreviewOpen ? 'hidden' : ''}`}>
-          <nav className="panel overflow-x-auto p-1.5" aria-label="أقسام التعديل">
+          <nav
+            className="panel -mx-0 overflow-x-auto p-1.5 [-webkit-overflow-scrolling:touch]"
+            aria-label="أقسام التعديل"
+          >
             <div className="flex min-w-max gap-1">
               {EDIT_SECTIONS.map((section) => {
                 const Icon = section.icon
@@ -419,14 +422,14 @@ export default function ProfileEditPage() {
                   <button
                     key={section.id}
                     type="button"
-                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition ${
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-2.5 text-xs font-semibold transition sm:px-3 sm:text-sm ${
                       active
                         ? 'bg-brand text-white'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-ink'
                     }`}
                     onClick={() => setEditSection(section.id)}
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
                     {section.label}
                   </button>
                 )
@@ -918,7 +921,7 @@ export default function ProfileEditPage() {
       </div>
 
       {!livePreviewOpen ? (
-        <div className="sticky bottom-3 z-10 flex flex-wrap gap-3 border border-line bg-white/95 p-3 backdrop-blur-sm">
+        <div className="sticky-actions">
           <button
             type="button"
             className="btn-primary"
@@ -935,7 +938,8 @@ export default function ProfileEditPage() {
             onClick={() => reviewChanges()}
           >
             <ListChecks className="h-4 w-4" />
-            عرض التعديلات
+            <span className="sm:hidden">التعديلات</span>
+            <span className="hidden sm:inline">عرض التعديلات</span>
           </button>
           {hasUnsavedChanges ? (
             <button
@@ -945,16 +949,18 @@ export default function ProfileEditPage() {
               onClick={() => discardChanges()}
             >
               <RotateCcw className="h-4 w-4" />
-              تجاهل التعديلات
+              <span className="sm:hidden">تجاهل</span>
+              <span className="hidden sm:inline">تجاهل التعديلات</span>
             </button>
           ) : null}
           <button
             type="button"
-            className="btn-ghost ms-auto"
+            className="btn-ghost sm:ms-auto"
             onClick={() => setLivePreviewOpen(true)}
           >
             <Eye className="h-4 w-4" />
-            معاينة السيرة
+            <span className="sm:hidden">معاينة</span>
+            <span className="hidden sm:inline">معاينة السيرة</span>
           </button>
         </div>
       ) : null}
@@ -995,10 +1001,10 @@ export default function ProfileEditPage() {
             }
           />
 
-          <div className="sticky bottom-3 z-10 flex justify-end border border-line bg-white/95 p-3 backdrop-blur-sm">
+          <div className="sticky-actions justify-end">
             <button
               type="button"
-              className="btn-ghost"
+              className="btn-ghost w-full sm:w-auto"
               onClick={() => setLivePreviewOpen(false)}
             >
               <X className="h-4 w-4" />

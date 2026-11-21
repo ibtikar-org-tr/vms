@@ -69,9 +69,9 @@ export default function ProfilePage() {
             معاينة سيرتك المهنية. السيرة خاصة افتراضياً حتى تفعّل الظهور العام.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="mobile-actions w-full sm:w-auto">
           <div
-            className={`inline-flex items-center gap-3 rounded-md border border-line bg-white px-3 py-2 ${
+            className={`inline-flex w-full items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2.5 sm:w-auto sm:justify-start ${
               publishing ? 'opacity-60' : ''
             }`}
           >
@@ -96,13 +96,13 @@ export default function ProfilePage() {
               />
             </button>
           </div>
-          <Link to="/profile/access" className="btn-ghost">
-            <Shield className="h-4 w-4" />
-            طلبات الوصول
-          </Link>
-          <Link to="/profile/edit" className="btn-primary">
+          <Link to="/profile/edit" className="btn-primary w-full sm:w-auto">
             <Pencil className="h-4 w-4" />
             تعديل السيرة
+          </Link>
+          <Link to="/profile/access" className="btn-ghost w-full sm:w-auto">
+            <Shield className="h-4 w-4" />
+            طلبات الوصول
           </Link>
         </div>
       </div>
