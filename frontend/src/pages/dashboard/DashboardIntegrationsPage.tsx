@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Briefcase, ChefHat, ExternalLink, Puzzle } from 'lucide-react'
+import { Briefcase, ChefHat, Puzzle } from 'lucide-react'
 import { createExternalHandoff } from '../../api/vms'
 import { getAppAuthCallbackUrl, listIntegratedApps, type IntegratedApp } from '../../lib/integrations'
 import { buildExternalHandoffRedirectUrl } from '../../utils/auth'
@@ -18,31 +18,17 @@ export function DashboardIntegrationsPage() {
     setOpeningId(app.id)
     setError(null)
 
-    // Open synchronously on click so the popup isn't blocked after the async handoff.
-    const popup = window.open('about:blank', '_blank')
-    if (popup) {
-      popup.opener = null
-      popup.document.write('<p style="font-family:sans-serif;padding:24px;direction:rtl">جاري فتح التطبيق…</p>')
-    }
-
     try {
       const redirectUri = getAppAuthCallbackUrl(app.url)
       const handoff = await createExternalHandoff({
         redirectUri,
         client: app.client,
       })
-      const target = buildExternalHandoffRedirectUrl(handoff.redirectUri, handoff.code)
-      if (popup && !popup.closed) {
-        popup.location.assign(target)
-      } else {
-        window.open(target, '_blank', 'noopener,noreferrer')
-      }
+      // Same-tab handoff (matches LoginPage). Deferred about:blank popup
+      // navigation fails on some mobile browsers and leaves a stuck blank tab.
+      window.location.assign(buildExternalHandoffRedirectUrl(handoff.redirectUri, handoff.code))
     } catch (err) {
-      if (popup && !popup.closed) {
-        popup.close()
-      }
       setError(err instanceof Error ? err.message : `تعذّر فتح ${app.nameAr}`)
-    } finally {
       setOpeningId(null)
     }
   }
@@ -86,7 +72,6 @@ export function DashboardIntegrationsPage() {
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
                     <span className="text-base font-semibold text-slate-900">{app.nameAr}</span>
-                    <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
                   </span>
                   <span className="mt-1 block text-sm text-slate-500">{app.descriptionAr}</span>
                   <span className="mt-2 block truncate text-xs text-slate-400" dir="ltr">
