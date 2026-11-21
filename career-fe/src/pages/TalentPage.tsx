@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Filter, Inbox, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { normalizeSearchText } from '../lib/countries'
-import { splitCsv } from '../lib/profile-utils'
+import { sexLabel, splitCsv } from '../lib/profile-utils'
 import {
   JOB_TYPE_OPTIONS,
   jobTypeLabel,
@@ -25,6 +25,7 @@ type TalentItem = {
   vmsProfile?: {
     arName?: string | null
     enName?: string | null
+    sex?: string | null
     educationLevel?: string | null
     school?: string | null
     fieldOfStudy?: string | null
@@ -39,8 +40,13 @@ type TalentItem = {
 
 type Filters = {
   q: string
+  sex: '' | 'male' | 'female'
   country: string
+  city: string
   skill: string
+  language: string
+  educationLevel: string
+  school: string
   fieldOfStudy: string
   jobType: '' | OpenJobType
   canRelocate: '' | 'yes' | 'no'
@@ -49,8 +55,13 @@ type Filters = {
 
 const emptyFilters = (): Filters => ({
   q: '',
+  sex: '',
   country: '',
+  city: '',
   skill: '',
+  language: '',
+  educationLevel: '',
+  school: '',
   fieldOfStudy: '',
   jobType: '',
   canRelocate: '',
@@ -82,6 +93,7 @@ function searchableBlob(item: TalentItem) {
       item.vmsProfile?.school,
       item.vmsProfile?.fieldOfStudy,
       item.vmsProfile?.educationLevel,
+      sexLabel(item.vmsProfile?.sex),
       skills,
       languages,
       locations,
@@ -102,7 +114,7 @@ export default function TalentPage() {
   const [profiles, setProfiles] = useState<TalentItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState<Filters>(emptyFilters)
-  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
     void profilesApi
@@ -114,13 +126,21 @@ export default function TalentPage() {
 
   const options = useMemo(() => {
     const countries: string[] = []
+    const cities: string[] = []
     const skills: string[] = []
+    const languages: string[] = []
+    const educationLevels: string[] = []
+    const schools: string[] = []
     const fields: string[] = []
     const workLocations: string[] = []
 
     for (const item of profiles) {
       if (item.vmsProfile?.country) countries.push(item.vmsProfile.country)
+      if (item.vmsProfile?.city) cities.push(item.vmsProfile.city)
       skills.push(...splitCsv(item.vmsProfile?.skills))
+      languages.push(...splitCsv(item.vmsProfile?.languages))
+      if (item.vmsProfile?.educationLevel) educationLevels.push(item.vmsProfile.educationLevel)
+      if (item.vmsProfile?.school) schools.push(item.vmsProfile.school)
       if (item.vmsProfile?.fieldOfStudy) fields.push(item.vmsProfile.fieldOfStudy)
       const prefs = normalizeWorkPreferences(item.workPreferences)
       for (const loc of prefs.locations) {
@@ -131,7 +151,11 @@ export default function TalentPage() {
 
     return {
       countries: uniqueSorted(countries),
+      cities: uniqueSorted(cities),
       skills: uniqueSorted(skills),
+      languages: uniqueSorted(languages),
+      educationLevels: uniqueSorted(educationLevels),
+      schools: uniqueSorted(schools),
       fields: uniqueSorted(fields),
       workLocations: uniqueSorted(workLocations),
     }
@@ -142,14 +166,35 @@ export default function TalentPage() {
     return profiles.filter((item) => {
       if (q && !searchableBlob(item).includes(q)) return false
 
+      if (filters.sex) {
+        if ((item.vmsProfile?.sex || '').trim() !== filters.sex) return false
+      }
+
       if (filters.country) {
         const country = (item.vmsProfile?.country || '').trim()
         if (country !== filters.country) return false
       }
 
+      if (filters.city) {
+        if ((item.vmsProfile?.city || '').trim() !== filters.city) return false
+      }
+
       if (filters.skill) {
         const skills = splitCsv(item.vmsProfile?.skills).map((s) => s.toLowerCase())
         if (!skills.includes(filters.skill.toLowerCase())) return false
+      }
+
+      if (filters.language) {
+        const languages = splitCsv(item.vmsProfile?.languages).map((s) => s.toLowerCase())
+        if (!languages.includes(filters.language.toLowerCase())) return false
+      }
+
+      if (filters.educationLevel) {
+        if ((item.vmsProfile?.educationLevel || '').trim() !== filters.educationLevel) return false
+      }
+
+      if (filters.school) {
+        if ((item.vmsProfile?.school || '').trim() !== filters.school) return false
       }
 
       if (filters.fieldOfStudy) {
@@ -180,8 +225,13 @@ export default function TalentPage() {
   }, [profiles, filters])
 
   const activeFilterCount = [
+    filters.sex,
     filters.country,
+    filters.city,
     filters.skill,
+    filters.language,
+    filters.educationLevel,
+    filters.school,
     filters.fieldOfStudy,
     filters.jobType,
     filters.canRelocate,
@@ -244,6 +294,19 @@ export default function TalentPage() {
         {filtersOpen ? (
           <div className="mt-3 grid gap-3 border-t border-line pt-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
+              <label className="label">الجنس</label>
+              <select
+                className="field"
+                value={filters.sex}
+                onChange={(e) => setFilter('sex', e.target.value as Filters['sex'])}
+              >
+                <option value="">الكل</option>
+                <option value="male">{sexLabel('male')}</option>
+                <option value="female">{sexLabel('female')}</option>
+              </select>
+            </div>
+
+            <div>
               <label className="label">بلد الإقامة</label>
               <select
                 className="field"
@@ -260,6 +323,22 @@ export default function TalentPage() {
             </div>
 
             <div>
+              <label className="label">المدينة</label>
+              <select
+                className="field"
+                value={filters.city}
+                onChange={(e) => setFilter('city', e.target.value)}
+              >
+                <option value="">الكل</option>
+                {options.cities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="label">مهارة</label>
               <select
                 className="field"
@@ -270,6 +349,54 @@ export default function TalentPage() {
                 {options.skills.map((skill) => (
                   <option key={skill} value={skill}>
                     {skill}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">اللغة</label>
+              <select
+                className="field"
+                value={filters.language}
+                onChange={(e) => setFilter('language', e.target.value)}
+              >
+                <option value="">الكل</option>
+                {options.languages.map((language) => (
+                  <option key={language} value={language}>
+                    {language}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">المستوى التعليمي</label>
+              <select
+                className="field"
+                value={filters.educationLevel}
+                onChange={(e) => setFilter('educationLevel', e.target.value)}
+              >
+                <option value="">الكل</option>
+                {options.educationLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">المدرسة / الجامعة</label>
+              <select
+                className="field"
+                value={filters.school}
+                onChange={(e) => setFilter('school', e.target.value)}
+              >
+                <option value="">الكل</option>
+                {options.schools.map((school) => (
+                  <option key={school} value={school}>
+                    {school}
                   </option>
                 ))}
               </select>
