@@ -32,6 +32,16 @@ export function redactVmsProfile<T extends Record<string, unknown> | null | unde
   const source = vms as Record<string, unknown>
   const dateOfBirth =
     typeof source.dateOfBirth === 'string' ? toBirthYearOnly(source.dateOfBirth) : null
+
+  let socialMediaLinks: Record<string, null> | null = null
+  const rawSocial = source.socialMediaLinks
+  if (rawSocial && typeof rawSocial === 'object' && !Array.isArray(rawSocial)) {
+    const keys = Object.keys(rawSocial as Record<string, unknown>)
+    if (keys.length) {
+      socialMediaLinks = Object.fromEntries(keys.map((key) => [key, null])) as Record<string, null>
+    }
+  }
+
   return {
     ...source,
     email: null,
@@ -40,6 +50,7 @@ export function redactVmsProfile<T extends Record<string, unknown> | null | unde
     enName: toInitialsLabel(typeof source.enName === 'string' ? source.enName : null),
     arName: toInitialsLabel(typeof source.arName === 'string' ? source.arName : null),
     dateOfBirth,
+    socialMediaLinks,
     // sex always kept
   } as T
 }

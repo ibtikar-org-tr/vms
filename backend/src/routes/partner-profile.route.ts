@@ -51,6 +51,7 @@ partnerProfileRoute.get('/internal/partner/member-profile/:membershipNumber', as
         country: profile.country,
         region: profile.region,
         city: profile.city,
+        socialMediaLinks: profile.socialMediaLinks,
       },
     })
   } catch (error) {

@@ -49,6 +49,7 @@ import {
   sexLabel,
   splitCsv,
 } from '../lib/profile-utils'
+import { socialLinksFromProfile } from '../lib/social-links'
 import { getVmsProfileUrl } from '../lib/vms-sso'
 import {
   emptyWorkPreferences,
@@ -501,6 +502,52 @@ export default function ProfileEditPage() {
                   value={formatBirthDate(vms?.dateOfBirth) || '—'}
                   dir="ltr"
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="label">وسائل التواصل الاجتماعي</label>
+                {(() => {
+                  const links = socialLinksFromProfile(vms?.socialMediaLinks).filter((link) =>
+                    Boolean(link.url),
+                  )
+                  if (!links.length) {
+                    return (
+                      <div className="rounded-md border border-dashed border-line bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                        لا توجد روابط مرتبطة. أضفها من منصة الأعضاء.
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="flex flex-wrap gap-2 rounded-md border border-line bg-slate-50 px-3 py-3">
+                      {links.map((link) => {
+                        const Icon = link.Icon
+                        return (
+                          <a
+                            key={link.key}
+                            href={link.url!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs text-slate-700 transition hover:border-brand hover:text-brand"
+                            title={link.label}
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            <span>{link.label}</span>
+                          </a>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+                <p className="mt-1.5 text-xs text-slate-500">
+                  تُعدَّل من منصة الأعضاء فقط —{' '}
+                  <a
+                    className="text-brand underline-offset-2 hover:underline"
+                    href={getVmsProfileUrl()}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    فتح الملف في منصة الأعضاء
+                  </a>
+                </p>
               </div>
               <div className="md:col-span-2">
                 <label className="label">نبذة مهنية</label>

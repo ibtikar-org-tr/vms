@@ -9,6 +9,7 @@ import {
   splitCsv,
 } from './profile-utils'
 import { publicCvUrl } from './cv-url'
+import { socialLinksFromProfile } from './social-links'
 import {
   formatSalaryRange,
   jobTypeLabel,
@@ -66,6 +67,10 @@ export function buildCvMarkdown(data: CvDocumentData): string {
     birthDate ? `DOB: ${birthDate}` : null,
   ].filter(Boolean)
   if (contact.length) lines.push(contact.join(' · '))
+  const socialMd = socialLinksFromProfile(vms?.socialMediaLinks)
+    .filter((link) => link.url)
+    .map((link) => `[${link.label}](${link.url})`)
+  if (socialMd.length) lines.push(socialMd.join(' · '))
   if (cvUrl) lines.push(`[Online CV](${cvUrl})`)
   lines.push('')
 
@@ -224,6 +229,10 @@ export function buildCvPlainText(data: CvDocumentData): string {
     birthDate ? `DOB: ${birthDate}` : null,
   ].filter(Boolean)
   if (contact.length) lines.push(contact.join(' | '))
+  const socialTxt = socialLinksFromProfile(vms?.socialMediaLinks)
+    .filter((link) => link.url)
+    .map((link) => `${link.label}: ${link.url}`)
+  if (socialTxt.length) lines.push(socialTxt.join(' | '))
   if (cvUrl) lines.push(cvUrl)
   lines.push('')
 

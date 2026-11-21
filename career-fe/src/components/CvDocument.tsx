@@ -34,6 +34,7 @@ import {
   normalizeWorkPreferences,
   type OpenJobType,
 } from '../lib/work-preferences'
+import { socialLinksFromProfile } from '../lib/social-links'
 import { CvExportMenu } from './CvExportMenu'
 
 export type CvSkill = { skillId?: string; name: string }
@@ -62,6 +63,8 @@ export type CvDocumentData = {
     skills?: string | null
     interests?: string | null
     languages?: string | null
+    /** Platform → URL; null URL means linked but privacy-redacted (icon only). */
+    socialMediaLinks?: Record<string, string | null> | string | null
   } | null
   workExperiences?: Array<{
     id: string
@@ -217,9 +220,12 @@ export function CvDocument({
   const showPhone = !limited && Boolean(vms?.phoneNumber)
   const showPhoto = !limited && Boolean(vms?.profilePictureUrl)
   const canDownload = !limited && Boolean(onDownloadDocument)
+  const socialLinks = socialLinksFromProfile(vms?.socialMediaLinks, {
+    includeRedacted: limited,
+  }).filter((link) => (limited ? true : Boolean(link.url)))
 
   const hasPersonal = Boolean(
-    showEmail || showPhone || location || birthDate || sex,
+    showEmail || showPhone || location || birthDate || sex || socialLinks.length,
   )
   const hasWorkPrefs =
     workPreferences.canRelocate ||
@@ -380,6 +386,43 @@ export function CvDocument({
                     <li className="flex items-start gap-2">
                       <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
                       <span dir="ltr">{birthDate}</span>
+                    </li>
+                  ) : null}
+                  {socialLinks.length ? (
+                    <li className="pt-1">
+                      <p className="mb-2 text-[11px] font-medium text-slate-500">وسائل التواصل</p>
+                      <div className="flex flex-wrap gap-2">
+                        {socialLinks.map((link) => {
+                          const Icon = link.Icon
+                          const box =
+                            'inline-flex h-8 w-8 items-center justify-center rounded-md border border-line bg-white text-slate-600'
+                          if (limited || !link.url) {
+                            return (
+                              <span
+                                key={link.key}
+                                className={`${box} cursor-default opacity-80`}
+                                title={`${link.label} (مخفي)`}
+                                aria-label={`${link.label} مرتبط، الرابط مخفي`}
+                              >
+                                <Icon className="h-3.5 w-3.5" aria-hidden />
+                              </span>
+                            )
+                          }
+                          return (
+                            <a
+                              key={link.key}
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`${box} transition hover:border-brand hover:text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand`}
+                              title={link.label}
+                              aria-label={link.label}
+                            >
+                              <Icon className="h-3.5 w-3.5" aria-hidden />
+                            </a>
+                          )
+                        })}
+                      </div>
                     </li>
                   ) : null}
                 </ul>
