@@ -76,18 +76,31 @@ export default function TalentDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Link
-        to="/talent"
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-brand"
-      >
-        <ArrowRight className="h-4 w-4" />
-        العودة للسير العامة
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          to="/talent"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-brand"
+        >
+          <ArrowRight className="h-4 w-4" />
+          العودة للسير العامة
+        </Link>
 
-      <div className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm text-slate-600">
-        <Inbox className="h-4 w-4 text-slate-400" />
-        <span className="font-semibold text-slate-800">{requestCountLabel(requestCount)}</span>
-        <span className="text-xs text-slate-400">· إجمالي عام بدون تفاصيل</span>
+        <span
+          className="group relative inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1.5 text-sm font-semibold tabular-nums text-slate-700"
+          title={requestCountLabel(requestCount)}
+        >
+          <Inbox className="h-3.5 w-3.5 text-slate-400" />
+          {requestCount}
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute end-0 top-[calc(100%+0.4rem)] z-20 w-max max-w-[14rem] rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            {requestCountLabel(requestCount)}
+            <span className="mt-0.5 block font-normal text-slate-400">
+              إجمالي عام بدون أسماء أو حالات
+            </span>
+          </span>
+        </span>
       </div>
 
       {status !== 'self' ? (

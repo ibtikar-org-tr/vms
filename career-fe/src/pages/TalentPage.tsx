@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Filter, Search, X } from 'lucide-react'
+import { Filter, Inbox, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { normalizeSearchText } from '../lib/countries'
 import { splitCsv } from '../lib/profile-utils'
@@ -360,7 +360,6 @@ export default function TalentPage() {
                   item.vmsProfile?.country,
                   item.vmsProfile?.fieldOfStudy,
                   prefs.canRelocate ? 'قابل للانتقال' : null,
-                  requestCount > 0 ? `${requestCount} طلب اطلاع` : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')
@@ -377,9 +376,22 @@ export default function TalentPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                           <h2 className="truncate font-semibold text-ink">{name}</h2>
-                          <span className="text-xs font-medium text-brand">
-                            {item.latestRole || 'بدون مسمى'}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-flex items-center gap-1 text-xs font-semibold tabular-nums text-slate-500"
+                              title={
+                                requestCount > 0
+                                  ? `${requestCount} طلب اطلاع · إجمالي عام بدون تفاصيل`
+                                  : 'لا طلبات اطلاع بعد'
+                              }
+                            >
+                              <Inbox className="h-3.5 w-3.5 text-slate-400" />
+                              {requestCount}
+                            </span>
+                            <span className="text-xs font-medium text-brand">
+                              {item.latestRole || 'بدون مسمى'}
+                            </span>
+                          </div>
                         </div>
                         {meta ? <p className="mt-0.5 text-xs text-muted">{meta}</p> : null}
                         <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted">
