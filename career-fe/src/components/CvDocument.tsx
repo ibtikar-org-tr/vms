@@ -20,6 +20,7 @@ import { documentKindLabel } from '../lib/file-icons'
 import {
   displayNameOf,
   formatBirthDate,
+  formatBirthYear,
   formatDateRange,
   formatLocation,
   latestRoleOf,
@@ -198,7 +199,9 @@ export function CvDocument({
     { country: vms?.country, region: vms?.region, city: vms?.city },
     '، ',
   )
-  const birthDate = formatBirthDate(vms?.dateOfBirth)
+  const birthDate = limited
+    ? formatBirthYear(vms?.dateOfBirth)
+    : formatBirthDate(vms?.dateOfBirth)
   const sex = sexLabel(vms?.sex)
   const workPreferences = normalizeWorkPreferences(data.workPreferences)
   const educationBits = [vms?.educationLevel, vms?.fieldOfStudy].filter(Boolean).join(' · ')

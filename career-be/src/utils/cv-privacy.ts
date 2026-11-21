@@ -15,11 +15,23 @@ export function toInitialsLabel(value?: string | null): string | null {
 
 export type CvAccessStatus = 'none' | 'pending' | 'accepted' | 'rejected' | 'revoked' | 'self'
 
+/** Keep year only for limited public view, e.g. "1994-03-12" → "1994". */
+export function toBirthYearOnly(value?: string | null): string | null {
+  if (!value?.trim()) return null
+  const raw = value.trim()
+  const iso = raw.slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso.slice(0, 4)
+  const yearMatch = raw.match(/(?:^|\D)((?:19|20)\d{2})(?:\D|$)/)
+  return yearMatch?.[1] || null
+}
+
 export function redactVmsProfile<T extends Record<string, unknown> | null | undefined>(
   vms: T,
 ): T {
   if (!vms || typeof vms !== 'object') return vms
   const source = vms as Record<string, unknown>
+  const dateOfBirth =
+    typeof source.dateOfBirth === 'string' ? toBirthYearOnly(source.dateOfBirth) : null
   return {
     ...source,
     email: null,
@@ -27,6 +39,7 @@ export function redactVmsProfile<T extends Record<string, unknown> | null | unde
     profilePictureUrl: null,
     enName: toInitialsLabel(typeof source.enName === 'string' ? source.enName : null),
     arName: toInitialsLabel(typeof source.arName === 'string' ? source.arName : null),
+    dateOfBirth,
     // sex always kept
   } as T
 }
