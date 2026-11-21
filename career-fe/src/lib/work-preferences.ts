@@ -1,3 +1,5 @@
+import { isSyriaName, isTurkeyName } from './countries'
+
 export type OpenJobType = 'full_time' | 'part_time' | 'temp_full_time'
 
 export const JOB_TYPE_OPTIONS: Array<{ id: OpenJobType; labelAr: string; labelEn: string }> = [
@@ -26,15 +28,7 @@ export function emptyWorkPreferences(): WorkPreferences {
     canRelocate: false,
     relocateNotes: '',
     jobTypes: [],
-    locations: [
-      {
-        kind: 'remote',
-        countryName: null,
-        salaryMin: null,
-        salaryMax: null,
-        currency: 'USD',
-      },
-    ],
+    locations: [],
   }
 }
 
@@ -57,6 +51,18 @@ export function jobTypeLabel(id: OpenJobType, lang: 'ar' | 'en' = 'ar') {
   const match = JOB_TYPE_OPTIONS.find((o) => o.id === id)
   if (!match) return id
   return lang === 'en' ? match.labelEn : match.labelAr
+}
+
+/** Remote → Syria → Turkey → other countries (Arabic alpha). */
+export function sortWorkLocations(locations: WorkLocationPref[]): WorkLocationPref[] {
+  const remote = locations.filter((loc) => loc.kind === 'remote').slice(0, 1)
+  const countries = locations.filter((loc) => loc.kind === 'country')
+  const syria = countries.filter((loc) => isSyriaName(loc.countryName))
+  const turkey = countries.filter((loc) => isTurkeyName(loc.countryName))
+  const rest = countries
+    .filter((loc) => !isSyriaName(loc.countryName) && !isTurkeyName(loc.countryName))
+    .sort((a, b) => (a.countryName || '').localeCompare(b.countryName || '', 'ar'))
+  return [...remote, ...syria, ...turkey, ...rest]
 }
 
 export function normalizeWorkPreferences(raw: any): WorkPreferences {
@@ -88,19 +94,11 @@ export function normalizeWorkPreferences(raw: any): WorkPreferences {
         .filter(Boolean)
     : []
 
-  const hasRemote = locations.some((loc) => loc.kind === 'remote')
-  const ordered = [
-    ...(hasRemote
-      ? locations.filter((loc) => loc.kind === 'remote').slice(0, 1)
-      : [base.locations[0]]),
-    ...locations.filter((loc) => loc.kind === 'country'),
-  ]
-
   return {
     canRelocate: Boolean(raw.canRelocate ?? raw.can_relocate),
     relocateNotes: String(raw.relocateNotes ?? raw.relocate_notes ?? ''),
     jobTypes: normalizeJobTypes(raw.jobTypes ?? raw.open_job_types),
-    locations: ordered,
+    locations: sortWorkLocations(locations),
   }
 }
 

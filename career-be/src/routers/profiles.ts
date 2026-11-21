@@ -1,6 +1,15 @@
 import { Hono } from 'hono'
 import { memberAuthMiddleware } from '../middleware/auth'
 import {
+  countCvAccessRequests,
+  CvAccessAlreadyRequestedError,
+  decideCvAccessRequest,
+  getCvAccessBetween,
+  hasAcceptedCvAccess,
+  listOwnerAccessRequests,
+  requestCvAccess,
+} from '../repositories/cv-access'
+import {
   createDocument,
   createProject,
   createWorkExperience,
@@ -31,6 +40,13 @@ import {
   replaceEntitySkills,
 } from '../repositories/vms-skills'
 import type { AppBindings } from '../types/env'
+import {
+  redactDocuments,
+  redactProjects,
+  redactVmsProfile,
+  redactWorkExperiences,
+  type CvAccessStatus,
+} from '../utils/cv-privacy'
 import { createId } from '../utils/id'
 
 const profilesRouter = new Hono<AppBindings>()
@@ -360,38 +376,140 @@ profilesRouter.delete('/me/documents/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-/** Browse published CVs/profiles for manual review (any signed-in VMS member). */
+profilesRouter.get('/me/access-requests', async (c) => {
+  const member = c.get('member')
+  const rows = await listOwnerAccessRequests(c.env, member.membership_number)
+  const items = []
+  for (const row of rows) {
+    const requester = await fetchVmsPartnerProfile(c.env, row.requester_membership_number)
+    items.push({
+      ...row,
+      requester: requester
+        ? {
+            membershipNumber: requester.membershipNumber,
+            enName: requester.enName,
+            arName: requester.arName,
+            email: requester.email,
+            profilePictureUrl: requester.profilePictureUrl,
+            sex: requester.sex,
+            country: requester.country,
+            city: requester.city,
+          }
+        : {
+            membershipNumber: row.requester_membership_number,
+            enName: null,
+            arName: null,
+            email: null,
+            profilePictureUrl: null,
+            sex: null,
+            country: null,
+            city: null,
+          },
+    })
+  }
+  return c.json({
+    pending: items.filter((item) => item.status === 'pending'),
+    accepted: items.filter((item) => item.status === 'accepted'),
+    rejected: items.filter((item) => item.status === 'rejected' || item.status === 'revoked'),
+  })
+})
+
+profilesRouter.patch('/me/access-requests/:id', async (c) => {
+  const member = c.get('member')
+  const body = await c.req
+    .json<{ status?: 'accepted' | 'rejected' | 'revoked' }>()
+    .catch(() => ({}))
+  const status = body.status
+  if (status !== 'accepted' && status !== 'rejected' && status !== 'revoked') {
+    return c.json({ message: 'حالة غير صالحة' }, 400)
+  }
+  const row = await decideCvAccessRequest(c.env, member.membership_number, c.req.param('id'), status)
+  if (!row) return c.json({ message: 'غير موجود' }, 404)
+  return c.json({ request: row })
+})
+
+/** Browse public CVs (any signed-in VMS member). Payloads are privacy-redacted. */
 profilesRouter.get('/discover', async (c) => {
+  const actor = c.get('member')
   const q = c.req.query('q') || undefined
   const profiles = await searchPublishedProfiles(c.env, q)
   const enriched = []
   for (const profile of profiles) {
+    const isSelf = profile.membership_number === actor.membership_number
+    const fullAccess =
+      isSelf || (await hasAcceptedCvAccess(c.env, profile.membership_number, actor.membership_number))
     const vmsProfile = await fetchVmsPartnerProfile(c.env, profile.membership_number)
     const work = await listWorkExperiences(c.env, profile.membership_number)
+    const workPreferences = await getWorkPreferences(c.env, profile.membership_number)
     const latestRole = work.find((item) => item.is_current)?.title || work[0]?.title || null
+    const safeVms = fullAccess
+      ? vmsProfile
+      : redactVmsProfile(
+          vmsProfile
+            ? {
+                membershipNumber: vmsProfile.membershipNumber,
+                enName: vmsProfile.enName,
+                arName: vmsProfile.arName,
+                educationLevel: vmsProfile.educationLevel,
+                school: vmsProfile.school,
+                fieldOfStudy: vmsProfile.fieldOfStudy,
+                skills: vmsProfile.skills,
+                languages: vmsProfile.languages,
+                profilePictureUrl: vmsProfile.profilePictureUrl,
+                sex: vmsProfile.sex,
+                dateOfBirth: vmsProfile.dateOfBirth,
+                country: vmsProfile.country,
+                region: vmsProfile.region,
+                city: vmsProfile.city,
+                email: vmsProfile.email,
+                phoneNumber: vmsProfile.phoneNumber,
+              }
+            : null,
+        )
+    const accessRequestCount = await countCvAccessRequests(c.env, profile.membership_number)
     enriched.push({
       profile,
       latestRole,
-      vmsProfile: vmsProfile
-        ? {
-            membershipNumber: vmsProfile.membershipNumber,
-            enName: vmsProfile.enName,
-            arName: vmsProfile.arName,
-            educationLevel: vmsProfile.educationLevel,
-            school: vmsProfile.school,
-            fieldOfStudy: vmsProfile.fieldOfStudy,
-            skills: vmsProfile.skills,
-            profilePictureUrl: vmsProfile.profilePictureUrl,
-            sex: vmsProfile.sex,
-            dateOfBirth: vmsProfile.dateOfBirth,
-            country: vmsProfile.country,
-            region: vmsProfile.region,
-            city: vmsProfile.city,
-          }
-        : null,
+      workPreferences,
+      privacyMode: fullAccess ? 'full' : 'limited',
+      accessRequestCount,
+      vmsProfile: safeVms,
     })
   }
   return c.json({ profiles: enriched })
+})
+
+profilesRouter.post('/:membershipNumber/access-requests', async (c) => {
+  const actor = c.get('member')
+  const membershipNumber = c.req.param('membershipNumber')
+  if (membershipNumber === actor.membership_number) {
+    return c.json({ message: 'لا يمكن طلب الوصول لسيرتك' }, 400)
+  }
+  const published = await getPublishedProfile(c.env, membershipNumber)
+  if (!published) return c.json({ message: 'السيرة غير متاحة' }, 404)
+
+  const body = await c.req.json<{ message?: string }>().catch(() => ({}))
+  try {
+    const request = await requestCvAccess(
+      c.env,
+      membershipNumber,
+      actor.membership_number,
+      body.message,
+    )
+    return c.json({ request }, 201)
+  } catch (error) {
+    if (error instanceof CvAccessAlreadyRequestedError) {
+      return c.json(
+        {
+          message: 'لقد أرسلت طلباً مسبقاً لهذه السيرة ولا يمكن إعادة الإرسال',
+          code: 'ACCESS_ALREADY_REQUESTED',
+          request: error.existing,
+        },
+        409,
+      )
+    }
+    throw error
+  }
 })
 
 profilesRouter.get('/:membershipNumber', async (c) => {
@@ -408,6 +526,16 @@ profilesRouter.get('/:membershipNumber', async (c) => {
     return c.json({ message: 'Not found' }, 404)
   }
 
+  const accessRow = isSelf
+    ? null
+    : await getCvAccessBetween(c.env, membershipNumber, actor.membership_number)
+  const fullAccess = isSelf || accessRow?.status === 'accepted'
+  const accessStatus: CvAccessStatus = isSelf
+    ? 'self'
+    : accessRow
+      ? (accessRow.status as CvAccessStatus)
+      : 'none'
+
   const workExperiences = await attachSkills(
     c.env,
     'work_experience',
@@ -420,27 +548,48 @@ profilesRouter.get('/:membershipNumber', async (c) => {
   )
   const documents = await listDocuments(c.env, membershipNumber)
   const languageRows = await listProfileLanguages(c.env, membershipNumber)
-  const vmsProfile = await fetchVmsPartnerProfile(c.env, membershipNumber)
+  const vmsProfile = isSelf
+    ? await fetchVmsSelfProfile(c.env, membershipNumber, c.req.header('Authorization'))
+    : await fetchVmsPartnerProfile(c.env, membershipNumber)
   const languages = mergeLanguagePreferences(vmsProfile?.languages, languageRows)
   const workPreferences = await getWorkPreferences(c.env, membershipNumber)
 
+  const safeDocs = documents.map(({ r2_key: _r2, ...rest }) => rest)
+  const accessRequestCount = await countCvAccessRequests(c.env, membershipNumber)
+
   return c.json({
     profile,
-    workExperiences,
-    projects,
-    documents: documents.map(({ r2_key: _r2, ...rest }) => rest),
+    workExperiences: fullAccess ? workExperiences : redactWorkExperiences(workExperiences),
+    projects: fullAccess ? projects : redactProjects(projects),
+    documents: fullAccess
+      ? safeDocs.map((doc) => ({ ...doc, downloadable: true }))
+      : redactDocuments(safeDocs),
     languages,
     workPreferences,
-    vmsProfile,
+    vmsProfile: fullAccess ? vmsProfile : redactVmsProfile(vmsProfile),
+    accessRequestCount,
+    privacy: {
+      mode: fullAccess ? 'full' : 'limited',
+      accessStatus,
+      /** Only once ever — no resend after pending/accepted/rejected/revoked. */
+      canRequestAccess: !isSelf && accessStatus === 'none',
+      canDownloadDocuments: fullAccess,
+    },
   })
 })
 
 profilesRouter.get('/:membershipNumber/documents/:id/download', async (c) => {
+  const actor = c.get('member')
   const membershipNumber = c.req.param('membershipNumber')
   const documentId = c.req.param('id')
 
-  const published = await getPublishedProfile(c.env, membershipNumber)
-  if (!published) return c.json({ message: 'Not found' }, 404)
+  const isSelf = membershipNumber === actor.membership_number
+  if (!isSelf) {
+    const published = await getPublishedProfile(c.env, membershipNumber)
+    if (!published) return c.json({ message: 'Not found' }, 404)
+    const allowed = await hasAcceptedCvAccess(c.env, membershipNumber, actor.membership_number)
+    if (!allowed) return c.json({ message: 'غير مصرح بتنزيل الملفات' }, 403)
+  }
 
   const document = await getDocument(c.env, membershipNumber, documentId)
   if (!document) return c.json({ message: 'Not found' }, 404)

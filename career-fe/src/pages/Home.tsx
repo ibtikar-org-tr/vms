@@ -25,41 +25,44 @@ export default function Home() {
         }}
       />
 
-      <div className="relative px-6 py-14 sm:px-12 sm:py-20">
+      <div className="relative px-4 py-10 sm:px-12 sm:py-20">
         <div className="flex items-center gap-3">
           <img
             src="/career-mark.svg"
             alt=""
-            className="h-12 w-12 rounded-lg object-cover ring-1 ring-line sm:h-14 sm:w-14"
+            className="h-11 w-11 rounded-lg object-cover ring-1 ring-line sm:h-14 sm:w-14"
           />
           <div>
-            <p className="text-lg font-bold text-ink sm:text-xl">المسار المهني</p>
+            <p className="text-base font-bold text-ink sm:text-xl">المسار المهني</p>
             <p className="text-sm text-muted">تجمّع إبتكار</p>
           </div>
         </div>
 
-        <h1 className="mt-8 max-w-2xl text-3xl font-bold leading-[1.25] text-ink sm:text-4xl">
+        <h1 className="mt-7 max-w-2xl text-[1.65rem] font-bold leading-[1.3] text-ink sm:mt-8 sm:text-4xl sm:leading-[1.25]">
           سيرة مهنية مرتبطة بعضويتك
         </h1>
-        <p className="mt-4 max-w-xl text-sm leading-7 text-muted sm:text-[15px]">
-          البيانات الشخصية تُجلب من منصة الأعضاء. تضيف هنا خبراتك ومشاريعك وتفضيلات العمل، وتُراجع
-          السير من فريق إبتكار.
+        <p className="mt-3 max-w-xl text-sm leading-7 text-muted sm:mt-4 sm:text-[15px]">
+          البيانات الشخصية تُجلب من منصة الأعضاء. تضيف هنا خبراتك ومشاريعك وتفضيلات العمل، وتختار
+          متى تكون سيرتك عامة مع حماية للخصوصية.
         </p>
 
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mobile-actions mt-7 sm:mt-8">
           {session ? (
             <>
-              <Link to="/profile" className="btn-primary">
-                فتح سيرتي
+              <Link to="/profile" className="btn-primary w-full sm:w-auto">
+                سيرتي
               </Link>
-              <Link to="/talent" className="btn-ghost">
-                تصفح السير المنشورة
+              <Link to="/profile/edit" className="btn-ghost w-full sm:w-auto">
+                تعديل السيرة
+              </Link>
+              <Link to="/talent" className="btn-ghost w-full sm:w-auto">
+                تصفح السير العامة
               </Link>
             </>
           ) : (
             <button
               type="button"
-              className="btn-primary"
+              className="btn-primary w-full sm:w-auto"
               onClick={() => startVmsSsoLogin('/profile')}
             >
               الدخول عبر منصة الأعضاء

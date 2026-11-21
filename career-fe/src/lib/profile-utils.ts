@@ -15,13 +15,22 @@ export function sexLabel(sex?: string | null) {
 export function formatBirthDate(value?: string | null) {
   if (!value?.trim()) return null
   const raw = value.trim()
+  // Year-only (privacy-limited payloads).
+  if (/^\d{4}$/.test(raw)) return raw
   // Prefer YYYY-MM-DD display; fall back to original string.
   const iso = raw.slice(0, 10)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-    const [y, m, d] = iso.split('-')
-    return `${d}/${m}/${y}`
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
   return raw
+}
+
+/** Limited privacy view: year only. */
+export function formatBirthYear(value?: string | null) {
+  if (!value?.trim()) return null
+  const raw = value.trim()
+  if (/^\d{4}$/.test(raw)) return raw
+  const iso = raw.slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso.slice(0, 4)
+  return raw.match(/(?:^|\D)((?:19|20)\d{2})(?:\D|$)/)?.[1] || null
 }
 
 export function formatLocation(parts: {

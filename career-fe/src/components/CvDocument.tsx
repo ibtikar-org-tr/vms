@@ -1,7 +1,9 @@
-import { type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  AlignLeft,
   Briefcase,
   Calendar,
+  ChevronDown,
   Download,
   FolderKanban,
   GraduationCap,
@@ -12,9 +14,13 @@ import {
   Phone,
   UserRound,
 } from 'lucide-react'
+import { CvSectionMap, type CvMapItem } from './CvSectionMap'
+import { FileTypeIcon } from './FileTypeIcon'
+import { documentKindLabel } from '../lib/file-icons'
 import {
   displayNameOf,
   formatBirthDate,
+  formatBirthYear,
   formatDateRange,
   formatLocation,
   latestRoleOf,
@@ -28,6 +34,7 @@ import {
   normalizeWorkPreferences,
   type OpenJobType,
 } from '../lib/work-preferences'
+import { socialLinksFromProfile } from '../lib/social-links'
 import { CvExportMenu } from './CvExportMenu'
 
 export type CvSkill = { skillId?: string; name: string }
@@ -56,6 +63,8 @@ export type CvDocumentData = {
     skills?: string | null
     interests?: string | null
     languages?: string | null
+    /** Platform → URL; null URL means linked but privacy-redacted (icon only). */
+    socialMediaLinks?: Record<string, string | null> | string | null
   } | null
   workExperiences?: Array<{
     id: string
@@ -86,6 +95,8 @@ export type CvDocumentData = {
     id: string
     file_name: string
     kind?: string
+    content_type?: string | null
+    size_bytes?: number | null
   }>
   languages?: Array<{
     language: string
@@ -110,13 +121,70 @@ type Props = {
   data: CvDocumentData
   onDownloadDocument?: (doc: NonNullable<CvDocumentData['documents']>[number]) => void
   compact?: boolean
+  /** limited = privacy-redacted public view (no export / downloads / photo) */
+  privacyMode?: 'full' | 'limited'
 }
 
 function EmptyHint({ children }: { children: ReactNode }) {
   return <p className="text-sm text-slate-400">{children}</p>
 }
 
-export function CvDocument({ data, onDownloadDocument, compact }: Props) {
+function CollapsibleCvSection({
+  id,
+  title,
+  icon,
+  children,
+  open,
+  onOpenChange,
+  onHover,
+}: {
+  id: string
+  title: string
+  icon?: ReactNode
+  children: ReactNode
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onHover?: () => void
+}) {
+  return (
+    <section
+      id={id}
+      className="cv-collapse scroll-mt-24"
+      onMouseEnter={onHover}
+    >
+      <div className="cv-section-title">
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          {icon}
+          {title}
+        </span>
+        <button
+          type="button"
+          className="cv-collapse-toggle print:hidden"
+          aria-expanded={open}
+          aria-label={open ? `إخفاء ${title}` : `إظهار ${title}`}
+          onClick={() => onOpenChange(!open)}
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-300 ease-out ${
+              open ? 'rotate-180' : 'rotate-0'
+            }`}
+          />
+        </button>
+      </div>
+      <div className={`cv-collapse-panel ${open ? 'is-open' : ''}`} aria-hidden={!open}>
+        <div className="cv-collapse-panel-inner">{children}</div>
+      </div>
+    </section>
+  )
+}
+
+export function CvDocument({
+  data,
+  onDownloadDocument,
+  compact,
+  privacyMode = 'full',
+}: Props) {
+  const limited = privacyMode === 'limited'
   const vms = data.vmsProfile
   const name = displayNameOf(data)
   const role = latestRoleOf(data.workExperiences)
@@ -134,7 +202,9 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     { country: vms?.country, region: vms?.region, city: vms?.city },
     '، ',
   )
-  const birthDate = formatBirthDate(vms?.dateOfBirth)
+  const birthDate = limited
+    ? formatBirthYear(vms?.dateOfBirth)
+    : formatBirthDate(vms?.dateOfBirth)
   const sex = sexLabel(vms?.sex)
   const workPreferences = normalizeWorkPreferences(data.workPreferences)
   const educationBits = [vms?.educationLevel, vms?.fieldOfStudy].filter(Boolean).join(' · ')
@@ -142,32 +212,130 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part[0])
+    .map((part) => Array.from(part.replace(/\./g, ''))[0] || '')
+    .filter(Boolean)
     .join('')
 
+  const showEmail = !limited && Boolean(vms?.email)
+  const showPhone = !limited && Boolean(vms?.phoneNumber)
+  const showPhoto = !limited && Boolean(vms?.profilePictureUrl)
+  const canDownload = !limited && Boolean(onDownloadDocument)
+  const socialLinks = socialLinksFromProfile(vms?.socialMediaLinks, {
+    includeRedacted: limited,
+  }).filter((link) => (limited ? true : Boolean(link.url)))
+
+  const hasPersonal = Boolean(
+    showEmail || showPhone || location || birthDate || sex || socialLinks.length,
+  )
+  const hasWorkPrefs =
+    workPreferences.canRelocate ||
+    workPreferences.jobTypes.length > 0 ||
+    workPreferences.locations.length > 0
+
+  // Main content column only (not the right sidebar).
+  const mapItems = useMemo(() => {
+    const iconCls = 'h-3.5 w-3.5'
+    const items: CvMapItem[] = []
+    if (data.profile.summary) {
+      items.push({
+        id: 'cv-summary',
+        label: 'نبذة مهنية',
+        icon: <AlignLeft className={iconCls} />,
+      })
+    }
+    if (hasWorkPrefs) {
+      items.push({
+        id: 'cv-work-prefs',
+        label: 'تفضيلات العمل',
+        icon: <MapPinned className={iconCls} />,
+      })
+    }
+    items.push({
+      id: 'cv-experience',
+      label: 'الخبرة العملية',
+      icon: <Briefcase className={iconCls} />,
+    })
+    items.push({
+      id: 'cv-education',
+      label: 'التعليم',
+      icon: <GraduationCap className={iconCls} />,
+    })
+    items.push({
+      id: 'cv-projects',
+      label: 'المشاريع',
+      icon: <FolderKanban className={iconCls} />,
+    })
+    if (data.documents?.length) {
+      items.push({
+        id: 'cv-documents',
+        label: 'الملفات المرفقة',
+        icon: <Download className={iconCls} />,
+      })
+    }
+    return items
+  }, [data.documents?.length, data.profile.summary, hasWorkPrefs])
+
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({})
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setOpenMap((prev) => {
+      const next = { ...prev }
+      for (const item of mapItems) {
+        if (next[item.id] === undefined) next[item.id] = true
+      }
+      return next
+    })
+    setActiveId((prev) => prev ?? mapItems[0]?.id ?? null)
+  }, [mapItems])
+
+  const setSectionOpen = (id: string, open: boolean) => {
+    setOpenMap((prev) => ({ ...prev, [id]: open }))
+  }
+
+  const hoverSection = (id: string) => {
+    setActiveId(id)
+  }
+
+  const navigateToSection = (id: string) => {
+    setActiveId(id)
+    setSectionOpen(id, true)
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   return (
+    <div className="cv-shell">
     <article
-      className={`overflow-hidden rounded-lg border border-line bg-white ${
+      id="cv-top"
+      className={`cv-doc overflow-hidden rounded-lg border border-line bg-white scroll-mt-24 ${
         compact ? '' : 'print:shadow-none'
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-2.5">
-          <img src="/career-mark.svg" alt="" className="h-8 w-8 rounded-md object-cover ring-1 ring-line" />
-          <div>
-            <p className="text-sm font-bold text-ink">المسار المهني</p>
-            <p className="text-[11px] text-muted">تصدير PDF · Markdown · TXT</p>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+          <img
+            src="/career-mark.svg"
+            alt=""
+            className="h-7 w-7 shrink-0 rounded-md object-cover ring-1 ring-line sm:h-8 sm:w-8"
+          />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-ink">المسار المهني</p>
+            <p className="truncate text-[11px] text-muted">
+              {limited ? 'عرض محدود للخصوصية' : 'تصدير PDF · Markdown · TXT'}
+            </p>
           </div>
         </div>
-        <CvExportMenu data={data} />
+        {!limited ? <CvExportMenu data={data} /> : null}
       </div>
 
       <div className={`grid gap-0 lg:grid-cols-[230px_1fr] ${compact ? '' : 'lg:min-h-[640px]'}`}>
         <aside className="border-b border-line bg-[#f7f8fa] p-5 sm:p-6 lg:border-b-0 lg:border-l lg:border-line">
           <div className="flex flex-col items-center text-center lg:items-stretch lg:text-start">
-            {vms?.profilePictureUrl ? (
+            {showPhoto ? (
               <img
-                src={vms.profilePictureUrl}
+                src={vms!.profilePictureUrl!}
                 alt=""
                 className="mx-auto h-28 w-28 rounded-md object-cover ring-1 ring-line lg:mx-0"
               />
@@ -184,20 +352,24 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </div>
 
           <div className="mt-6 space-y-4 text-sm">
-            {(vms?.email || vms?.phoneNumber || location || birthDate || (sex && sex !== '—')) && (
-              <div>
-                <p className="cv-section-title">تواصل ومعلومات شخصية</p>
+            {hasPersonal ? (
+              <CollapsibleCvSection
+                id="cv-personal"
+                title={limited ? 'معلومات شخصية' : 'تواصل ومعلومات شخصية'}
+                open={openMap['cv-personal'] !== false}
+                onOpenChange={(open) => setSectionOpen('cv-personal', open)}
+              >
                 <ul className="space-y-2.5 text-slate-600">
-                  {vms?.email ? (
+                  {showEmail ? (
                     <li className="flex items-start gap-2 break-all">
                       <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span dir="ltr">{vms.email}</span>
+                      <span dir="ltr">{vms?.email}</span>
                     </li>
                   ) : null}
-                  {vms?.phoneNumber ? (
+                  {showPhone ? (
                     <li className="flex items-start gap-2">
                       <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span dir="ltr">{vms.phoneNumber}</span>
+                      <span dir="ltr">{vms?.phoneNumber}</span>
                     </li>
                   ) : null}
                   {location ? (
@@ -206,24 +378,63 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                       <span>{location}</span>
                     </li>
                   ) : null}
-                  {sex && sex !== '—' ? (
-                    <li className="flex items-start gap-2">
-                      <UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span>{sex}</span>
-                    </li>
-                  ) : null}
+                  <li className="flex items-start gap-2">
+                    <UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span>{sex}</span>
+                  </li>
                   {birthDate ? (
                     <li className="flex items-start gap-2">
                       <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
                       <span dir="ltr">{birthDate}</span>
                     </li>
                   ) : null}
+                  {socialLinks.length ? (
+                    <li className="pt-1">
+                      <p className="mb-2 text-[11px] font-medium text-slate-500">وسائل التواصل</p>
+                      <div className="flex flex-wrap gap-2">
+                        {socialLinks.map((link) => {
+                          const Icon = link.Icon
+                          const box =
+                            'inline-flex h-8 w-8 items-center justify-center rounded-md border border-line bg-white text-slate-600'
+                          if (limited || !link.url) {
+                            return (
+                              <span
+                                key={link.key}
+                                className={`${box} cursor-default opacity-80`}
+                                title={`${link.label} (مخفي)`}
+                                aria-label={`${link.label} مرتبط، الرابط مخفي`}
+                              >
+                                <Icon className="h-3.5 w-3.5" aria-hidden />
+                              </span>
+                            )
+                          }
+                          return (
+                            <a
+                              key={link.key}
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`${box} transition hover:border-brand hover:text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand`}
+                              title={link.label}
+                              aria-label={link.label}
+                            >
+                              <Icon className="h-3.5 w-3.5" aria-hidden />
+                            </a>
+                          )
+                        })}
+                      </div>
+                    </li>
+                  ) : null}
                 </ul>
-              </div>
-            )}
+              </CollapsibleCvSection>
+            ) : null}
 
-            <div>
-              <p className="cv-section-title">المهارات</p>
+            <CollapsibleCvSection
+              id="cv-skills"
+              title="المهارات"
+              open={openMap['cv-skills'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-skills', open)}
+            >
               <div className="flex flex-wrap gap-1.5">
                 {skills.length ? (
                   skills.map((item) => (
@@ -235,13 +446,15 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                   <EmptyHint>لا توجد مهارات بعد</EmptyHint>
                 )}
               </div>
-            </div>
+            </CollapsibleCvSection>
 
-            <div>
-              <p className="cv-section-title">
-                <Languages className="h-3.5 w-3.5 text-slate-400" />
-                اللغات
-              </p>
+            <CollapsibleCvSection
+              id="cv-languages"
+              title="اللغات"
+              icon={<Languages className="h-3.5 w-3.5 text-slate-400" />}
+              open={openMap['cv-languages'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-languages', open)}
+            >
               <ul className="space-y-2">
                 {languages.length ? (
                   languages.map((item) => (
@@ -260,7 +473,9 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                         <div className="mt-1.5 h-1 overflow-hidden bg-slate-100">
                           <div
                             className="h-full bg-brand"
-                            style={{ width: `${Math.min(100, Math.max(0, item.proficiency * 10))}%` }}
+                            style={{
+                              width: `${Math.min(100, Math.max(0, item.proficiency * 10))}%`,
+                            }}
                           />
                         </div>
                       ) : null}
@@ -273,11 +488,15 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                   <EmptyHint>لا توجد لغات بعد</EmptyHint>
                 )}
               </ul>
-            </div>
+            </CollapsibleCvSection>
 
             {!!interests.length && (
-              <div>
-                <p className="cv-section-title">الاهتمامات</p>
+              <CollapsibleCvSection
+                id="cv-interests"
+                title="الاهتمامات"
+                open={openMap['cv-interests'] !== false}
+                onOpenChange={(open) => setSectionOpen('cv-interests', open)}
+              >
                 <div className="flex flex-wrap gap-1.5">
                   {interests.map((item) => (
                     <span key={item} className="chip">
@@ -285,7 +504,7 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                     </span>
                   ))}
                 </div>
-              </div>
+              </CollapsibleCvSection>
             )}
           </div>
         </aside>
@@ -303,20 +522,26 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
           </header>
 
           {data.profile.summary ? (
-            <section>
-              <h2 className="cv-section-title">نبذة مهنية</h2>
+            <CollapsibleCvSection
+              id="cv-summary"
+              title="نبذة مهنية"
+              open={openMap['cv-summary'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-summary', open)}
+              onHover={() => hoverSection('cv-summary')}
+            >
               <p className="whitespace-pre-wrap leading-7 text-slate-700">{data.profile.summary}</p>
-            </section>
+            </CollapsibleCvSection>
           ) : null}
 
-          {(workPreferences.canRelocate ||
-            workPreferences.jobTypes.length > 0 ||
-            workPreferences.locations.length > 0) && (
-            <section>
-              <h2 className="cv-section-title">
-                <MapPinned className="h-3.5 w-3.5 text-slate-400" />
-                تفضيلات العمل
-              </h2>
+          {hasWorkPrefs ? (
+            <CollapsibleCvSection
+              id="cv-work-prefs"
+              title="تفضيلات العمل"
+              icon={<MapPinned className="h-3.5 w-3.5 text-slate-400" />}
+              open={openMap['cv-work-prefs'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-work-prefs', open)}
+              onHover={() => hoverSection('cv-work-prefs')}
+            >
               {!!workPreferences.jobTypes.length && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {workPreferences.jobTypes.map((id) => (
@@ -359,14 +584,17 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
                   })}
                 </ul>
               )}
-            </section>
-          )}
+            </CollapsibleCvSection>
+          ) : null}
 
-          <section>
-            <h2 className="cv-section-title">
-              <Briefcase className="h-3.5 w-3.5 text-slate-400" />
-              الخبرة العملية
-            </h2>
+          <CollapsibleCvSection
+            id="cv-experience"
+            title="الخبرة العملية"
+            icon={<Briefcase className="h-3.5 w-3.5 text-slate-400" />}
+            open={openMap['cv-experience'] !== false}
+            onOpenChange={(open) => setSectionOpen('cv-experience', open)}
+              onHover={() => hoverSection('cv-experience')}
+          >
             <ul className="divide-y divide-line">
               {data.workExperiences?.map((item) => (
                 <li key={item.id} className="py-4 first:pt-0 last:pb-0">
@@ -404,13 +632,16 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
               ))}
               {!data.workExperiences?.length && <EmptyHint>لا توجد خبرات مسجّلة بعد.</EmptyHint>}
             </ul>
-          </section>
+          </CollapsibleCvSection>
 
-          <section>
-            <h2 className="cv-section-title">
-              <GraduationCap className="h-3.5 w-3.5 text-slate-400" />
-              التعليم
-            </h2>
+          <CollapsibleCvSection
+            id="cv-education"
+            title="التعليم"
+            icon={<GraduationCap className="h-3.5 w-3.5 text-slate-400" />}
+            open={openMap['cv-education'] !== false}
+            onOpenChange={(open) => setSectionOpen('cv-education', open)}
+              onHover={() => hoverSection('cv-education')}
+          >
             {educationBits || vms?.school ? (
               <div>
                 <p className="font-semibold text-ink">
@@ -426,13 +657,16 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
             ) : (
               <EmptyHint>لا توجد بيانات تعليم في منصة الأعضاء بعد.</EmptyHint>
             )}
-          </section>
+          </CollapsibleCvSection>
 
-          <section>
-            <h2 className="cv-section-title">
-              <FolderKanban className="h-3.5 w-3.5 text-slate-400" />
-              المشاريع
-            </h2>
+          <CollapsibleCvSection
+            id="cv-projects"
+            title="المشاريع"
+            icon={<FolderKanban className="h-3.5 w-3.5 text-slate-400" />}
+            open={openMap['cv-projects'] !== false}
+            onOpenChange={(open) => setSectionOpen('cv-projects', open)}
+              onHover={() => hoverSection('cv-projects')}
+          >
             <ul className="divide-y divide-line">
               {data.projects?.map((item) => (
                 <li key={item.id} className="py-4 first:pt-0 last:pb-0">
@@ -472,42 +706,60 @@ export function CvDocument({ data, onDownloadDocument, compact }: Props) {
               ))}
               {!data.projects?.length && <EmptyHint>لا توجد مشاريع مسجّلة بعد.</EmptyHint>}
             </ul>
-          </section>
+          </CollapsibleCvSection>
 
           {!!data.documents?.length && (
-            <section>
-            <h2 className="cv-section-title">
-              <Download className="h-3.5 w-3.5 text-slate-400" />
-              الملفات المرفقة
-            </h2>
+            <CollapsibleCvSection
+              id="cv-documents"
+              title="الملفات المرفقة"
+              icon={<Download className="h-3.5 w-3.5 text-slate-400" />}
+              open={openMap['cv-documents'] !== false}
+              onOpenChange={(open) => setSectionOpen('cv-documents', open)}
+              onHover={() => hoverSection('cv-documents')}
+            >
               <ul className="divide-y divide-line border border-line">
                 {data.documents.map((doc) => (
                   <li
                     key={doc.id}
                     className="flex items-center justify-between gap-3 px-4 py-3"
                   >
-                    <div>
-                      <p className="font-semibold text-ink">{doc.file_name}</p>
-                      <p className="text-xs text-slate-500">
-                        {doc.kind === 'cv' ? 'سيرة ذاتية' : 'ملف أعمال'}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <FileTypeIcon
+                        fileName={doc.file_name}
+                        contentType={doc.content_type}
+                        size="sm"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-ink" title={doc.file_name}>
+                          {doc.file_name}
+                        </p>
+                        <p className="text-xs text-slate-500">{documentKindLabel(doc.kind)}</p>
+                      </div>
                     </div>
-                    {onDownloadDocument ? (
+                    {canDownload ? (
                       <button
                         type="button"
-                        className="btn-ghost py-1.5 text-xs"
-                        onClick={() => onDownloadDocument(doc)}
+                        className="btn-ghost shrink-0 py-1.5 text-xs"
+                        onClick={() => onDownloadDocument?.(doc)}
                       >
                         تنزيل
                       </button>
+                    ) : limited ? (
+                      <span className="shrink-0 text-[11px] font-medium text-slate-400">
+                        محمي
+                      </span>
                     ) : null}
                   </li>
                 ))}
               </ul>
-            </section>
+            </CollapsibleCvSection>
           )}
         </div>
       </div>
     </article>
+      {!compact ? (
+        <CvSectionMap items={mapItems} activeId={activeId} onNavigate={navigateToSection} onHover={hoverSection} />
+      ) : null}
+    </div>
   )
 }

@@ -1,28 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Search } from 'lucide-react'
-import { loadCountryOptions, type CountryOption } from '../lib/countries'
+import { ChevronDown, Globe, Search } from 'lucide-react'
+import {
+  countryMatchesQuery,
+  loadCountryOptions,
+  type CountryOption,
+} from '../lib/countries'
+
+export type LocationPick =
+  | { kind: 'remote' }
+  | { kind: 'country'; countryName: string; option: CountryOption }
 
 type Props = {
-  value: string
-  onChange: (countryNameAr: string, option: CountryOption | null) => void
+  onPick: (pick: LocationPick) => void
   placeholder?: string
   disabled?: boolean
   excludeNames?: string[]
-}
-
-function normalize(text: string) {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  excludeRemote?: boolean
 }
 
 export function CountrySelect({
-  value,
-  onChange,
+  onPick,
   placeholder = 'ابحث واختر الدولة',
   disabled,
   excludeNames = [],
+  excludeRemote = false,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
@@ -62,19 +63,21 @@ export function CountrySelect({
     const available = countries.filter((country) => !excluded.has(country.nameAr.toLowerCase()))
     const q = query.trim()
     if (!q) return available
-    const qLower = q.toLowerCase()
-    const qNorm = normalize(q)
-    return available.filter((country) => {
-      return (
-        country.nameAr.includes(q) ||
-        country.nameAr.toLowerCase().includes(qLower) ||
-        normalize(country.nameEn).includes(qNorm) ||
-        country.iso2.toLowerCase().includes(qNorm.replace(/[^a-z]/g, ''))
-      )
-    })
+    return available.filter((country) => countryMatchesQuery(country, q))
   }, [countries, excluded, query])
 
-  const selected = countries.find((country) => country.nameAr === value) || null
+  const showRemote = !excludeRemote && countryMatchesQuery(
+    {
+      id: -1,
+      iso2: 'XX',
+      nameEn: 'Remote',
+      nameAr: 'عن بعد Remote',
+      native: 'عن بعد',
+      emoji: '',
+      phoneCode: '',
+    },
+    query,
+  )
 
   return (
     <div className="relative min-w-[14rem] flex-1" ref={rootRef}>
@@ -84,8 +87,8 @@ export function CountrySelect({
         className="field flex w-full items-center justify-between gap-2 text-start"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={selected ? 'text-slate-900' : 'text-slate-400'}>
-          {loading ? 'جاري تحميل الدول…' : selected ? `${selected.emoji} ${selected.nameAr}` : placeholder}
+        <span className="text-slate-400">
+          {loading ? 'جاري تحميل الدول…' : placeholder}
         </span>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -97,19 +100,43 @@ export function CountrySelect({
             <input
               className="field ps-8"
               autoFocus
+              dir="auto"
+              lang="ar"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="ابحث عن الدولة أو الرمز (TR, DE…)"
+              placeholder="ابحث بالعربية أو الإنجليزية أو الرمز"
             />
           </div>
           <ul className="max-h-56 overflow-y-auto p-1">
+            {showRemote ? (
+              <li>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 border-b border-line px-2.5 py-2 text-start text-sm transition hover:bg-slate-50"
+                  onClick={() => {
+                    onPick({ kind: 'remote' })
+                    setOpen(false)
+                    setQuery('')
+                  }}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center text-brand">
+                    <Globe className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 font-medium text-slate-800">عن بُعد (Remote)</span>
+                </button>
+              </li>
+            ) : null}
             {filtered.map((country) => (
               <li key={country.id}>
                 <button
                   type="button"
                   className="flex w-full items-center gap-2 px-2.5 py-2 text-start text-sm transition hover:bg-slate-50"
                   onClick={() => {
-                    onChange(country.nameAr, country)
+                    onPick({
+                      kind: 'country',
+                      countryName: country.nameAr,
+                      option: country,
+                    })
                     setOpen(false)
                     setQuery('')
                   }}
@@ -122,7 +149,7 @@ export function CountrySelect({
                 </button>
               </li>
             ))}
-            {!filtered.length && (
+            {!showRemote && !filtered.length && (
               <li className="px-3 py-4 text-center text-xs text-slate-400">لا توجد نتائج</li>
             )}
           </ul>

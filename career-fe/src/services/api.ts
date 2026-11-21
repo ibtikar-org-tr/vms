@@ -93,6 +93,15 @@ export const profilesApi = {
     (await api.get('/profiles/discover', { params: q ? { q } : undefined })).data,
   getPublic: async (membershipNumber: string) =>
     (await api.get(`/profiles/${encodeURIComponent(membershipNumber)}`)).data,
+  requestCvAccess: async (membershipNumber: string, message?: string) =>
+    (
+      await api.post(`/profiles/${encodeURIComponent(membershipNumber)}/access-requests`, {
+        message,
+      })
+    ).data,
+  listAccessRequests: async () => (await api.get('/profiles/me/access-requests')).data,
+  decideAccessRequest: async (id: string, status: 'accepted' | 'rejected' | 'revoked') =>
+    (await api.patch(`/profiles/me/access-requests/${encodeURIComponent(id)}`, { status })).data,
 }
 
 export function authDownloadHeaders(): Record<string, string> {

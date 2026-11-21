@@ -21,6 +21,8 @@ export type VmsProfileSnapshot = {
   country: string | null
   region: string | null
   city: string | null
+  /** Platform key → URL (null means present but privacy-redacted). */
+  socialMediaLinks: Record<string, string | null> | null
 }
 
 type VmsProfileJson = {
@@ -29,7 +31,40 @@ type VmsProfileJson = {
     email?: string
     dateOfBirth?: string | null
     region?: string | null
+    socialMediaLinks?: string | Record<string, unknown> | null
   }
+}
+
+function parseSocialMediaLinks(
+  raw: string | Record<string, unknown> | null | undefined,
+): Record<string, string | null> | null {
+  if (raw == null) return null
+  let source: unknown = raw
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (!trimmed) return null
+    try {
+      source = JSON.parse(trimmed)
+    } catch {
+      return null
+    }
+  }
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null
+
+  const out: Record<string, string | null> = {}
+  for (const [key, value] of Object.entries(source as Record<string, unknown>)) {
+    const platform = key.trim().toLowerCase()
+    if (!platform) continue
+    let url: string | null = null
+    if (typeof value === 'string') {
+      url = value.trim() || null
+    } else if (value && typeof value === 'object' && 'url' in value) {
+      url = String((value as { url?: unknown }).url || '').trim() || null
+    }
+    // Only keep linked platforms (non-empty URL). Privacy redact later strips URLs but keeps keys.
+    if (url) out[platform] = url
+  }
+  return Object.keys(out).length ? out : null
 }
 
 /** Self profile via caller's Bearer token. */
@@ -125,5 +160,6 @@ function mapProfile(data: unknown, fallbackMembership: string): VmsProfileSnapsh
     country: profile.country ?? null,
     region: profile.region ?? null,
     city: profile.city ?? null,
+    socialMediaLinks: parseSocialMediaLinks(profile.socialMediaLinks),
   }
 }

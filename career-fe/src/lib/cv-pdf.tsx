@@ -20,6 +20,7 @@ import {
   splitCsv,
 } from './profile-utils'
 import { careerAssetUrl, publicCvUrl } from './cv-url'
+import { socialLinksFromProfile } from './social-links'
 import {
   formatSalaryRange,
   jobTypeLabel,
@@ -349,12 +350,17 @@ function StandardCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl }: PdfShared) {
   })
   const birthDate = formatBirthDate(vms?.dateOfBirth)
   const sex = sexLabel(vms?.sex)
+  const socialLine = socialLinksFromProfile(vms?.socialMediaLinks)
+    .filter((link) => link.url)
+    .map((link) => `${link.label}: ${link.url}`)
+    .join('  |  ')
   const contact = [
     vms?.email,
     vms?.phoneNumber,
     location,
     sex !== '—' ? sex : null,
     birthDate ? `DOB ${birthDate}` : null,
+    socialLine || null,
   ]
     .filter(Boolean)
     .join('  |  ')
@@ -552,7 +558,13 @@ function ModernCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl, photoUrl }: PdfS
   })
   const birthDate = formatBirthDate(vms?.dateOfBirth)
   const sex = sexLabel(vms?.sex)
-  const contact = [vms?.email, vms?.phoneNumber, location].filter(Boolean).join('  ·  ')
+  const socialLine = socialLinksFromProfile(vms?.socialMediaLinks)
+    .filter((link) => link.url)
+    .map((link) => `${link.label}: ${link.url}`)
+    .join('  ·  ')
+  const contact = [vms?.email, vms?.phoneNumber, location, socialLine || null]
+    .filter(Boolean)
+    .join('  ·  ')
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -582,6 +594,13 @@ function ModernCvPdfDocument({ data, cvUrl, qrDataUrl, logoUrl, photoUrl }: PdfS
             {location ? <Text style={modern.sideText}>{location}</Text> : null}
             {sex !== '—' ? <Text style={modern.sideText}>{sex}</Text> : null}
             {birthDate ? <Text style={modern.sideText}>{`تاريخ الميلاد: ${birthDate}`}</Text> : null}
+            {socialLinksFromProfile(vms?.socialMediaLinks)
+              .filter((link) => link.url)
+              .map((link) => (
+                <Text key={link.key} style={modern.sideText}>
+                  {`${link.label}: ${link.url}`}
+                </Text>
+              ))}
           </View>
 
           {(workPreferences.canRelocate ||

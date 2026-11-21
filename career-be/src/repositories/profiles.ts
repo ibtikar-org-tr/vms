@@ -871,10 +871,21 @@ export async function replaceWorkPreferences(
       })
     }
 
-    // Remote always first
+    // Remote → Syria → Turkey → other countries (Arabic alpha)
+    const pinRank = (loc: WorkLocationDto) => {
+      if (loc.kind === 'remote') return 0
+      const name = String(loc.countryName || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[إأآٱ]/g, 'ا')
+      if (name === 'سوريا' || name === 'syria') return 1
+      if (name === 'تركيا' || name === 'turkey' || name === 'turkiye' || name === 'türkiye') return 2
+      return 3
+    }
     normalized.sort((a, b) => {
-      if (a.kind === 'remote' && b.kind !== 'remote') return -1
-      if (a.kind !== 'remote' && b.kind === 'remote') return 1
+      const ra = pinRank(a)
+      const rb = pinRank(b)
+      if (ra !== rb) return ra - rb
       return (a.countryName || '').localeCompare(b.countryName || '', 'ar')
     })
 

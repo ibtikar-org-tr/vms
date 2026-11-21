@@ -9,4 +9,9 @@ skills-lock.json
 # Local-only offline VMS development (do not commit)
 backend/wrangler.offline.jsonc
 backend/scripts/seed-offline.mjs
+backend/scripts/seed*.mjs
+backend/scripts/seed*.sql
+career-be/scripts/seed*
+career-be/**/seed*.sql
+career-fe/**/seed*
 database/members/migrations/

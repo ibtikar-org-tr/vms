@@ -39,5 +39,9 @@ samples/
 wrangler.local.jsonc
 worker-configuration.d.ts
 
+# Local seed/demo data (do not commit)
+scripts/seed*
+**/seed*.sql
+
 # certs
 *.pem
