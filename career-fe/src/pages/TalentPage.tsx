@@ -1,6 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Filter, Inbox, Search, X } from 'lucide-react'
+import {
+  BookOpen,
+  Briefcase,
+  Building2,
+  Filter,
+  GraduationCap,
+  Inbox,
+  Languages,
+  MapPin,
+  MapPinned,
+  Plane,
+  School,
+  Search,
+  Sparkles,
+  UserRound,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import { normalizeSearchText } from '../lib/countries'
 import { sexLabel, splitCsv } from '../lib/profile-utils'
@@ -107,6 +124,26 @@ function searchableBlob(item: TalentItem) {
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.map((v) => v.trim()).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b, 'ar'),
+  )
+}
+
+function FilterField({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div>
+      <label className="label inline-flex items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5 text-slate-400" strokeWidth={1.75} />
+        {label}
+      </label>
+      {children}
+    </div>
   )
 }
 
@@ -293,8 +330,7 @@ export default function TalentPage() {
 
         {filtersOpen ? (
           <div className="mt-3 grid gap-3 border-t border-line pt-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="label">الجنس</label>
+            <FilterField icon={UserRound} label="الجنس">
               <select
                 className="field"
                 value={filters.sex}
@@ -304,10 +340,9 @@ export default function TalentPage() {
                 <option value="male">{sexLabel('male')}</option>
                 <option value="female">{sexLabel('female')}</option>
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">بلد الإقامة</label>
+            <FilterField icon={MapPin} label="بلد الإقامة">
               <select
                 className="field"
                 value={filters.country}
@@ -320,10 +355,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">المدينة</label>
+            <FilterField icon={Building2} label="المدينة">
               <select
                 className="field"
                 value={filters.city}
@@ -336,10 +370,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">مهارة</label>
+            <FilterField icon={Sparkles} label="مهارة">
               <select
                 className="field"
                 value={filters.skill}
@@ -352,10 +385,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">اللغة</label>
+            <FilterField icon={Languages} label="اللغة">
               <select
                 className="field"
                 value={filters.language}
@@ -368,10 +400,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">المستوى التعليمي</label>
+            <FilterField icon={GraduationCap} label="المستوى التعليمي">
               <select
                 className="field"
                 value={filters.educationLevel}
@@ -384,10 +415,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">المدرسة / الجامعة</label>
+            <FilterField icon={School} label="المدرسة / الجامعة">
               <select
                 className="field"
                 value={filters.school}
@@ -400,10 +430,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">مجال الدراسة</label>
+            <FilterField icon={BookOpen} label="مجال الدراسة">
               <select
                 className="field"
                 value={filters.fieldOfStudy}
@@ -416,10 +445,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">نوع العمل المتاح</label>
+            <FilterField icon={Briefcase} label="نوع العمل المتاح">
               <select
                 className="field"
                 value={filters.jobType}
@@ -432,10 +460,9 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">إمكانية الانتقال</label>
+            <FilterField icon={Plane} label="إمكانية الانتقال">
               <select
                 className="field"
                 value={filters.canRelocate}
@@ -445,10 +472,9 @@ export default function TalentPage() {
                 <option value="yes">نعم</option>
                 <option value="no">لا</option>
               </select>
-            </div>
+            </FilterField>
 
-            <div>
-              <label className="label">مكان عمل مفضّل</label>
+            <FilterField icon={MapPinned} label="مكان عمل مفضّل">
               <select
                 className="field"
                 value={filters.workLocation}
@@ -461,7 +487,7 @@ export default function TalentPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FilterField>
           </div>
         ) : null}
       </div>
