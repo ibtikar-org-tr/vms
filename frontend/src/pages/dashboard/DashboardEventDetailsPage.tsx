@@ -56,6 +56,7 @@ import {
   EventRegistrationPrivacyNote,
   type EventApplicationFormHandle,
 } from '../../components/events/EventApplicationForm'
+import { EventRatingForm } from '../../components/events/EventRatingForm'
 
 function eventStatusLabel(status: string) {
   if (status === 'draft') return 'مسودة'
@@ -723,6 +724,10 @@ export function DashboardEventDetailsPage() {
           </div>
         ) : null}
       </div>
+
+      {user ? (
+        <EventRatingForm eventId={eventItem.id} ratingsEnabled={eventItem.ratingsEnabled === true} />
+      ) : null}
 
       {canEditEvent ? (
         <div className="rounded-xl border border-dashed border-slate-300/80 bg-slate-50/50 px-4 py-3 text-center text-sm text-slate-600">

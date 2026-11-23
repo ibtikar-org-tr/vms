@@ -28,6 +28,9 @@ export const createEventSchema = z.object({
   allowMultipleTickets: z.boolean().optional(),
   requireApplicantContact: z.boolean().optional(),
   registrationSuccessMessage: optionalRichText,
+  ratingsEnabled: z.boolean().optional(),
+  ratingsRequireAttendanceApproved: z.boolean().optional(),
+  ratingsDeadlineAt: z.string().trim().min(1).nullable().optional(),
 })
 
 export const updateEventSchema = createEventSchema

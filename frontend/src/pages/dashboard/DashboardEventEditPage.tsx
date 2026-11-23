@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import type { FormEvent } from 'react'
-import { ArrowRight, ClipboardList, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Ticket, Trash2, Users, X } from 'lucide-react'
+import { ArrowRight, ClipboardList, ImageIcon, Link2, MessageSquareText, Pencil, Plus, Save, Star, Ticket, Trash2, Users, X } from 'lucide-react'
 import { EventQrCard } from '../../components/events/EventQrCard'
 import {
   addEventAdmin,
@@ -10,9 +10,11 @@ import {
   fetchEventAdmins,
   fetchEventById,
   fetchEventFormFields,
+  fetchEventRatingFields,
   fetchEventTickets,
   removeEventAdmin,
   saveEventFormFields,
+  saveEventRatingFields,
   searchEventAdminCandidates,
   updateEvent,
   updateEventTicket,
@@ -100,6 +102,10 @@ export function DashboardEventEditPage() {
   const [isSavingFormFields, setIsSavingFormFields] = useState(false)
   const [formFieldsError, setFormFieldsError] = useState<string | null>(null)
   const [formFieldsSuccess, setFormFieldsSuccess] = useState<string | null>(null)
+  const [ratingFieldDrafts, setRatingFieldDrafts] = useState<ReturnType<typeof createDraftFormField>[]>([])
+  const [isSavingRatingFields, setIsSavingRatingFields] = useState(false)
+  const [ratingFieldsError, setRatingFieldsError] = useState<string | null>(null)
+  const [ratingFieldsSuccess, setRatingFieldsSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     if (!eventID) return
@@ -112,10 +118,11 @@ export function DashboardEventEditPage() {
         if (controller.signal.aborted) return
         setEventItem(eventPayload.event)
 
-        const [ticketsPayload, adminsPayload, formFieldsPayload] = await Promise.allSettled([
+        const [ticketsPayload, adminsPayload, formFieldsPayload, ratingFieldsPayload] = await Promise.allSettled([
           fetchEventTickets(currentEventId),
           fetchEventAdmins(currentEventId),
           fetchEventFormFields(currentEventId),
+          fetchEventRatingFields(currentEventId),
         ])
         if (controller.signal.aborted) return
         if (ticketsPayload.status === 'fulfilled') {
@@ -126,6 +133,9 @@ export function DashboardEventEditPage() {
         }
         if (formFieldsPayload.status === 'fulfilled') {
           setFormFieldDrafts(eventFieldsToDraft(formFieldsPayload.value.fields))
+        }
+        if (ratingFieldsPayload.status === 'fulfilled') {
+          setRatingFieldDrafts(eventFieldsToDraft(ratingFieldsPayload.value.fields))
         }
       } catch {
         if (!controller.signal.aborted) setNotFound(true)
@@ -237,6 +247,10 @@ export function DashboardEventEditPage() {
     const allowGuestRegistration = formData.get('allowGuestRegistration') === 'on'
     const allowMultipleTickets = formData.get('allowMultipleTickets') === 'on'
     const requireApplicantContact = formData.get('optionalApplicantContact') !== 'on'
+    const ratingsEnabled = formData.get('ratingsEnabled') === 'on'
+    const ratingsRequireAttendanceApproved = formData.get('ratingsRequireAttendanceApproved') === 'on'
+    const ratingsDeadlineLocal = String(formData.get('ratingsDeadlineAt') ?? '').trim()
+    const ratingsDeadlineAt = ratingsDeadlineLocal ? new Date(ratingsDeadlineLocal).toISOString() : null
     const cancellationDeadlineHoursRaw = Number(formData.get('cancellationDeadlineHours') ?? eventItem.cancellationDeadlineHours ?? 48)
     const cancellationDeadlineHours = Number.isFinite(cancellationDeadlineHoursRaw)
       ? Math.max(0, Math.min(24 * 365, Math.trunc(cancellationDeadlineHoursRaw)))
@@ -286,6 +300,9 @@ export function DashboardEventEditPage() {
         allowMultipleTickets,
         requireApplicantContact,
         cancellationDeadlineHours,
+        ratingsEnabled,
+        ratingsRequireAttendanceApproved,
+        ratingsDeadlineAt,
         ...(skills ? { skills } : {}),
         ...(locationType === 'online'
           ? { address: 'online' }
@@ -393,6 +410,35 @@ export function DashboardEventEditPage() {
       setFormFieldsError(requestError instanceof Error ? requestError.message : 'تعذر حفظ أسئلة النموذج.')
     } finally {
       setIsSavingFormFields(false)
+    }
+  }
+
+  const handleSaveRatingFields = async () => {
+    if (!eventID) return
+    if (ratingFieldDrafts.some((field) => !field.label.trim())) {
+      setRatingFieldsError('يرجى كتابة نص لكل سؤال أو حذف الأسئلة الفارغة قبل الحفظ.')
+      setRatingFieldsSuccess(null)
+      return
+    }
+
+    const fields = ratingFieldDrafts.map((field) => ({
+      label: field.label.trim(),
+      description: field.description.trim() || undefined,
+      type: field.type,
+      required: field.required,
+    }))
+
+    setRatingFieldsError(null)
+    setRatingFieldsSuccess(null)
+    setIsSavingRatingFields(true)
+    try {
+      const payload = await saveEventRatingFields(eventID, fields)
+      setRatingFieldDrafts(eventFieldsToDraft(payload.fields))
+      setRatingFieldsSuccess(fields.length > 0 ? 'تم حفظ أسئلة التقييم الإضافية.' : 'تم إفراغ الأسئلة الإضافية.')
+    } catch (requestError) {
+      setRatingFieldsError(requestError instanceof Error ? requestError.message : 'تعذر حفظ أسئلة التقييم.')
+    } finally {
+      setIsSavingRatingFields(false)
     }
   }
 
@@ -735,6 +781,46 @@ export function DashboardEventEditPage() {
               عدد الساعات قبل بداية الفعالية التي يسمح بعدها للمسجّلين بإلغاء تذكرتهم (مثال: 48 = يومان). اجعل القيمة 0 لتعطيل الإلغاء الذاتي.
             </span>
           </label>
+          <label className="md:col-span-2 flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
+            <input
+              type="checkbox"
+              name="ratingsEnabled"
+              defaultChecked={eventItem.ratingsEnabled === true}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+            />
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-slate-800">تفعيل تقييم الفعالية</span>
+              <span className="block text-xs leading-6 text-slate-500">
+                عند التفعيل يظهر نموذج تقييم للمسجّلين يتضمن تقييماً من 1 إلى 10 ومربع ملاحظات، مع أي أسئلة إضافية تضيفها أدناه.
+              </span>
+            </span>
+          </label>
+          <label className="md:col-span-2 flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
+            <input
+              type="checkbox"
+              name="ratingsRequireAttendanceApproved"
+              defaultChecked={eventItem.ratingsRequireAttendanceApproved === true}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+            />
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-slate-800">السماح بالتقييم لمن اعتُمد حضورهم فقط</span>
+              <span className="block text-xs leading-6 text-slate-500">
+                عند التفعيل يقتصر التقييم على المسجّلين الذين تم اعتماد حضورهم. بدون هذا الخيار يمكن لأي مسجّل نشط التقييم.
+              </span>
+            </span>
+          </label>
+          <label className="md:col-span-2 space-y-1">
+            <span className="text-xs font-medium text-slate-700">موعد إغلاق التقييم (اختياري)</span>
+            <input
+              type="datetime-local"
+              name="ratingsDeadlineAt"
+              defaultValue={toDateTimeLocal(eventItem.ratingsDeadlineAt)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+            />
+            <span className="text-xs leading-6 text-slate-500">
+              اترك الحقل فارغاً إذا لم يكن هناك موعد نهائي لإرسال التقييم.
+            </span>
+          </label>
           <div className="md:col-span-4 space-y-1">
             <span className="text-xs font-medium text-slate-700">وصف الفعالية</span>
             <EventRichTextEditor
@@ -994,6 +1080,39 @@ export function DashboardEventEditPage() {
           {formFieldsSuccess ? <p className="text-sm font-medium text-emerald-700">{formFieldsSuccess}</p> : null}
         </div>
         {formFieldsError ? <p className="mt-3 text-sm text-red-600">{formFieldsError}</p> : null}
+      </article>
+
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+          <Star className="h-5 w-5 text-slate-700" />
+          <h2 className="text-base font-semibold text-slate-900">أسئلة التقييم الإضافية</h2>
+          <span className="mr-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+            {ratingFieldDrafts.length} سؤال
+          </span>
+        </div>
+        <p className="mb-4 text-sm leading-6 text-slate-600">
+          التقييم من 1 إلى 10 ومربع الملاحظات موجودان دائماً. أضف هنا أي أسئلة إضافية تظهر في نموذج تقييم الحضور بعد تفعيل التقييم من إعدادات الفعالية.
+        </p>
+        <EventFormFieldsEditor
+          fields={ratingFieldDrafts}
+          onChange={setRatingFieldDrafts}
+          disabled={isSavingRatingFields}
+          emptyMessage="لا توجد أسئلة إضافية. سيظهر للمشارك تقييم من 1 إلى 10 ومربع ملاحظات فقط."
+          showStartupPreset={false}
+        />
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleSaveRatingFields()}
+            disabled={isSavingRatingFields}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Save className="h-4 w-4" />
+            {isSavingRatingFields ? 'جار الحفظ...' : 'حفظ أسئلة التقييم'}
+          </button>
+          {ratingFieldsSuccess ? <p className="text-sm font-medium text-emerald-700">{ratingFieldsSuccess}</p> : null}
+        </div>
+        {ratingFieldsError ? <p className="mt-3 text-sm text-red-600">{ratingFieldsError}</p> : null}
       </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">

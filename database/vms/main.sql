@@ -110,7 +110,10 @@ CREATE TABLE IF NOT EXISTS events (
     allow_guest_registration INTEGER NOT NULL DEFAULT 0, -- 1 = unauthenticated visitors may register with name/email/phone
     allow_multiple_tickets INTEGER NOT NULL DEFAULT 0, -- 1 = a person may hold more than one ticket type, 0 = one ticket only
     require_applicant_contact INTEGER NOT NULL DEFAULT 1, -- 1 = name/email/phone required on the event form; 0 = optional (evaluation/rating)
-    registration_success_message TEXT -- optional rich text shown to the registrant after a successful apply
+    registration_success_message TEXT, -- optional rich text shown to the registrant after a successful apply
+    ratings_enabled INTEGER NOT NULL DEFAULT 0, -- 1 = attendees may submit a post-event rating
+    ratings_require_attendance_approved INTEGER NOT NULL DEFAULT 0, -- 1 = only registrations with attendance_approved_by may rate
+    ratings_deadline_at TEXT -- ISO 8601 deadline for rating submissions; NULL = no deadline
 );
 
 CREATE TRIGGER IF NOT EXISTS update_event_updated_at AFTER UPDATE ON events
@@ -216,6 +219,48 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_event_form_submissions_event_email
 CREATE UNIQUE INDEX IF NOT EXISTS idx_event_form_submissions_event_member
     ON event_form_submissions (event_id, membership_number)
     WHERE membership_number IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS event_rating_fields (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    description TEXT,
+    type TEXT NOT NULL, -- text, textarea, email, phone, url, number
+    required INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_rating_fields_event
+    ON event_rating_fields (event_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS event_ratings (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL, -- 1..10
+    feedback TEXT,
+    answers TEXT NOT NULL -- JSON array of { fieldId, label, value }
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_ratings_event
+    ON event_ratings (event_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS event_rating_raters (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    membership_number TEXT NOT NULL,
+    rating_id TEXT REFERENCES event_ratings(id) ON DELETE SET NULL -- NULL when identity is hidden
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_event_rating_raters_event_member
+    ON event_rating_raters (event_id, membership_number);
+
+CREATE INDEX IF NOT EXISTS idx_event_rating_raters_rating
+    ON event_rating_raters (rating_id)
+    WHERE rating_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS skills (
     id TEXT PRIMARY KEY,

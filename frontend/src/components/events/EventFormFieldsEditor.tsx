@@ -22,6 +22,8 @@ type EventFormFieldsEditorProps = {
   fields: DraftField[]
   onChange: (fields: DraftField[]) => void
   disabled?: boolean
+  emptyMessage?: string
+  showStartupPreset?: boolean
 }
 
 export function createDraftFormField(overrides?: Partial<DraftField>): DraftField {
@@ -60,7 +62,13 @@ export function startupApplicationPreset(): DraftField[] {
   ]
 }
 
-export function EventFormFieldsEditor({ fields, onChange, disabled }: EventFormFieldsEditorProps) {
+export function EventFormFieldsEditor({
+  fields,
+  onChange,
+  disabled,
+  emptyMessage = 'لا توجد أسئلة بعد. الاسم الكامل والبريد ورقم الهاتف تُجمع تلقائياً. أضف الأسئلة الإضافية التي تريد جمعها من المتقدمين.',
+  showStartupPreset = true,
+}: EventFormFieldsEditorProps) {
   function updateField(key: string, patch: Partial<DraftField>) {
     onChange(fields.map((field) => (field.key === key ? { ...field, ...patch } : field)))
   }
@@ -68,9 +76,7 @@ export function EventFormFieldsEditor({ fields, onChange, disabled }: EventFormF
   return (
     <div className="space-y-3">
       {fields.length === 0 ? (
-        <p className="text-sm leading-6 text-slate-500">
-          لا توجد أسئلة بعد. الاسم الكامل والبريد ورقم الهاتف تُجمع تلقائياً. أضف الأسئلة الإضافية التي تريد جمعها من المتقدمين.
-        </p>
+        <p className="text-sm leading-6 text-slate-500">{emptyMessage}</p>
       ) : (
         <ul className="space-y-3">
           {fields.map((field, index) => (
@@ -150,7 +156,7 @@ export function EventFormFieldsEditor({ fields, onChange, disabled }: EventFormF
           <Plus className="h-4 w-4" />
           إضافة سؤال
         </button>
-        {fields.length === 0 ? (
+        {fields.length === 0 && showStartupPreset ? (
           <button
             type="button"
             onClick={() => onChange(startupApplicationPreset())}
