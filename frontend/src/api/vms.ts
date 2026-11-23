@@ -6,6 +6,10 @@ import type {
   VmsEventAdmin,
   VmsEventFormField,
   VmsEventFormSubmission,
+  VmsEventRating,
+  VmsEventRatingAggregates,
+  VmsEventRatingField,
+  VmsEventRatingMeStatus,
   VmsEventRegistration,
   VmsEventTicket,
   VmsLeaderboardEntry,
@@ -707,6 +711,71 @@ export async function downloadEventFormSubmissionsCsv(eventId: string) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
 }
 
+export function fetchEventRatingFields(eventId: string) {
+  return fetchJson<{ fields: VmsEventRatingField[] }>(`/events/${encodeURIComponent(eventId)}/rating-fields`, {
+    cache: false,
+  })
+}
+
+export function saveEventRatingFields(
+  eventId: string,
+  fields: Array<{
+    label: string
+    description?: string
+    type: VmsEventRatingField['type']
+    required: boolean
+  }>,
+) {
+  return putJson<{ fields: VmsEventRatingField[] }, { fields: typeof fields }>(
+    `/events/${encodeURIComponent(eventId)}/rating-fields`,
+    { fields },
+  )
+}
+
+export function fetchMyEventRating(eventId: string) {
+  return fetchJson<VmsEventRatingMeStatus>(`/events/${encodeURIComponent(eventId)}/ratings/me`, {
+    cache: false,
+  })
+}
+
+export function createEventRating(
+  eventId: string,
+  payload: {
+    score: number
+    feedback?: string
+    answers?: Record<string, string>
+    hideInfo?: boolean
+  },
+) {
+  return postJson<
+    { hasRated: boolean; hideInfo: boolean; rating: VmsEventRating | null },
+    typeof payload
+  >(`/events/${encodeURIComponent(eventId)}/ratings`, payload)
+}
+
+export function fetchEventRatings(eventId: string) {
+  return fetchJson<{
+    aggregates: VmsEventRatingAggregates
+    ratings: VmsEventRating[]
+    total: number
+  }>(`/events/${encodeURIComponent(eventId)}/ratings`, { cache: false })
+}
+
+export async function downloadEventRatingsCsv(eventId: string) {
+  const { blob, filename } = await apiDownload(`/events/${encodeURIComponent(eventId)}/ratings/export`)
+  const csvBlob = new Blob([await blob.arrayBuffer()], { type: 'text/csv;charset=utf-8' })
+  const downloadName = `${(filename || 'ratings.csv').replace(/\.(csv|xlsx|xls)$/i, '') || 'ratings'}.csv`
+  const objectUrl = URL.createObjectURL(csvBlob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = downloadName
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+}
+
 export function updateEvent(
   eventId: string,
   payload: Partial<{
@@ -727,6 +796,9 @@ export function updateEvent(
     allowMultipleTickets: boolean
     requireApplicantContact: boolean
     registrationSuccessMessage: string | null
+    ratingsEnabled: boolean
+    ratingsRequireAttendanceApproved: boolean
+    ratingsDeadlineAt: string | null
   }>,
 ) {
   return putJson<{ event: VmsEvent }, typeof payload>(`/events/${encodeURIComponent(eventId)}`, payload)

@@ -72,6 +72,9 @@ export interface VmsEvent {
   allowMultipleTickets?: boolean
   requireApplicantContact?: boolean
   registrationSuccessMessage?: string | null
+  ratingsEnabled?: boolean
+  ratingsRequireAttendanceApproved?: boolean
+  ratingsDeadlineAt?: string | null
   canManage?: boolean
 }
 
@@ -104,6 +107,43 @@ export interface VmsEventFormSubmission {
   applicantEmail: string
   applicantPhone: string
   answers: VmsEventFormAnswer[]
+}
+
+export type VmsEventRatingField = VmsEventFormField
+export type VmsEventRatingAnswer = VmsEventFormAnswer
+
+export interface VmsEventRating {
+  id: string
+  createdAt: string
+  eventId: string
+  score: number
+  feedback: string | null
+  answers: VmsEventRatingAnswer[]
+  membershipNumber?: string
+  ratedAt?: string
+}
+
+export interface VmsEventRatingAggregates {
+  count: number
+  averageScore: number
+  linkedCount: number
+  anonymousCount: number
+  raterCount: number
+}
+
+export type VmsEventRatingEligibilityReason =
+  | 'ratings_disabled'
+  | 'deadline_passed'
+  | 'not_registered'
+  | 'attendance_not_approved'
+  | 'already_rated'
+
+export interface VmsEventRatingMeStatus {
+  hasRated: boolean
+  canRate: boolean
+  reason: VmsEventRatingEligibilityReason | null
+  rating: VmsEventRating | null
+  hideInfo: boolean | null
 }
 
 export interface VmsEventAdmin {

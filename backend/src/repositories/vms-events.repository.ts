@@ -29,6 +29,9 @@ interface EventRow {
   allow_multiple_tickets: number | null
   require_applicant_contact: number | null
   registration_success_message: string | null
+  ratings_enabled: number | null
+  ratings_require_attendance_approved: number | null
+  ratings_deadline_at: string | null
 }
 
 function mapDisplayAttendeeNumbers(value: number | null | undefined) {
@@ -45,6 +48,14 @@ function mapAllowMultipleTickets(value: number | null | undefined) {
 
 function mapRequireApplicantContact(value: number | null | undefined) {
   return value !== 0
+}
+
+function mapRatingsEnabled(value: number | null | undefined) {
+  return value === 1
+}
+
+function mapRatingsRequireAttendanceApproved(value: number | null | undefined) {
+  return value === 1
 }
 
 function parseJsonObject(data: string | null): Record<string, unknown> | null {
@@ -93,6 +104,11 @@ function mapEventRow(row: EventRow) {
     allowMultipleTickets: mapAllowMultipleTickets(row.allow_multiple_tickets),
     requireApplicantContact: mapRequireApplicantContact(row.require_applicant_contact),
     registrationSuccessMessage: row.registration_success_message ?? null,
+    ratingsEnabled: mapRatingsEnabled(row.ratings_enabled),
+    ratingsRequireAttendanceApproved: mapRatingsRequireAttendanceApproved(
+      row.ratings_require_attendance_approved,
+    ),
+    ratingsDeadlineAt: row.ratings_deadline_at ?? null,
   }
 }
 
@@ -330,6 +346,9 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
   const allowMultipleTickets = input.allowMultipleTickets
   const registrationSuccessMessage = input.registrationSuccessMessage
   const requireApplicantContact = input.requireApplicantContact
+  const ratingsEnabled = input.ratingsEnabled
+  const ratingsRequireAttendanceApproved = input.ratingsRequireAttendanceApproved
+  const ratingsDeadlineAt = input.ratingsDeadlineAt
 
   if (updates.length > 0) {
     updates.push("updated_at = datetime('now')")
@@ -373,11 +392,49 @@ export async function updateEventById(db: D1DatabaseLike, id: string, input: Upd
     }
   }
 
+  if (ratingsEnabled !== undefined) {
+    try {
+      await db
+        .prepare(`UPDATE events SET ratings_enabled = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(ratingsEnabled ? 1 : 0, id)
+        .run()
+    } catch (error) {
+      console.error('Failed to save event ratings enabled setting', error)
+    }
+  }
+
+  if (ratingsRequireAttendanceApproved !== undefined) {
+    try {
+      await db
+        .prepare(
+          `UPDATE events SET ratings_require_attendance_approved = ?, updated_at = datetime('now') WHERE id = ?`,
+        )
+        .bind(ratingsRequireAttendanceApproved ? 1 : 0, id)
+        .run()
+    } catch (error) {
+      console.error('Failed to save event ratings require attendance approved setting', error)
+    }
+  }
+
+  if (ratingsDeadlineAt !== undefined) {
+    try {
+      await db
+        .prepare(`UPDATE events SET ratings_deadline_at = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(ratingsDeadlineAt?.trim() ? ratingsDeadlineAt.trim() : null, id)
+        .run()
+    } catch (error) {
+      console.error('Failed to save event ratings deadline setting', error)
+    }
+  }
+
   if (
     updates.length === 0 &&
     registrationSuccessMessage === undefined &&
     allowMultipleTickets === undefined &&
-    requireApplicantContact === undefined
+    requireApplicantContact === undefined &&
+    ratingsEnabled === undefined &&
+    ratingsRequireAttendanceApproved === undefined &&
+    ratingsDeadlineAt === undefined
   ) {
     return getEventById(db, id)
   }

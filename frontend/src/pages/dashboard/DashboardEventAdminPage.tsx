@@ -1,21 +1,30 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { CheckCircle, ClipboardList, Clock, Download, Search, Trash2, Users } from 'lucide-react'
+import { CheckCircle, ClipboardList, Clock, Download, Search, Star, Trash2, Users } from 'lucide-react'
 import { EventAnnouncementPanel } from '../../components/events/EventAnnouncementPanel'
 import { EventQrCard } from '../../components/events/EventQrCard'
 import {
   approveRegistration,
   deleteEventRegistration,
   downloadEventFormSubmissionsCsv,
+  downloadEventRatingsCsv,
   downloadEventRegistrationsCsv,
   fetchEventById,
   fetchEventFormFields,
   fetchEventFormSubmissions,
+  fetchEventRatings,
   fetchEventRegistrations,
   fetchEventTickets,
   updateEventRegistration,
 } from '../../api/vms'
-import type { VmsEvent, VmsEventFormSubmission, VmsEventRegistration, VmsEventTicket } from '../../types/vms'
+import type {
+  VmsEvent,
+  VmsEventFormSubmission,
+  VmsEventRating,
+  VmsEventRatingAggregates,
+  VmsEventRegistration,
+  VmsEventTicket,
+} from '../../types/vms'
 import { MemberInfoModal } from '../../components/dashboard/project-details/MemberInfoModal'
 import { getStoredUser } from '../../utils/auth'
 import { canManageVmsEvent } from '../../utils/event-access'
@@ -63,6 +72,11 @@ export function DashboardEventAdminPage() {
   const [isLoadingFormSubmissions, setIsLoadingFormSubmissions] = useState(false)
   const [isExportingFormSubmissions, setIsExportingFormSubmissions] = useState(false)
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null)
+  const [ratingAggregates, setRatingAggregates] = useState<VmsEventRatingAggregates | null>(null)
+  const [linkedRatings, setLinkedRatings] = useState<VmsEventRating[]>([])
+  const [isLoadingRatings, setIsLoadingRatings] = useState(false)
+  const [isExportingRatings, setIsExportingRatings] = useState(false)
+  const [expandedRatingId, setExpandedRatingId] = useState<string | null>(null)
   const [memberInfoTarget, setMemberInfoTarget] = useState<{
     membershipNumber: string
     displayName: string
@@ -127,6 +141,30 @@ export function DashboardEventAdminPage() {
       }
     }
     void loadFormSubmissions()
+    return () => controller.abort()
+  }, [eventID])
+
+  useEffect(() => {
+    if (!eventID) return
+    const controller = new AbortController()
+    async function loadRatings() {
+      setIsLoadingRatings(true)
+      try {
+        const payload = await fetchEventRatings(eventID as string)
+        if (controller.signal.aborted) return
+        setRatingAggregates(payload.aggregates)
+        setLinkedRatings(payload.ratings)
+      } catch (requestError) {
+        if (!controller.signal.aborted) {
+          setRatingAggregates(null)
+          setLinkedRatings([])
+          setError(requestError instanceof Error ? requestError.message : 'تعذر تحميل التقييمات.')
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingRatings(false)
+      }
+    }
+    void loadRatings()
     return () => controller.abort()
   }, [eventID])
 
@@ -280,6 +318,19 @@ export function DashboardEventAdminPage() {
     }
   }
 
+  const handleExportRatings = async () => {
+    if (!eventID) return
+    setError(null)
+    setIsExportingRatings(true)
+    try {
+      await downloadEventRatingsCsv(eventID)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'تعذر تصدير التقييمات.')
+    } finally {
+      setIsExportingRatings(false)
+    }
+  }
+
   if (!eventID || notFound) return <Navigate to="/events" replace />
 
   if (isLoading || !eventItem) {
@@ -324,6 +375,106 @@ export function DashboardEventAdminPage() {
       <EventQrCard eventId={eventItem.id} eventName={eventItem.name} status={eventItem.status} />
 
       <EventAnnouncementPanel eventId={eventItem.id} eventName={eventItem.name} />
+
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+          <Star className="h-5 w-5 text-slate-700" />
+          <h2 className="text-base font-semibold text-slate-900">تقييمات الحضور</h2>
+          <span className="mr-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+            {ratingAggregates?.count ?? 0} تقييم
+          </span>
+          <button
+            type="button"
+            onClick={() => void handleExportRatings()}
+            disabled={isExportingRatings || !ratingAggregates || ratingAggregates.count === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {isExportingRatings ? 'جار التصدير...' : 'تصدير CSV'}
+          </button>
+        </div>
+        {isLoadingRatings ? (
+          <p className="text-sm text-slate-500">جار تحميل التقييمات...</p>
+        ) : !eventItem.ratingsEnabled ? (
+          <p className="text-sm leading-6 text-slate-500">
+            تقييم الفعالية غير مفعّل. يمكنك تفعيله من صفحة التعديل.
+          </p>
+        ) : !ratingAggregates || ratingAggregates.count === 0 ? (
+          <p className="text-sm leading-6 text-slate-500">لا توجد تقييمات بعد.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs text-slate-500">المتوسط</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{ratingAggregates.averageScore.toFixed(2)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs text-slate-500">إجمالي التقييمات</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{ratingAggregates.count}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs text-slate-500">مرتبطة بالهوية</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{ratingAggregates.linkedCount}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs text-slate-500">مجهولة الهوية</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{ratingAggregates.anonymousCount}</p>
+              </div>
+            </div>
+            {linkedRatings.length === 0 ? (
+              <p className="text-sm leading-6 text-slate-500">
+                كل التقييمات الحالية مجهولة الهوية؛ تظهر في المتوسط والإحصاءات دون ربطها بالأعضاء.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {linkedRatings.map((rating) => {
+                  const expanded = expandedRatingId === rating.id
+                  return (
+                    <li key={rating.id} className="rounded-xl border border-slate-200 bg-slate-50/70">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedRatingId(expanded ? null : rating.id)}
+                        className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-right"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            تقييم {rating.score}/10
+                            {rating.membershipNumber ? (
+                              <span className="mr-2 font-mono text-xs font-normal text-slate-500">
+                                {rating.membershipNumber}
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="text-xs text-slate-500 line-clamp-1">
+                            {rating.feedback?.trim() || 'بدون ملاحظات'}
+                          </p>
+                        </div>
+                        <span className="text-xs text-slate-500">{rating.ratedAt ?? rating.createdAt}</span>
+                      </button>
+                      {expanded ? (
+                        <dl className="space-y-2 border-t border-slate-200 px-4 py-3 text-sm">
+                          <div>
+                            <dt className="text-xs font-medium text-slate-500">الملاحظات</dt>
+                            <dd className="mt-0.5 whitespace-pre-wrap text-slate-800">
+                              {rating.feedback?.trim() || '—'}
+                            </dd>
+                          </div>
+                          {rating.answers.map((answer) => (
+                            <div key={`${rating.id}-${answer.fieldId}`}>
+                              <dt className="text-xs font-medium text-slate-500">{answer.label}</dt>
+                              <dd className="mt-0.5 whitespace-pre-wrap text-slate-800">{answer.value || '—'}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
           <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
