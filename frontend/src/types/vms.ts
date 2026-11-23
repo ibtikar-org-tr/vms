@@ -137,10 +137,12 @@ export type VmsEventRatingEligibilityReason =
   | 'not_registered'
   | 'attendance_not_approved'
   | 'already_rated'
+  | 'anonymous_locked'
 
 export interface VmsEventRatingMeStatus {
   hasRated: boolean
   canRate: boolean
+  canEdit: boolean
   reason: VmsEventRatingEligibilityReason | null
   rating: VmsEventRating | null
   hideInfo: boolean | null

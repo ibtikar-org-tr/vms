@@ -7,6 +7,7 @@ import {
   getEventRatingRaterByMembership,
   isEventRatingUniqueConflict,
   listEventRatingFields,
+  updateEventRatingById,
   type EventRatingAnswer,
   type EventRatingFieldRecord,
   type EventRatingRecord,
@@ -22,6 +23,13 @@ export type RatingEligibilityReason =
   | 'not_registered'
   | 'attendance_not_approved'
   | 'already_rated'
+  | 'anonymous_locked'
+
+type UpdateEventRatingInput = {
+  score: number
+  feedback?: string
+  answers?: Record<string, string>
+}
 
 function validateAnswerValue(field: EventRatingFieldRecord, value: string) {
   if (!value) {
@@ -80,6 +88,13 @@ function isDeadlinePassed(deadlineAt: string | null | undefined) {
   return Date.now() > deadlineMs
 }
 
+function canModifyWindow(event: {
+  ratingsEnabled?: boolean
+  ratingsDeadlineAt?: string | null
+}) {
+  return Boolean(event.ratingsEnabled) && !isDeadlinePassed(event.ratingsDeadlineAt)
+}
+
 export async function evaluateEventRatingEligibility(
   db: D1DatabaseLike,
   input: {
@@ -96,16 +111,28 @@ export async function evaluateEventRatingEligibility(
   const hasRated = Boolean(rater)
   const linkedRating =
     rater?.ratingId != null ? await getEventRatingById(db, rater.ratingId) : null
+  const hideInfo = hasRated ? linkedRating == null : null
+  const openWindow = canModifyWindow(event)
 
   if (hasRated) {
+    const canEdit = openWindow && linkedRating != null
+    let reason: RatingEligibilityReason = 'already_rated'
+    if (!openWindow) {
+      reason = event.ratingsEnabled ? 'deadline_passed' : 'ratings_disabled'
+    } else if (hideInfo) {
+      reason = 'anonymous_locked'
+    }
+
     return {
       ok: true as const,
       event,
       hasRated: true,
       canRate: false,
-      reason: 'already_rated' as RatingEligibilityReason,
+      canEdit,
+      reason,
       rater,
       rating: linkedRating,
+      hideInfo,
     }
   }
 
@@ -115,9 +142,11 @@ export async function evaluateEventRatingEligibility(
       event,
       hasRated: false,
       canRate: false,
+      canEdit: false,
       reason: 'ratings_disabled' as RatingEligibilityReason,
       rater: null,
       rating: null as EventRatingRecord | null,
+      hideInfo: null,
     }
   }
 
@@ -127,9 +156,11 @@ export async function evaluateEventRatingEligibility(
       event,
       hasRated: false,
       canRate: false,
+      canEdit: false,
       reason: 'deadline_passed' as RatingEligibilityReason,
       rater: null,
       rating: null,
+      hideInfo: null,
     }
   }
 
@@ -145,9 +176,11 @@ export async function evaluateEventRatingEligibility(
       event,
       hasRated: false,
       canRate: false,
+      canEdit: false,
       reason: 'not_registered' as RatingEligibilityReason,
       rater: null,
       rating: null,
+      hideInfo: null,
     }
   }
 
@@ -157,9 +190,11 @@ export async function evaluateEventRatingEligibility(
       event,
       hasRated: false,
       canRate: false,
+      canEdit: false,
       reason: 'attendance_not_approved' as RatingEligibilityReason,
       rater: null,
       rating: null,
+      hideInfo: null,
     }
   }
 
@@ -168,10 +203,17 @@ export async function evaluateEventRatingEligibility(
     event,
     hasRated: false,
     canRate: true,
+    canEdit: false,
     reason: null,
     rater: null,
     rating: null,
+    hideInfo: null,
   }
+}
+
+async function buildValidatedAnswers(db: D1DatabaseLike, eventId: string, answers: Record<string, string> | undefined) {
+  const fields = await listEventRatingFields(db, eventId)
+  return buildEventRatingAnswers(fields, answers)
 }
 
 export async function submitEventRating(
@@ -197,18 +239,18 @@ export async function submitEventRating(
       deadline_passed: 'انتهى موعد التقييم لهذه الفعالية.',
       not_registered: 'يجب أن تكون مسجلاً في الفعالية لتتمكن من التقييم.',
       attendance_not_approved: 'التقييم متاح فقط للمشاركين الذين تم اعتماد حضورهم.',
-      already_rated: 'لقد قمت بتقييم هذه الفعالية مسبقاً.',
+      already_rated: 'لقد قمت بتقييم هذه الفعالية مسبقاً. يمكنك تعديل تقييمك إن كان مرتبطاً بهويتك.',
+      anonymous_locked: 'لقد قمت بتقييم هذه الفعالية مع إخفاء الهوية ولا يمكن تعديل التقييم لاحقاً.',
     }
     const reason = eligibility.reason ?? 'ratings_disabled'
     return {
       ok: false as const,
-      status: reason === 'already_rated' ? (409 as const) : (403 as const),
+      status: reason === 'already_rated' || reason === 'anonymous_locked' ? (409 as const) : (403 as const),
       error: messages[reason],
     }
   }
 
-  const fields = await listEventRatingFields(db, input.eventId)
-  const built = buildEventRatingAnswers(fields, input.payload.answers)
+  const built = await buildValidatedAnswers(db, input.eventId, input.payload.answers)
   if (!built.ok) {
     return { ok: false as const, status: 400 as const, error: built.error }
   }
@@ -234,11 +276,72 @@ export async function submitEventRating(
       rating: created.hideInfo ? null : created.rating,
       hasRated: true,
       hideInfo: created.hideInfo,
+      canEdit: !created.hideInfo,
     }
   } catch (error) {
     if (isEventRatingUniqueConflict(error)) {
       return { ok: false as const, status: 409 as const, error: 'لقد قمت بتقييم هذه الفعالية مسبقاً.' }
     }
     throw error
+  }
+}
+
+export async function updateEventRating(
+  db: D1DatabaseLike,
+  input: {
+    eventId: string
+    membershipNumber: string
+    payload: UpdateEventRatingInput
+  },
+) {
+  const eligibility = await evaluateEventRatingEligibility(db, {
+    eventId: input.eventId,
+    membershipNumber: input.membershipNumber,
+  })
+
+  if (!eligibility.ok) {
+    return { ok: false as const, status: eligibility.status, error: eligibility.error }
+  }
+
+  if (!eligibility.canEdit || !eligibility.rating) {
+    const messages: Record<RatingEligibilityReason, string> = {
+      ratings_disabled: 'التقييم غير مفعّل لهذه الفعالية.',
+      deadline_passed: 'انتهى موعد تعديل التقييم لهذه الفعالية.',
+      not_registered: 'يجب أن تكون مسجلاً في الفعالية لتتمكن من التقييم.',
+      attendance_not_approved: 'التقييم متاح فقط للمشاركين الذين تم اعتماد حضورهم.',
+      already_rated: 'لا يمكن تعديل هذا التقييم.',
+      anonymous_locked:
+        'لا يمكن تعديل التقييم لأنك أخفيت هويتك عند الإرسال، ولا يمكن ربط الإجابات بعضويتك.',
+    }
+    const reason = eligibility.reason ?? 'already_rated'
+    return {
+      ok: false as const,
+      status: reason === 'anonymous_locked' ? (403 as const) : (403 as const),
+      error: messages[reason],
+    }
+  }
+
+  const built = await buildValidatedAnswers(db, input.eventId, input.payload.answers)
+  if (!built.ok) {
+    return { ok: false as const, status: 400 as const, error: built.error }
+  }
+
+  const feedback = input.payload.feedback?.trim() ? input.payload.feedback.trim() : null
+  const rating = await updateEventRatingById(db, eligibility.rating.id, {
+    score: input.payload.score,
+    feedback,
+    answers: built.answers,
+  })
+
+  if (!rating) {
+    return { ok: false as const, status: 500 as const, error: 'تعذر تحديث التقييم.' }
+  }
+
+  return {
+    ok: true as const,
+    rating,
+    hasRated: true,
+    hideInfo: false,
+    canEdit: true,
   }
 }

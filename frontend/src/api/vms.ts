@@ -748,9 +748,23 @@ export function createEventRating(
   },
 ) {
   return postJson<
-    { hasRated: boolean; hideInfo: boolean; rating: VmsEventRating | null },
+    { hasRated: boolean; hideInfo: boolean; canEdit: boolean; rating: VmsEventRating | null },
     typeof payload
   >(`/events/${encodeURIComponent(eventId)}/ratings`, payload)
+}
+
+export function updateMyEventRating(
+  eventId: string,
+  payload: {
+    score: number
+    feedback?: string
+    answers?: Record<string, string>
+  },
+) {
+  return putJson<
+    { hasRated: boolean; hideInfo: boolean; canEdit: boolean; rating: VmsEventRating | null },
+    typeof payload
+  >(`/events/${encodeURIComponent(eventId)}/ratings/me`, payload)
 }
 
 export function fetchEventRatings(eventId: string) {

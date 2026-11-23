@@ -11,11 +11,13 @@ import { getEventById } from '../repositories/vms-events.repository'
 import {
   createEventRatingSchema,
   replaceEventRatingFieldsSchema,
+  updateEventRatingSchema,
 } from '../schemas/vms-event-rating.schema'
 import { eventParamsSchema } from '../schemas/vms-event.schema'
 import {
   evaluateEventRatingEligibility,
   submitEventRating,
+  updateEventRating,
 } from '../services/event-rating.service'
 import type { AppEnv } from '../types/hono'
 import { getActorMembershipNumber } from '../utils/actor'
@@ -99,9 +101,10 @@ vmsEventRatingsRoute.get('/events/:id/ratings/me', zValidator('param', eventPara
     return c.json({
       hasRated: eligibility.hasRated,
       canRate: eligibility.canRate,
+      canEdit: eligibility.canEdit,
       reason: eligibility.reason,
       rating: eligibility.rating,
-      hideInfo: eligibility.hasRated ? eligibility.rating == null : null,
+      hideInfo: eligibility.hideInfo,
     })
   } catch (error) {
     console.error('Failed to fetch my event rating status', error)
@@ -132,6 +135,7 @@ vmsEventRatingsRoute.post(
         {
           hasRated: result.hasRated,
           hideInfo: result.hideInfo,
+          canEdit: result.canEdit,
           rating: result.rating,
         },
         201,
@@ -139,6 +143,38 @@ vmsEventRatingsRoute.post(
     } catch (error) {
       console.error('Failed to submit event rating', error)
       return c.json({ error: 'Could not submit event rating.' }, 500)
+    }
+  },
+)
+
+vmsEventRatingsRoute.put(
+  '/events/:id/ratings/me',
+  zValidator('param', eventParamsSchema),
+  zValidator('json', updateEventRatingSchema, jsonValidationHook),
+  async (c) => {
+    try {
+      const { id } = c.req.valid('param')
+      const membershipNumber = getActorMembershipNumber(c)
+      const payload = c.req.valid('json')
+      const result = await updateEventRating(c.env.VMS_DB, {
+        eventId: id,
+        membershipNumber,
+        payload,
+      })
+
+      if (!result.ok) {
+        return c.json({ error: result.error }, result.status)
+      }
+
+      return c.json({
+        hasRated: result.hasRated,
+        hideInfo: result.hideInfo,
+        canEdit: result.canEdit,
+        rating: result.rating,
+      })
+    } catch (error) {
+      console.error('Failed to update event rating', error)
+      return c.json({ error: 'Could not update event rating.' }, 500)
     }
   },
 )

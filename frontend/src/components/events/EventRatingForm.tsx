@@ -4,8 +4,10 @@ import {
   createEventRating,
   fetchEventRatingFields,
   fetchMyEventRating,
+  updateMyEventRating,
 } from '../../api/vms'
 import type {
+  VmsEventRating,
   VmsEventRatingEligibilityReason,
   VmsEventRatingField,
   VmsEventRatingMeStatus,
@@ -23,9 +25,22 @@ function reasonMessage(reason: VmsEventRatingEligibilityReason | null | undefine
   if (reason === 'attendance_not_approved') {
     return 'التقييم متاح فقط للمشاركين الذين تم اعتماد حضورهم.'
   }
+  if (reason === 'anonymous_locked') {
+    return 'لقد قيّمت هذه الفعالية مع إخفاء هويتك، لذلك لا يمكن تعديل التقييم لاحقاً.'
+  }
   if (reason === 'already_rated') return 'لقد قمت بتقييم هذه الفعالية مسبقاً.'
   if (reason === 'ratings_disabled') return null
   return null
+}
+
+function answersFromRating(fields: VmsEventRatingField[], rating: VmsEventRating | null) {
+  const next: Record<string, string> = {}
+  const byId = new Map((rating?.answers ?? []).map((answer) => [answer.fieldId, answer.value]))
+  const byLabel = new Map((rating?.answers ?? []).map((answer) => [answer.label, answer.value]))
+  for (const field of fields) {
+    next[field.id] = byId.get(field.id) ?? byLabel.get(field.label) ?? ''
+  }
+  return next
 }
 
 export function EventRatingForm({ eventId, ratingsEnabled }: EventRatingFormProps) {
@@ -35,9 +50,11 @@ export function EventRatingForm({ eventId, ratingsEnabled }: EventRatingFormProp
   const [feedback, setFeedback] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [hideInfo, setHideInfo] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     if (!ratingsEnabled) {
@@ -56,11 +73,10 @@ export function EventRatingForm({ eventId, ratingsEnabled }: EventRatingFormProp
         if (controller.signal.aborted) return
         setFields(fieldsPayload.fields)
         setStatus(mePayload)
-        const next: Record<string, string> = {}
-        for (const field of fieldsPayload.fields) {
-          next[field.id] = ''
-        }
-        setAnswers(next)
+        setScore(mePayload.rating?.score ?? 8)
+        setFeedback(mePayload.rating?.feedback ?? '')
+        setAnswers(answersFromRating(fieldsPayload.fields, mePayload.rating))
+        setIsEditing(false)
       } catch (requestError) {
         if (!controller.signal.aborted) {
           setError(requestError instanceof Error ? requestError.message : 'تعذر تحميل نموذج التقييم.')
@@ -86,7 +102,9 @@ export function EventRatingForm({ eventId, ratingsEnabled }: EventRatingFormProp
     )
   }
 
-  if (status?.hasRated) {
+  const showForm = Boolean(status?.canRate || (status?.canEdit && isEditing))
+
+  if (status?.hasRated && !showForm) {
     return (
       <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm sm:p-6">
         <div className="flex items-center gap-2">
@@ -100,11 +118,36 @@ export function EventRatingForm({ eventId, ratingsEnabled }: EventRatingFormProp
         {status.rating ? (
           <p className="mt-2 text-sm font-medium text-emerald-950">تقييمك: {status.rating.score}/10</p>
         ) : null}
+        {status.hideInfo ? (
+          <p className="mt-3 text-sm leading-7 text-emerald-900">
+            ملاحظة: لأنك أخفيت هويتك لا يمكن تعديل هذا التقييم لاحقاً.
+          </p>
+        ) : null}
+        {status.canEdit ? (
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditing(true)
+              setSuccess(null)
+              setError(null)
+              if (status.rating) {
+                setScore(status.rating.score)
+                setFeedback(status.rating.feedback ?? '')
+                setAnswers(answersFromRating(fields, status.rating))
+              }
+            }}
+            className="mt-4 inline-flex rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-100"
+          >
+            تعديل التقييم
+          </button>
+        ) : status.reason === 'deadline_passed' || status.reason === 'ratings_disabled' ? (
+          <p className="mt-3 text-sm leading-7 text-emerald-900">{reasonMessage(status.reason)}</p>
+        ) : null}
       </article>
     )
   }
 
-  if (!status?.canRate) {
+  if (!showForm) {
     const message = reasonMessage(status?.reason)
     if (!message) {
       return null
@@ -121,35 +164,65 @@ export function EventRatingForm({ eventId, ratingsEnabled }: EventRatingFormProp
     )
   }
 
+  const editingExisting = Boolean(status?.hasRated && status.canEdit)
+
   return (
     <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
       <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
         <Star className="h-5 w-5 text-slate-700" />
-        <h2 className="text-base font-semibold text-slate-900">تقييم الفعالية</h2>
+        <h2 className="text-base font-semibold text-slate-900">
+          {editingExisting ? 'تعديل تقييم الفعالية' : 'تقييم الفعالية'}
+        </h2>
       </div>
+      {editingExisting ? (
+        <p className="mb-4 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm leading-7 text-cyan-950">
+          يمكنك تعديل تقييمك وإجابات الأسئلة الإضافية حتى موعد إغلاق التقييم.
+        </p>
+      ) : null}
       <form
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault()
           setError(null)
+          setSuccess(null)
           setIsSubmitting(true)
-          void createEventRating(eventId, {
+
+          const payload = {
             score,
             feedback: feedback.trim() || undefined,
             answers,
-            hideInfo,
-          })
-            .then((payload) => {
+          }
+
+          const request = editingExisting
+            ? updateMyEventRating(eventId, payload)
+            : createEventRating(eventId, { ...payload, hideInfo })
+
+          void request
+            .then((response) => {
               setStatus({
                 hasRated: true,
                 canRate: false,
-                reason: 'already_rated',
-                rating: payload.rating,
-                hideInfo: payload.hideInfo,
+                canEdit: response.canEdit,
+                reason: response.hideInfo ? 'anonymous_locked' : 'already_rated',
+                rating: response.rating,
+                hideInfo: response.hideInfo,
               })
+              if (response.rating) {
+                setScore(response.rating.score)
+                setFeedback(response.rating.feedback ?? '')
+                setAnswers(answersFromRating(fields, response.rating))
+              }
+              setIsEditing(false)
+              setSuccess(editingExisting ? 'تم حفظ تعديلات التقييم.' : 'تم إرسال التقييم بنجاح.')
             })
             .catch((requestError) => {
-              setError(requestError instanceof Error ? requestError.message : 'تعذر إرسال التقييم.')
+              setError(
+                requestError instanceof Error
+                  ? requestError.message
+                  : editingExisting
+                    ? 'تعذر تحديث التقييم.'
+                    : 'تعذر إرسال التقييم.',
+              )
             })
             .finally(() => setIsSubmitting(false))
         }}
@@ -231,31 +304,57 @@ export function EventRatingForm({ eventId, ratingsEnabled }: EventRatingFormProp
           </div>
         ))}
 
-        <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3">
-          <input
-            type="checkbox"
-            checked={hideInfo}
-            onChange={(event) => setHideInfo(event.target.checked)}
-            disabled={isSubmitting}
-            className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-          />
-          <span className="space-y-1">
-            <span className="block text-sm font-medium text-slate-800">إخفاء هويتي</span>
-            <span className="block text-xs leading-6 text-slate-500">
-              سيتم تسجيل أنك قيّمت الفعالية دون ربط إجاباتك بعضويتك.
+        {!editingExisting ? (
+          <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3">
+            <input
+              type="checkbox"
+              checked={hideInfo}
+              onChange={(event) => setHideInfo(event.target.checked)}
+              disabled={isSubmitting}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+            />
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-slate-800">إخفاء هويتي</span>
+              <span className="block text-xs leading-6 text-slate-500">
+                سيتم تسجيل أنك قيّمت الفعالية دون ربط إجاباتك بعضويتك. ملاحظة مهمة: إذا أخفيت هويتك فلن تتمكن من
+                تعديل التقييم لاحقاً لأن النظام لن يعرف أي تقييم يخصك.
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        ) : null}
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {success ? <p className="text-sm font-medium text-emerald-700">{success}</p> : null}
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-lg bg-cyan-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-        >
-          {isSubmitting ? 'جار الإرسال...' : 'إرسال التقييم'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="flex-1 rounded-lg bg-cyan-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            {isSubmitting
+              ? editingExisting
+                ? 'جار الحفظ...'
+                : 'جار الإرسال...'
+              : editingExisting
+                ? 'حفظ التعديلات'
+                : 'إرسال التقييم'}
+          </button>
+          {editingExisting ? (
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => {
+                setIsEditing(false)
+                setError(null)
+                setSuccess(null)
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              إلغاء
+            </button>
+          ) : null}
+        </div>
       </form>
     </article>
   )

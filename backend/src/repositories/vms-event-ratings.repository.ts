@@ -370,3 +370,24 @@ export async function createEventRatingSubmission(
 
   return { rating, rater, hideInfo: input.hideInfo }
 }
+
+export async function updateEventRatingById(
+  db: D1DatabaseLike,
+  ratingId: string,
+  input: {
+    score: number
+    feedback: string | null
+    answers: EventRatingAnswer[]
+  },
+) {
+  await db
+    .prepare(
+      `UPDATE event_ratings
+       SET score = ?, feedback = ?, answers = ?
+       WHERE id = ?`,
+    )
+    .bind(input.score, input.feedback, JSON.stringify(input.answers), ratingId)
+    .run()
+
+  return getEventRatingById(db, ratingId)
+}
